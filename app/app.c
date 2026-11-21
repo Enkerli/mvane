@@ -8,7 +8,8 @@
  *              CHORDS: white keys are the scale's degrees (up the keyboard, higher voicings); black keys pick the
  *              chord type and stay latched (9, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/); the last black
  *              key (F#5) is HOLD. A separate bass, smooth voice leading, common tones held, moving voices glide
- *   ALGO       NOTES / CHORDS    PRESET  the key (C .. B)    SELECT  the scale (pitch-class set)
+ *   ALGO       NOTES / CHORDS    PRESETS the sound (mvane yard's saw, then Clipper's 407)
+ *   SELECT     the key (C .. B); SEL held + SELECT: the scale (pitch-class set); SEL tapped: POLY / MONO / +BREATH
  *   FX         voicing: CLOSE / OPEN / WIDE        LFO   upper voices: 3 .. 6      EDIT  bass on / off
  *   ENV        black keys: types from the scale (STACK 7 TRIAD ADD9 SUS 6/9 QUARTAL 11 FIFTHS V/) or fixed
  *              qualities, as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m)
@@ -24,6 +25,7 @@
 #include "chords.c"
 #include "rec.c"
 #include "synth.h"
+#include "clp.h"
 
 #define HIST_WORDS (1u << 15)            /* 128 KiB of history: 32,768 events, however long they took to play */
 #define TAKE_MAX (HIST_WORDS + REC_PRE)  /* the longest take: the whole history (a saved one: in the flash, read in place) */
@@ -32,7 +34,7 @@
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564134u            /* "MVA4" */
+#define SET_MAGIC 0x4D564135u            /* "MVA5" */
 typedef struct {
     uint32_t magic;
     uint8_t mode;                        /* 0 notes, 1 chords */
@@ -45,6 +47,8 @@ typedef struct {
     uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
     uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BREATH, 3 MONO+BREATH (synth_mode) */
     uint8_t slot;                        /* the take's slot (multiple takes) */
+    uint16_t sound;                      /* 0 mvane yard's saw; 1.. Clipper's factory sounds (clp.h) */
+    uint8_t rsv[2];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -67,6 +71,7 @@ static void settings_defaults(void)
     set.voices = 5;
     set.bank = 1;
     set.type = CHORD_BANK + 1u;          /* M7 */
+    set.sound = 0;
 }
 
 static void settings_load(void)
@@ -95,17 +100,39 @@ static void synth_send(uint32_t st, uint32_t d1, uint32_t d2)
     sq_w = w + 1u;
 }
 
+/* the engine the render plays: 0 mvane yard's synth (synth.c), 1 Clipper's (clp.c); a change silences the other first */
+static volatile uint8_t eng_want, eng_now;
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
+    if (eng_want != eng_now) {
+        synth_panic();
+        clp_panic();
+        eng_now = eng_want;
+    }
     while (sq_r != sq_w) {
         uint32_t w = sq[sq_r & 255u];
-        synth_event(w >> 16, (w >> 8) & 0xFFu, w & 0xFFu);
+        if (eng_now)
+            clp_event(w >> 16, (w >> 8) & 0xFFu, w & 0xFFu);
+        else
+            synth_event(w >> 16, (w >> 8) & 0xFFu, w & 0xFFu);
         sq_r = sq_r + 1u;
     }
-    synth_render(lr, n, master_q12);
+    if (eng_now)
+        clp_render(lr, n, master_q12);
+    else
+        synth_render(lr, n, master_q12);
 }
 
-void app_panic(void) { synth_panic(); }
+void app_panic(void) { synth_panic(); clp_panic(); }
+
+static void sound_apply(void)            /* the sound setting to the engines (main loop) */
+{
+    if (set.sound > clp_sounds())
+        set.sound = 0;
+    if (set.sound)
+        clp_select(set.sound - 1u);
+    eng_want = set.sound != 0;
+}
 
 /* --------------------------------------------------------------------- bus --- */
 #define TO_SYNTH 1u
@@ -267,6 +294,9 @@ void app_init(void)
         take_load();
     plat_usb_audio_full(set.usb_full);
     synth_mode(set.play & 1u, set.play >> 1);
+    clp_init();
+    clp_mode(set.play & 1u, set.play >> 1);
+    sound_apply();
 }
 
 /* ---------------------------------------------------------------- helpers --- */
@@ -333,6 +363,8 @@ static struct {
     uint32_t link;
     uint32_t hist_ms, hist_at;
     uint32_t slot_warn;                  /* when a slot change last warned of an unsaved take */
+    uint32_t sel_t;                      /* SEL went down (0: not held) */
+    uint8_t sel_used;                    /* SELECT turned while SEL was held: no tap */
     uint8_t redraw;
 } ui;
 
@@ -492,6 +524,8 @@ static void capture(uint32_t gap)
     app_say(gap ? "PHRASE" : "ALL", t);
 }
 
+static const char *sound_name(void) { return set.sound ? clp_sound_name(set.sound - 1u) : "SAW"; }
+
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
 {
     char t[16] = "TAKE ", n[12];
@@ -598,13 +632,9 @@ static void input(void)
             }
         } else if (k == B_SEQ || k == B_HOME) {
             slot_step(k == B_SEQ ? 1 : -1);
-        } else if (k == B_SEL) {         /* how the synth plays: poly or mono legato, with or without breath */
-            static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BREATH", "MONO+BREATH"};
-            set.play = (uint8_t)((set.play + 1u) & 3u);
-            set_dirty = 1;
-            all_off();
-            synth_mode(set.play & 1u, set.play >> 1);
-            app_say("PLAY", PLAY_N[set.play]);
+        } else if (k == B_SEL) {         /* SEL: held, SELECT is the scale; a tap, how the synth plays (on release) */
+            ui.sel_t = now ? now : 1u;
+            ui.sel_used = 0;
         } else if (k == B_ENV) {         /* the black keys' bank: types from the scale, or fixed qualities */
             set.bank ^= 1u;
             set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
@@ -643,6 +673,18 @@ static void input(void)
             app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : "");
         }
     }
+    if (ui.sel_t && !(btn >> B_SEL & 1u)) {   /* SEL let go: a tap (SELECT not turned): POLY, MONO, +BREATH */
+        static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BREATH", "MONO+BREATH"};
+        if (!ui.sel_used) {
+            set.play = (uint8_t)((set.play + 1u) & 3u);
+            set_dirty = 1;
+            all_off();
+            synth_mode(set.play & 1u, set.play >> 1);
+            clp_mode(set.play & 1u, set.play >> 1);
+            app_say("PLAY", PLAY_N[set.play]);
+        }
+        ui.sel_t = 0;
+    }
     if (ui.rec_t) {                      /* REC: held, the whole history; a tap, the last phrase */
         if (btn >> B_REC & 1u) {
             if (now - ui.rec_t >= 700u) {
@@ -662,14 +704,24 @@ static void input(void)
             set.mode = (uint8_t)(e > 0);
             set_dirty = 1;
             app_say("MODE", set.mode ? "CHORDS" : "NOTES");
-        } else if (k == EN_PRESET) {
-            set.tonic = (uint8_t)((set.tonic + (e > 0 ? 1u : 11u)) % 12u);
-            harmony_changed();
-            app_say("KEY", NOTE_N[set.tonic]);
-        } else if (k == EN_SELECT) {
-            set.scale = (uint8_t)((set.scale + (e > 0 ? 1u : CHORD_NSCALES - 1u)) % CHORD_NSCALES);
-            harmony_changed();
-            app_say("SCALE", CHORD_SCALES[set.scale].name);
+        } else if (k == EN_PRESET) {     /* PRESETS: the sound (0 mvane yard's saw, then Clipper's) */
+            uint32_t ns = clp_sounds() + 1u;
+            int32_t d = e > 0 ? (e > 4 ? 8 : 1) : (e < -4 ? -8 : -1);   /* a fast turn: eight at a time */
+            set.sound = (uint16_t)(((int32_t)set.sound + d + 8 * (int32_t)ns) % (int32_t)ns);
+            set_dirty = 1;
+            sound_apply();
+            app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_name());
+        } else if (k == EN_SELECT) {     /* SELECT: the key; with SEL held, the scale */
+            if (ui.sel_t) {
+                ui.sel_used = 1;
+                set.scale = (uint8_t)((set.scale + (e > 0 ? 1u : CHORD_NSCALES - 1u)) % CHORD_NSCALES);
+                harmony_changed();
+                app_say("SCALE", CHORD_SCALES[set.scale].name);
+            } else {
+                set.tonic = (uint8_t)((set.tonic + (e > 0 ? 1u : 11u)) % 12u);
+                harmony_changed();
+                app_say("KEY", NOTE_N[set.tonic]);
+            }
         } else if (k == EN_K1)
             turn_knob(SP_TONE, SYNTH_CC_TONE, e, "TONE");
         else if (k == EN_K2)
@@ -712,13 +764,9 @@ static void draw(void)
         int32_t x = cv_text(10, 6, &FONT_B, ui.msg[0], C_WHITE);
         cv_text(x + 8, 6, &FONT_B, ui.msg[1], C_HI);
     } else {
-        int32_t x = cv_text(10, 6, &FONT_B, set.mode ? "CHORDS" : "NOTES", C_HI);
-        (void)x;
-        t[0] = 0;
-        text_cat(t, NOTE_N[set.tonic]);
-        text_cat(t, " ");
-        text_cat(t, CHORD_SCALES[set.scale].name);
-        cv_text(230 - text_w(&FONT_B, t), 6, &FONT_B, t, C_GRAY);
+        const char *sn = sound_name();
+        cv_text(10, 6, &FONT_B, set.mode ? "CHORDS" : "NOTES", C_HI);
+        cv_text(230 - text_w(&FONT_B, sn), 6, &FONT_B, sn, C_WHITE);
     }
     cv_blit(0, 0);
 
@@ -728,8 +776,12 @@ static void draw(void)
             cv_text((240 - text_w(&FONT_L, ui.chord_name)) / 2, 2, &FONT_L, ui.chord_name,
                     ui.chord_n ? C_WHITE : C_DIM);
         t[0] = 0;
-        text_cat(t, CHORD_TYPE_NAMES[set.type]);
+        text_cat(t, NOTE_N[set.tonic]);
+        text_cat(t, " ");
+        text_cat(t, CHORD_SCALES[set.scale].name);
         text_cat(t, "  ");
+        text_cat(t, CHORD_TYPE_NAMES[set.type]);
+        text_cat(t, " ");
         text_cat(t, CHORD_STYLE_NAMES[set.style]);
         {
             char nv[4] = {' ', ' ', (char)('0' + set.voices), 0};
@@ -737,7 +789,7 @@ static void draw(void)
         }
         text_cat(t, set.bass ? "+BASS" : "");
         {
-            char pcs[8] = "  ";
+            char pcs[8] = " ";
             int_text((int32_t)CHORD_SCALES[set.scale].mask, pcs + 2);   /* the set's number (music-suite: C major 2741) */
             text_cat(t, pcs);
         }
@@ -754,7 +806,7 @@ static void draw(void)
 
     cv_begin(240, 36, C_BLACK);          /* the knobs */
     for (i = 0; i < SP_N; i++) {
-        int_text((int32_t)synth_param(i), t);
+        int_text((int32_t)(eng_want ? knob[i] : synth_param(i)), t);   /* (Clipper: the knob as sent, CC74 72 5 73) */
         label_value(8 + (int32_t)i * 58, 0, KN[i], t);
     }
     cv_blit(0, 100);
@@ -941,6 +993,10 @@ int app_expect(const char *what, int *got)
         *got = set.style;
     else if (!strcmp(what, "old_take"))
         *got = old_take;
+    else if (!strcmp(what, "sound"))
+        *got = set.sound;
+    else if (!strcmp(what, "scale_n"))
+        *got = (int)clp_sounds();
     else if (!strcmp(what, "slot"))
         *got = set.slot;
     else if (!strcmp(what, "play"))

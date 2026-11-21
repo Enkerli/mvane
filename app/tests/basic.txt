@@ -42,9 +42,12 @@ expect type 0
 tap ENV
 expect type 10
 # scale, voicing, bass
+press SEL
 turn SELECT 5
+release SEL
 wait 30
 expect scale 5
+expect play 0
 tap FX
 expect style 2
 key 6 down 100
@@ -70,7 +73,9 @@ expect nvoices 3
 tap LFO
 tap LFO
 expect nvoices 5
+press SEL
 turn SELECT -5
+release SEL
 wait 30
 expect scale 0
 # a glide gesture on K3, recorded with the notes
@@ -172,11 +177,24 @@ tap SAVE
 wait 100
 tap HOME
 expect slot 0
-expect take_ms 8370
+expect take_ms 8378
 tap SEQ
 expect slot 1
 reboot
 wait 600
 expect slot 1
-expect take_ms 912
+expect take_ms 872
 shot slots.png
+# the sound: PRESETS through Clipper's factory sounds and back to mvane yard's saw; a chord sounds on each
+expect sound 0
+turn PRESET 1
+wait 300
+expect sound 1
+key 0 down 100
+wait 200
+shot clipper.png
+key 0 up
+wait 100
+turn PRESET -1
+wait 100
+expect sound 0
