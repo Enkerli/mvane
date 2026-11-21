@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """A take from the FM-1 (take.mvt: core/rec.h) to a standard MIDI file, and back.
 
-  tools/mvt2mid.py take.mvt [out.mid]      MPE channels kept; 1 ms = 1 tick at 120 bpm (500 ticks a beat)
+  tools/mvt2mid.py take.mvt [out.mid]      one channel, one clip in a DAW: each note's pressure as poly aftertouch
+  tools/mvt2mid.py --mpe take.mvt [out.mid]   the MPE channels kept (a DAW may split them into a clip each)
+                                           1 ms = 1 tick at 120 bpm (500 ticks a beat)
   tools/mvt2mid.py --info take.mvt         what it holds
 """
 import struct, sys
@@ -26,6 +28,40 @@ def read_take(path):
         events.append((t, st, (w >> 8) & 0x7F, w & 0x7F))
     return events, dur
 
+def flatten(events):
+    """MPE on 16 channels -> one channel: notes on channel 1 (a note held twice sounds once), a member channel's
+    pressure as poly aftertouch on its notes, its slide (CC74) and bend as channel 1's; the MPE set-up dropped"""
+    held = {c: set() for c in range(16)}   # notes on each channel
+    count = {}                              # how many channels hold a note
+    out = []
+    for t, st, d1, d2 in events:
+        kind, ch = st & 0xF0, st & 15
+        if kind == 0x90 and d2:
+            held[ch].add(d1)
+            count[d1] = count.get(d1, 0) + 1
+            if count[d1] == 1:
+                out.append((t, 0x90, d1, d2))
+        elif kind in (0x80, 0x90):
+            if d1 in held[ch]:
+                held[ch].discard(d1)
+                count[d1] -= 1
+                if count[d1] == 0:
+                    out.append((t, 0x80, d1, 0))
+        elif kind == 0xD0:
+            if ch == 0:
+                out.append((t, 0xD0, d1, 0))
+            else:
+                out += [(t, 0xA0, n, d1) for n in sorted(held[ch])]
+        elif kind == 0xA0:
+            out.append((t, 0xA0, d1, d2))
+        elif kind == 0xB0:
+            if d1 not in (100, 101, 6, 38):  # the MPE configuration and bend ranges
+                out.append((t, 0xB0, d1, d2))
+        elif kind == 0xE0:
+            out.append((t, 0xE0, d1, d2))
+    return out
+
+
 def vlq(n):
     out = [n & 0x7F]
     while n > 0x7F:
@@ -48,11 +84,13 @@ def main(argv):
         chans = sorted({e[1] & 15 for e in ev})
         print(f"{argv[1]}: {dur / 1000:.1f} s, {len(ev)} events, {notes} notes, channels {[c + 1 for c in chans]}")
         return
+    mpe = "--mpe" in argv
+    argv = [a for a in argv if a != "--mpe"]
     if not argv:
         raise SystemExit(__doc__)
     out = argv[1] if len(argv) > 1 else argv[0].rsplit(".", 1)[0] + ".mid"
     ev, dur = read_take(argv[0])
-    write_mid(ev, dur, out)
+    write_mid(ev if mpe else flatten(ev), dur, out)
     print(f"{out}: {len(ev)} events, {dur / 1000:.1f} s")
 
 if __name__ == "__main__":

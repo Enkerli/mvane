@@ -42,6 +42,33 @@ export function writeTake(events) {             // [[ms, st, d1, d2]] (in time o
   return out;
 }
 
+// MPE on 16 channels -> one channel, so a DAW makes one clip of it: notes on channel 1 (a note held twice sounds once),
+// a member channel's pressure as poly aftertouch on its notes, its slide (CC74) and bend as channel 1's; the MPE
+// set-up dropped (as tools/mvt2mid.py flatten)
+export function flatten(events) {
+  const held = Array.from({ length: 16 }, () => new Set()), count = new Map(), out = [];
+  for (const [t, st, d1, d2] of events) {
+    const kind = st & 0xf0, ch = st & 15;
+    if (kind === 0x90 && d2) {
+      held[ch].add(d1);
+      count.set(d1, (count.get(d1) || 0) + 1);
+      if (count.get(d1) === 1) out.push([t, 0x90, d1, d2]);
+    } else if (kind === 0x80 || kind === 0x90) {
+      if (held[ch].has(d1)) {
+        held[ch].delete(d1);
+        count.set(d1, count.get(d1) - 1);
+        if (count.get(d1) === 0) out.push([t, 0x80, d1, 0]);
+      }
+    } else if (kind === 0xd0) {
+      if (ch === 0) out.push([t, 0xd0, d1, 0]);
+      else for (const n of [...held[ch]].sort((a, b) => a - b)) out.push([t, 0xa0, n, d1]);
+    } else if (kind === 0xa0) out.push([t, 0xa0, d1, d2]);
+    else if (kind === 0xb0) { if (![100, 101, 6, 38].includes(d1)) out.push([t, 0xb0, d1, d2]); }
+    else if (kind === 0xe0) out.push([t, 0xe0, d1, d2]);
+  }
+  return out;
+}
+
 const vlq = (n) => { const o = [n & 0x7f]; while ((n >>>= 7)) o.unshift(0x80 | (n & 0x7f)); return o; };
 
 export function writeMid({ events, duration }) { // a format-0 MIDI file, 120 bpm, 500 ticks a beat

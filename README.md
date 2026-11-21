@@ -24,7 +24,9 @@ stop, so waiting costs nothing.
 | OCT- / OCT+ | octave |
 | REC | tap: keep the last phrase (everything since the last 3 s of silence); hold: keep the whole history |
 | PLAY | play / stop the take |
-| SAVE | the settings and the take, kept across power-off |
+| SAVE | the settings, and the take into its slot, kept across power-off |
+| SEQ / HOME | the next / previous of eight take slots (an unsaved take: a warning first, a second press goes on) |
+| SEL | POLY, MONO (legato), POLY+BREATH, MONO+BREATH: breath is CC2 or CC11 from a wind controller, as level and brightness |
 
 MIDI in (USB, TRS) plays the synth with MPE: per-note pitch bend (bend range by RPN), slide (CC74 on a member
 channel), channel and poly pressure. It goes into the history too.
@@ -36,12 +38,14 @@ The take SAVE keeps is a file over USB (fm1-base's companion services). Two ways
 - **The page**, https://enkerli.github.io/mvane-yard/ (`web/index.html`): Connect, see the take as a piano roll, **Download as MIDI** (or `.mvt`), or send a
   MIDI file to the FM-1 as the take PLAY plays; settings download and restore. Chrome or Edge. To run it from a checkout
   instead: `python3 -m http.server 8737 --directory web`, then http://localhost:8737 (Web MIDI needs HTTPS or localhost).
-- **The command line**: `python3 tools/yard.py take` writes `take.mid`; `tools/yard.py put song.mid` sends a MIDI file
+- **The command line**: `python3 tools/yard.py take` writes slot 1's take as `take1.mid` (`--slot N`, or `takes` for
+  all eight); `tools/yard.py put song.mid --slot 3` sends a MIDI file
   (notes, controllers, pressure, bend; tracks merged; tempo honoured); `tools/yard.py settings` saves the settings.
   Needs `pip install mido python-rtmidi`.
 
-Stop PLAY first: the FM-1 refuses files while a take plays. The MIDI file keeps the MPE channels, so an MPE instrument
-(Vane, Bitwig's) plays it back as played. In the VIBE FM plugin the take stays in memory (no flash there).
+Stop PLAY first: the FM-1 refuses files while a take plays. Download as MIDI puts everything on one channel, so a DAW makes one clip of it
+(each note's pressure as poly aftertouch: per-note pressure in Bitwig); `--mpe` or the page's MIDI with MPE channels
+keeps a channel a note. In the VIBE FM plugin the take stays in memory (no flash there).
 
 ## Layout
 

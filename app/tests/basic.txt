@@ -134,3 +134,49 @@ expect mode 0
 expect glide 40
 expect style 2
 shot notes.png
+# mono legato: two notes held sound as one voice; releasing the second goes back to the first
+tap SEL
+expect play 1
+midi 92 3C 64
+midi 93 40 64
+wait 30
+expect voices 1
+midi 83 40 00
+wait 30
+expect voices 1
+midi 82 3C 00
+wait 30
+expect voices 0
+# breath: SEL again (POLY+BREATH), then back to POLY
+tap SEL
+expect play 2
+tap SEL
+tap SEL
+expect play 0
+# take slots: the take saved above is in slot 1; slot 2 starts empty, gets its own; both survive a reboot
+expect slot 0
+tap SEQ
+expect slot 1
+expect take 0
+turn ALGO 1
+wait 30
+key 0 down 100
+wait 300
+key 0 up
+wait 300
+tap REC
+wait 30
+tap SEQ
+expect slot 1
+tap SAVE
+wait 100
+tap HOME
+expect slot 0
+expect take_ms 8370
+tap SEQ
+expect slot 1
+reboot
+wait 600
+expect slot 1
+expect take_ms 912
+shot slots.png

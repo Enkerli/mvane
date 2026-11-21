@@ -42,6 +42,7 @@ jobs:
         run: |
           ./build.sh --host
           app/build/host/mvane-yard_host app/tests/basic.txt app/build/host | tee host.log
+          app/build/host/mvane-yard_host app/tests/migrate.txt app/build/host | tee -a host.log
           ! grep -q '^FAIL' host.log
 
       - name: File transfer checks (the take as MIDI, a MIDI file in; the page's conversions)

@@ -2,14 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """mvane yard's files over USB, through fm1-base's companion services (base/docs/COMPANION.md).
 
-    tools/yard.py take [OUT.mid]          the FM-1's saved take as a MIDI file (default take.mid); --mvt keeps the .mvt
-    tools/yard.py put FILE                a take to the FM-1: a .mvt, or a MIDI file (its notes, controllers, pressure
+    tools/yard.py take [OUT.mid]          slot 1's take (--slot N for another) as a MIDI file (default takeN.mid): one channel, so a DAW
+                                          makes one clip of it (pressure per note as poly aftertouch); --mpe keeps the
+                                          MPE channels instead; --mvt keeps the .mvt too
+    tools/yard.py takes [DIR]             every slot's take as MIDI files (takeN.mid), into DIR (default .)
+    tools/yard.py put FILE                a take into slot 1 (--slot N): a .mvt, or a MIDI file (its notes, controllers, pressure
                                           and bend, all tracks merged; at most 30,000 events)
     tools/yard.py settings [OUT]          the settings as a file (default settings.bin); --put FILE sends one back
     tools/yard.py ls                      what the FM-1 has
 
 Options: --port NAME (part of the FM-1's MIDI port name), --serve-cmd CMD (a host simulator instead of an FM-1:
-"app/build/host/mvane-yard_host --serve"). The take on the FM-1 is the one SAVE kept (REC, then SAVE). Needs mido with
+"app/build/host/mvane-yard_host --serve"). The FM-1 keeps eight takes (SEQ and HOME pick the slot, SAVE keeps
+the take there). Needs mido with
 python-rtmidi for an FM-1. Stop PLAY first: the FM-1 refuses files while a take plays.
 """
 import argparse
@@ -23,7 +27,11 @@ sys.path.insert(0, HERE)
 import fm1_companion as fc  # noqa: E402
 import mvt2mid  # noqa: E402
 
-TAKE, SETTINGS = "take.mvt", "settings"
+SETTINGS, SLOTS = "settings", 8
+
+
+def take_name(slot):
+    return f"take{slot}.mvt"
 MAX_WORDS = 30000
 
 
@@ -139,9 +147,11 @@ def main(argv=None, link=None):
     own = link is None
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__.split("\n", 2)[2])
-    p.add_argument("cmd", choices=["take", "put", "settings", "ls"])
+    p.add_argument("cmd", choices=["take", "takes", "put", "settings", "ls"])
+    p.add_argument("--slot", type=int, default=1, choices=range(1, 9), metavar="1..8")
     p.add_argument("file", nargs="?")
     p.add_argument("--mvt", action="store_true", help="take: keep the .mvt beside the MIDI file")
+    p.add_argument("--mpe", action="store_true", help="take: the MPE channels kept (a DAW may split them into clips)")
     p.add_argument("--put", metavar="FILE", help="settings: send this file to the FM-1")
     p.add_argument("--port")
     p.add_argument("--serve-cmd")
@@ -155,20 +165,32 @@ def main(argv=None, link=None):
         if a.cmd == "ls":
             for f in c.files():
                 print(f"{f['name']:<12} {f['size']:>7} B  (room {f['room']})")
-        elif a.cmd == "take":
-            data = read_file(c, TAKE)
-            if len(data) < 16:
-                print("yard: no take saved on the FM-1 (REC, then SAVE)", file=sys.stderr)
-                return 6
-            out = a.file or "take.mid"
-            mvt = out.rsplit(".", 1)[0] + ".mvt"
-            open(mvt, "wb").write(data)
-            ev, dur = mvt2mid.read_take(mvt)
-            mvt2mid.write_mid(ev, dur, out)
-            if not a.mvt:
-                os.remove(mvt)
-            notes = sum(1 for e in ev if e[1] & 0xF0 == 0x90 and e[3])
-            print(f"{out}: {dur / 1000:.1f} s, {notes} notes, {len(ev)} events" + (f" (and {mvt})" if a.mvt else ""))
+        elif a.cmd in ("take", "takes"):
+            slots = [a.slot] if a.cmd == "take" else range(1, SLOTS + 1)
+            got = 0
+            for slot in slots:
+                data = read_file(c, take_name(slot)) if c.index_of(take_name(slot))["size"] >= 16 else b""
+                if len(data) < 16:
+                    if a.cmd == "take":
+                        print(f"yard: slot {slot} is empty (REC, then SAVE)", file=sys.stderr)
+                        return 6
+                    continue
+                if a.cmd == "take":
+                    out = a.file or f"take{slot}.mid"
+                else:
+                    os.makedirs(a.file or ".", exist_ok=True)
+                    out = os.path.join(a.file or ".", f"take{slot}.mid")
+                mvt = out.rsplit(".", 1)[0] + ".mvt"
+                open(mvt, "wb").write(data)
+                ev, dur = mvt2mid.read_take(mvt)
+                mvt2mid.write_mid(ev if a.mpe else mvt2mid.flatten(ev), dur, out)
+                if not a.mvt:
+                    os.remove(mvt)
+                notes = sum(1 for e in ev if e[1] & 0xF0 == 0x90 and e[3])
+                print(f"{out}: {dur / 1000:.1f} s, {notes} notes, {len(ev)} events" + (f" (and {mvt})" if a.mvt else ""))
+                got += 1
+            if a.cmd == "takes" and not got:
+                print("yard: every slot is empty", file=sys.stderr)
         elif a.cmd == "put":
             if not a.file:
                 raise SystemExit("yard put FILE")
@@ -179,8 +201,8 @@ def main(argv=None, link=None):
                 raw = take_file(words, last)
             elif raw[:4] != struct.pack("<I", 0x3154564D):
                 raise SystemExit(f"{a.file}: neither a take (.mvt) nor a MIDI file")
-            c.write(c.index_of(TAKE)["index"], raw)
-            print(f"{a.file} -> the FM-1's take ({len(raw)} B): PLAY plays it")
+            c.write(c.index_of(take_name(a.slot))["index"], raw)
+            print(f"{a.file} -> slot {a.slot} ({len(raw)} B): PLAY plays it there")
         elif a.cmd == "settings":
             i = c.index_of(SETTINGS)["index"]
             if a.put:

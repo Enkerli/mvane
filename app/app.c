@@ -12,10 +12,11 @@
  *   FX         voicing: CLOSE / OPEN / WIDE        LFO   upper voices: 3 .. 6      EDIT  bass on / off
  *   ENV        black keys: types from the scale (STACK 7 TRIAD ADD9 SUS 6/9 QUARTAL 11 FIFTHS V/) or fixed
  *              qualities, as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m)
- *   GLO        USB audio level: full / MASTER
+ *   GLO        USB audio level: full / MASTER           SEL   POLY / MONO (legato) / POLY+BREATH / MONO+BREATH
  *   K1 tone    K2 release    K3 glide    K4 attack (CC74, CC72, CC5, CC73 on the master channel: recorded, replayed)
  *   OCT- OCT+  octave        REC  tap: capture the last phrase; hold: capture the whole history
- *   PLAY       play / stop the take                    SAVE  the settings and the take, kept across power-off
+ *   PLAY       play / stop the take                    SAVE  the settings and the take into its slot
+ *   SEQ, HOME  the next, the previous of eight take slots (an unsaved take: a warning first)
  *
  * MIDI in (USB, TRS) plays the synth with MPE (per-note bend, slide, pressure) and goes into the history.
  * Part of the unity build (base/device/unity.c, base/host/plat_host.c), after the platform. */
@@ -42,7 +43,8 @@ typedef struct {
     uint8_t type, style, bass, usb_full;
     uint8_t voices;                      /* upper voices, 3..6 */
     uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
-    uint8_t rsv[2];
+    uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BREATH, 3 MONO+BREATH (synth_mode) */
+    uint8_t slot;                        /* the take's slot (multiple takes) */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -76,7 +78,7 @@ static void settings_load(void)
         bad |= set.p[i] > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
-        || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u)
+        || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u)
         settings_defaults();
 }
 
@@ -166,12 +168,9 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
     }
 }
 
-/* -------------------------------------------------------------- the take --- */
-#define TAKEF_N (30u * 4096u)            /* 120 KiB a copy: the head and a full take */
-static const plat_file_t TAKEF = {PLAT_DATA_LO, PLAT_DATA_LO + TAKEF_N, TAKEF_N};   /* A/B, at the data area's start */
-
-/* The take kept in the flash, through plat_file_* (fm1-base's companion services). A WebAssembly build that is
- * not fm1-base's own emulator (VIBE FM's converter: its platform has no plat_file_*) keeps the take in RAM only.
+/* -------------------------------------------------------------- the takes --- */
+/* Takes kept in the flash: TAKE_SLOTS slots (takes.c). A WebAssembly build that is not fm1-base's own emulator
+ * (VIBE FM's converter: its platform has neither plat_file_* nor plat_data_*) keeps the take in RAM only.
  * MVY_TAKE_FLASH 0 or 1 overrides */
 #ifndef MVY_TAKE_FLASH
 #if defined(__wasm__) && !defined(PLAT_HOST)
@@ -181,46 +180,45 @@ static const plat_file_t TAKEF = {PLAT_DATA_LO, PLAT_DATA_LO + TAKEF_N, TAKEF_N}
 #endif
 #endif
 #if MVY_TAKE_FLASH
-#define tf_size plat_file_size
-#define tf_data plat_file_data
-#define tf_read plat_file_read
-#define tf_begin plat_file_begin
-#define tf_write plat_file_write
-#define tf_commit plat_file_commit
-#define tf_delete plat_file_delete
+#include "takes.c"
+/* 0.4's single take (plat_file_*, A/B at the data area's start): brought into RAM once, for the first SAVE */
+static const plat_file_t OLD_TAKEF = {PLAT_DATA_LO, PLAT_DATA_LO + 30u * 4096u, 30u * 4096u};
 #else
-static int tf_size(const plat_file_t *f) { (void)f; return -1; }
-static const uint8_t *tf_data(const plat_file_t *f) { (void)f; return 0; }
-static int tf_read(const plat_file_t *f, uint32_t o, void *d, uint32_t n) { (void)f, (void)o, (void)d, (void)n; return -1; }
-static int tf_begin(const plat_file_t *f, uint32_t n) { (void)f, (void)n; return -1; }
-static int tf_write(const plat_file_t *f, uint32_t o, const void *s, uint32_t n) { (void)f, (void)o, (void)s, (void)n; return -1; }
-static int tf_commit(const plat_file_t *f, uint32_t n, uint32_t c) { (void)f, (void)n, (void)c; return -1; }
-static int tf_delete(const plat_file_t *f) { (void)f; return -1; }
+#define TAKE_SLOTS 8u
+static int takes_init(void) { return 1; }
+static int takes_size(uint32_t k) { (void)k; return -1; }
+static const uint8_t *takes_data(uint32_t k) { (void)k; return 0; }
+static uint32_t takes_free_sectors(void) { return 0; }
+static int takes_begin(uint32_t k, uint32_t n) { (void)k, (void)n; return -1; }
+static int takes_write(uint32_t o, const void *s, uint32_t n) { (void)o, (void)s, (void)n; return -1; }
+static int takes_commit(uint32_t c) { (void)c; return -1; }
+static int takes_delete(uint32_t k) { (void)k; return -1; }
 #endif
+static uint8_t old_take;                 /* 0.4's take is in RAM, not yet in a slot */
 
-static void take_load(void)
+static void take_load(void)              /* the current slot's take into RAM (none: an empty take) */
 {
-    int n = tf_size(&TAKEF);
-    const uint8_t *p = tf_data(&TAKEF);
+    int n = takes_size(set.slot);
+    const uint8_t *p = takes_data(set.slot);
     take.words = take_buf;
-    take.count = 0;
+    take.count = take.duration_ms = 0;
     if (n > 0 && p && rec_load(&take, p, (uint32_t)n) != 0)
         take.count = 0;
+    take_dirty = 0;
 }
 
-static int take_save(void)
+static int take_save(void)               /* the RAM take into the current slot */
 {
-    if (!MVY_TAKE_FLASH)
-        return take_dirty = 0, 0;   /* kept in RAM: nowhere to save it */
     uint32_t head[REC_HEAD_WORDS], size = rec_file_size(&take), crc;
+    if (!MVY_TAKE_FLASH)
+        return take_dirty = 0, 0;        /* kept in RAM: nowhere to save it */
     rec_file_head(&take, head);
     crc = rec_crc32(0, (const uint8_t *)head, sizeof head);   /* the FM-1 and the host are little-endian */
     crc = rec_crc32(crc, (const uint8_t *)take.words, 4u * take.count);
-    if (tf_begin(&TAKEF, size) || tf_write(&TAKEF, 0, head, sizeof head)
-        || (take.count && tf_write(&TAKEF, sizeof head, take.words, 4u * take.count))
-        || tf_commit(&TAKEF, size, crc))
+    if (takes_begin(set.slot, size) || takes_write(0, head, sizeof head)
+        || (take.count && takes_write(sizeof head, take.words, 4u * take.count)) || takes_commit(crc))
         return -1;
-    take_dirty = 0;
+    take_dirty = old_take = 0;
     return 0;
 }
 
@@ -233,8 +231,20 @@ void app_init(void)
         knob[i] = set.p[i];
     rec_init(&hist, hist_buf, HIST_WORDS);
     hist.sleep_ms = SLEEP_MS;
-    take_load();
+    if (set.slot >= TAKE_SLOTS)
+        set.slot = 0;
+    take.words = take_buf;
+#if MVY_TAKE_FLASH
+    if (!takes_init()) {                 /* no slots yet: 0.4's take, if there is one, waits in RAM for SAVE */
+        int n = plat_file_size(&OLD_TAKEF);
+        const uint8_t *p = plat_file_data(&OLD_TAKEF);
+        if (n > 0 && p && rec_load(&take, p, (uint32_t)n) == 0 && take.count)
+            take_dirty = old_take = 1;
+    } else
+#endif
+        take_load();
     plat_usb_audio_full(set.usb_full);
+    synth_mode(set.play & 1u, set.play >> 1);
 }
 
 /* ---------------------------------------------------------------- helpers --- */
@@ -264,11 +274,18 @@ static void int_text(int32_t v, char *b)
     *b = 0;
 }
 
-static void time_text(uint32_t ms, char *b)   /* m:ss */
+static void time_text(uint32_t ms, char *b)   /* m:ss, or seconds and tenths under a minute ("8.4 S") */
 {
     uint32_t s = ms / 1000u;
     char t[12];
     b[0] = 0;
+    if (ms < 60000u) {
+        int_text((int32_t)s, b);
+        t[0] = '.', t[1] = (char)('0' + ms % 1000u / 100u), t[2] = 0;
+        text_cat(b, t);
+        text_cat(b, " S");
+        return;
+    }
     int_text((int32_t)(s / 60u), b);
     text_cat(b, ":");
     t[0] = (char)('0' + s % 60u / 10u), t[1] = (char)('0' + s % 10u), t[2] = 0;
@@ -293,6 +310,7 @@ static struct {
     uint32_t rec_t;
     uint32_t link;
     uint32_t hist_ms, hist_at;
+    uint32_t slot_warn;                  /* when a slot change last warned of an unsaved take */
     uint8_t redraw;
 } ui;
 
@@ -453,6 +471,31 @@ static void capture(uint32_t gap)
     app_say(gap ? "PHRASE" : "ALL", t);
 }
 
+static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
+{
+    char t[16] = "TAKE ", n[12];
+    uint32_t now = plat_ms();
+    if (take_dirty && now - ui.slot_warn > 3000u) {
+        ui.slot_warn = now;
+        app_say("NOT SAVED", "AGAIN: LOSE IT");
+        return;
+    }
+    ui.slot_warn = 0;
+    if (player.playing)
+        rec_play_stop(&player, play_emit, 0);
+    set.slot = (uint8_t)((set.slot + TAKE_SLOTS + (uint32_t)d) % TAKE_SLOTS);
+    set_dirty = 1;
+    old_take = 0;
+    take_load();
+    int_text((int32_t)set.slot + 1, n);
+    text_cat(t, n);
+    if (take.count)
+        time_text(take.duration_ms, n);
+    else
+        n[0] = 0, text_cat(n, "EMPTY");
+    app_say(t, n);
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), k, pass, now = plat_ms(), pkt;
@@ -532,6 +575,15 @@ static void input(void)
                 char t[4] = {(char)('0' + set.voices), 0};
                 app_say("VOICES", t);
             }
+        } else if (k == B_SEQ || k == B_HOME) {
+            slot_step(k == B_SEQ ? 1 : -1);
+        } else if (k == B_SEL) {         /* how the synth plays: poly or mono legato, with or without breath */
+            static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BREATH", "MONO+BREATH"};
+            set.play = (uint8_t)((set.play + 1u) & 3u);
+            set_dirty = 1;
+            all_off();
+            synth_mode(set.play & 1u, set.play >> 1);
+            app_say("PLAY", PLAY_N[set.play]);
         } else if (k == B_ENV) {         /* the black keys' bank: types from the scale, or fixed qualities */
             set.bank ^= 1u;
             set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
@@ -700,12 +752,19 @@ static void draw(void)
         time_text(take.duration_ms, t);
     else
         text_cat(t, "EMPTY");
-    label_value(10, 42, "TAKE", t);
+    {
+        char l[12] = "TAKE ";
+        l[5] = (char)('1' + set.slot), l[6] = 0;
+        text_cat(l, "/8");
+        label_value(10, 42, l, t);
+    }
     if (player.playing) {
         time_text(now - player.start_ms, t);
         cv_text(80, 56, &FONT_S, t, C_WHITE);
         cv_text(130, 58, &FONT_XS, "PLAYING", C_HI);
-    } else if (take_dirty)
+    } else if (old_take)
+        cv_text(80, 58, &FONT_XS, "0.4'S TAKE: SAVE KEEPS IT", C_HI);
+    else if (take_dirty)
         cv_text(80, 58, &FONT_XS, "NOT SAVED", C_DIM);
     t[0] = 0;                            /* the render's load and its missed deadlines */
     text_cat(t, "CPU ");
@@ -717,7 +776,11 @@ static void draw(void)
         text_cat(t, x);
     }
     cv_text(10, 82, &FONT_XS, t, plat_xruns() ? C_HI : C_DIM);
-    cv_text(150, 82, &FONT_XS, set.usb_full ? "USB FULL" : "USB MASTER", C_DIM);
+    {
+        static const char *const PLAY_S[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
+        cv_text(132, 82, &FONT_XS, PLAY_S[set.play], set.play ? C_HI : C_DIM);
+    }
+    cv_text(188, 82, &FONT_XS, set.usb_full ? "USB FULL" : "USB MAS", C_DIM);
     cv_blit(0, 140);
 }
 
@@ -766,41 +829,65 @@ void app_frame(void)
 }
 
 /* --------------------------------------------------------------- companion --- */
-/* file 0 (after the settings object): the take, take.mvt (tools/mvt2mid.py) */
+/* files after the settings object: the slots' takes, take1.mvt .. take8.mvt (tools/yard.py, web/) */
+static char take_names[TAKE_SLOTS][12];
+static int write_slot = -1;
 int app_file(uint32_t i, plat_file_info_t *f)
 {
     int n;
-    if (i)
+    if (i >= TAKE_SLOTS)
         return -1;
-    n = tf_size(&TAKEF);
-    f->name = "take.mvt";
+    n = takes_size(i);
+    if (!take_names[i][0]) {
+        text_cat(take_names[i], "take");
+        take_names[i][4] = (char)('1' + i), take_names[i][5] = 0;
+        text_cat(take_names[i], ".mvt");
+    }
+    f->name = take_names[i];
     f->kind = PLAT_FK_PATTERN;
     f->flags = PLAT_FF_READ | PLAT_FF_WRITE | PLAT_FF_DELETE;
     f->size = n > 0 ? (uint32_t)n : 0u;
-    f->room = TAKEF.n - PLAT_FILE_HEAD;
+    f->room = 4u * (REC_HEAD_WORDS + TAKE_WORDS);
     return 0;
 }
-int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n) { return i ? -1 : tf_read(&TAKEF, off, dst, n); }
-int app_file_begin(uint32_t i, uint32_t size) { return i ? -1 : tf_begin(&TAKEF, size); }
+int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n)
+{
+    int size = takes_size(i);
+    const uint8_t *p = takes_data(i);
+    uint32_t k;
+    if (size < 0 || !p || off > (uint32_t)size || n > (uint32_t)size - off)
+        return -1;
+    for (k = 0; k < n; k++)
+        dst[k] = p[off + k];
+    return 0;
+}
+int app_file_begin(uint32_t i, uint32_t size)
+{
+    if (size > 4u * (REC_HEAD_WORDS + TAKE_WORDS))
+        return -1;
+    write_slot = (int)i;
+    return takes_begin(i, size);
+}
 int app_file_write(uint32_t i, uint32_t off, const uint8_t *src, uint32_t n)
 {
-    return i ? -1 : tf_write(&TAKEF, off, src, n);
+    return (int)i == write_slot ? takes_write(off, src, n) : -1;
 }
 int app_file_commit(uint32_t i, uint32_t size, uint32_t crc)
 {
-    int rc = i ? -1 : tf_commit(&TAKEF, size, crc);
-    if (!rc) {                           /* a take from the computer: the one PLAY plays */
+    int rc = (int)i == write_slot ? takes_commit(crc) : -1;
+    (void)size;
+    write_slot = -1;
+    if (!rc && i == set.slot) {          /* the current slot from the computer: the take PLAY plays */
         take_load();
-        take_dirty = 0;
         ui.redraw = 1;
     }
     return rc;
 }
 int app_file_delete(uint32_t i)
 {
-    int rc = i ? -1 : tf_delete(&TAKEF);
-    if (!rc)
-        take.count = 0, ui.redraw = 1;
+    int rc = takes_delete(i);
+    if (!rc && i == set.slot)
+        take.count = 0, take_dirty = 0, ui.redraw = 1;
     return rc;
 }
 int app_file_busy(void) { return player.playing; }
@@ -829,6 +916,12 @@ int app_expect(const char *what, int *got)
         *got = set.type;
     else if (!strcmp(what, "style"))
         *got = set.style;
+    else if (!strcmp(what, "old_take"))
+        *got = old_take;
+    else if (!strcmp(what, "slot"))
+        *got = set.slot;
+    else if (!strcmp(what, "play"))
+        *got = set.play;
     else if (!strcmp(what, "nvoices"))
         *got = set.voices;
     else if (!strcmp(what, "hold"))

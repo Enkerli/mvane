@@ -1,0 +1,16 @@
+# 0.4's single take (plat_file at the data area's start) comes into RAM at the first start of 0.5; SAVE puts it in slot 1
+data app/tests/old_take.bin 0x97000
+reboot
+wait 600
+expect old_take 1
+expect take 4
+expect take_ms 200
+shot migrate.png
+tap SAVE
+wait 100
+expect old_take 0
+reboot
+wait 600
+expect old_take 0
+expect take 4
+expect slot 0

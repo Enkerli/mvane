@@ -19,6 +19,11 @@ static uint8_t bend_range[16], rpn_msb[16], rpn_lsb[16];
 static volatile uint8_t prm[SP_N];
 static uint32_t clock_age;
 static float gain_now;
+static uint8_t mono, breath_on;          /* synth_mode */
+static float breath_in, bsm1, bsm;       /* breath (CC2 / CC11), 0..1, and smoothed twice */
+#define NSTACK 16u
+static struct { uint8_t ch, note, vel; } stk[NSTACK];   /* mono: the notes held, the latest last */
+static uint32_t nstk;
 
 static float note_inc(float note) { return 440.0f * fm_exp2f((note - 69.0f) * (1.0f / 12.0f)) * (1.0f / SR); }
 
@@ -32,6 +37,17 @@ void synth_init(const uint8_t p[SP_N])
         slide[i] = 0.5f;                 /* CC74 at rest: 64 (bipolar controllers rest there) */
         rpn_msb[i] = rpn_lsb[i] = 127u;
     }
+}
+
+void synth_mode(uint32_t m, uint32_t b)
+{
+    uint32_t i;
+    if (m != mono)                       /* a change of mode lets everything go */
+        for (i = 0; i < NVOICE; i++)
+            vc[i].gate = 0;
+    mono = (uint8_t)(m != 0);
+    breath_on = (uint8_t)(b != 0);
+    nstk = 0;
 }
 
 uint32_t synth_param(uint32_t which) { return which < SP_N ? prm[which] : 0u; }
@@ -89,10 +105,56 @@ static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
     v->age = ++clock_age;
 }
 
+/* mono: one voice; a note played while another is held slides to it (legato: the envelope goes on), its release
+ * goes back to the note still held, the last release lets go */
+static void mono_to(uint32_t ch, uint32_t note, uint32_t vel, int legato)
+{
+    voice_t *v = &vc[0];
+    v->target = note_inc((float)note);
+    if (!legato) {
+        if (!v->used || !prm[SP_GLIDE])
+            v->base = v->target;
+        v->vel = 0.4f + 0.6f * (float)vel * (1.0f / 127.0f);
+        v->gate = 1;
+        v->age = ++clock_age;
+    }
+    v->ch = (uint8_t)ch;
+    v->note = (uint8_t)note;
+    v->used = 1;
+    v->sb = v->sb1 = bend[ch] + (ch ? bend[0] : 0.0f);
+}
+
+static void mono_event(uint32_t ch, uint32_t note, uint32_t vel)
+{
+    uint32_t i, j;
+    for (i = j = 0; i < nstk; i++)       /* the note, out of the stack wherever it is */
+        if (!(stk[i].ch == ch && stk[i].note == note))
+            stk[j++] = stk[i];
+    nstk = j;
+    if (vel) {
+        int legato = vc[0].gate && nstk > 0;
+        if (nstk == NSTACK) {
+            for (i = 1; i < NSTACK; i++)
+                stk[i - 1] = stk[i];
+            nstk--;
+        }
+        stk[nstk].ch = (uint8_t)ch, stk[nstk].note = (uint8_t)note, stk[nstk].vel = (uint8_t)vel;
+        nstk++;
+        mono_to(ch, note, vel, legato);
+    } else if (vc[0].gate && vc[0].ch == ch && vc[0].note == note) {
+        if (nstk)
+            mono_to(stk[nstk - 1].ch, stk[nstk - 1].note, stk[nstk - 1].vel, 1);
+        else
+            vc[0].gate = 0;
+    }
+}
+
 void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t kind = st & 0xF0u, ch = st & 0x0Fu, i;
-    if (kind == 0x90u && d2)
+    if (mono && (kind == 0x90u || kind == 0x80u))
+        mono_event(ch, d1, kind == 0x90u ? d2 : 0u);
+    else if (kind == 0x90u && d2)
         voice_on(ch, d1, d2);
     else if (kind == 0x80u || kind == 0x90u) {
         for (i = 0; i < NVOICE; i++)
@@ -112,7 +174,9 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
                 slide[ch] = (float)d2 * (1.0f / 127.0f);   /* MPE slide: this note's brightness, 64 neutral */
             else
                 prm[SP_TONE] = (uint8_t)d2;
-        } else if (d1 == SYNTH_CC_REL && !ch)
+        } else if (d1 == 2u || d1 == 11u)   /* breath (CC2), or expression (CC11) from a wind controller */
+            breath_in = (float)d2 * (1.0f / 127.0f);
+        else if (d1 == SYNTH_CC_REL && !ch)
             prm[SP_REL] = (uint8_t)d2;
         else if (d1 == SYNTH_CC_GLIDE && !ch)
             prm[SP_GLIDE] = (uint8_t)d2;
@@ -128,9 +192,11 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
             bend[ch] = press[ch] = 0.0f;
             slide[ch] = 0.5f;
         }
-        else if (d1 == 123u)
+        else if (d1 == 123u) {
             for (i = 0; i < NVOICE; i++)
                 vc[i].gate = 0;
+            nstk = 0;
+        }
     }
 }
 
@@ -146,9 +212,17 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     float att = 1.0f - fm_exp2f(-4.0f / (SR * att_s));
     float glide = prm[SP_GLIDE] ? 4.0f / (SR * 0.005f * fm_exp2f((float)prm[SP_GLIDE] * (8.6f / 127.0f))) : 1.0f;
     float tone = (float)prm[SP_TONE] * (1.0f / 127.0f);
-    float acc[256];
+    float acc[256], bsub[16], batt = 1.0f - fm_exp2f(-4.0f / (SR * 0.004f));   /* breath: the level within 4 ms */
+    uint32_t k;
     if (glide > 1.0f)
         glide = 1.0f;
+    if (mono && glide >= 1.0f)           /* mono: legato always slides, 20 ms when GLIDE is 0 */
+        glide = 4.0f / (SR * 0.02f);
+    for (k = 0; k < 16u; k++) {          /* breath, smoothed twice, once every 16 samples; a gentle curve */
+        bsm1 += (breath_in - bsm1) * 0.15f;
+        bsm += (bsm1 - bsm) * 0.15f;
+        bsub[k] = bsm * (0.6f + 0.4f * bsm);
+    }
     for (i = 0; i < n && i < 256u; i++)
         acc[i] = 0.0f;
     for (j = 0; j < NVOICE; j++) {
@@ -164,13 +238,14 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         for (i0 = 0; i0 < n && i0 < 256u; i0 += 16u) {
             float mul, fc, g, a1, a2, a3, c1, oct;
             uint32_t i, end = i0 + 16u < n ? i0 + 16u : n;
+            float br = bsub[(i0 >> 4) & 15u], tv = breath_on ? v->vel * br : v->vel, a = breath_on ? batt : att;
             v->sp1 += (p - v->sp1) * 0.04f, v->sp += (v->sp1 - v->sp) * 0.04f;   /* two stages, ~9 ms each */
             v->ss1 += (slide[v->ch] - v->ss1) * 0.04f, v->ss += (v->ss1 - v->ss) * 0.04f;
             v->sb1 += (b - v->sb1) * 0.04f, v->sb += (v->sb1 - v->sb) * 0.04f;
             mul = fm_exp2f(v->sb * (1.0f / 12.0f));
             /* the cutoff follows the note: tone 0 under the fundamental (a sine), 127 eight octaves above; pressure
              * up to three more; slide four octaves either way of 64 */
-            oct = shape + 3.0f * v->sp + 8.0f * (v->ss - 0.5f);
+            oct = shape + 3.0f * v->sp + 8.0f * (v->ss - 0.5f) + (breath_on ? 4.0f * br - 1.5f : 0.0f);
             fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 20.0f, 16000.0f);
             g = fm_tanf(3.14159265f * fc * (1.0f / SR));
             a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
@@ -197,7 +272,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
                 v->ic1 = 2.0f * v1 - v->ic1;
                 v->ic2 = 2.0f * v2 - v->ic2;
                 v->lp += (v2 - v->lp) * c1;
-                v->level += v->gate ? (v->vel - v->level) * att : -v->level * rel;
+                v->level += v->gate ? (tv - v->level) * a : -v->level * rel;
                 acc[i] += v->lp * v->level;
             }
         }

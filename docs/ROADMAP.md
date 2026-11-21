@@ -64,6 +64,14 @@ compiles everything and stops at the link: its platform has no `plat_file_*`. **
 fm1-base's own emulator) the take stays in RAM, so the plugin build captures and replays but doesn't keep a take
 between sessions; next, `vibe_host_store` for that.
 
+**Fifth session (the plugin and files).** The VIBE FM conversion worked and the plugin plays as expected. The take
+came into Bitwig as 15 clips (a clip per MPE channel). **0.5:** Download as MIDI puts everything on one channel (each
+note's pressure as poly aftertouch, slide and bend on channel 1), MPE channels kept as an option; eight take slots in
+the flash (SEQ / HOME), on the page and in `yard.py`; mono legato and breath (CC2 / CC11) on SEL. Next asked: more
+sounds, starting with the FM-1's tried and true engines and patches (Coral Flower's VA, then its FM; Clipper's), so a
+looping take can be tried through different patches, with slide and pressure routed in each; later a minimal Vane
+(its wavetable engine first).
+
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
 top row's last key (F#5). Then a simple recorded sequence is replayed with different presets, preferably ones
