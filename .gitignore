@@ -5,3 +5,4 @@ app/web/words/
 docs/media/*.wav
 dist/
 web/emu/
+midi_out.txt
