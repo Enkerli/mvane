@@ -1,7 +1,7 @@
 # mvane yard
 
 A custom firmware for the M-VAVE FM-1, on [fm1-base](https://github.com/charlesvestal/fm1-base). See
-[docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
+[docs/MANUAL.md](docs/MANUAL.md) for how to play it and [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
 
 **0.4:** a 12-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
 chords from any of eight pitch-class sets with a separate bass and smooth voice leading, MPE out over USB, duplex USB

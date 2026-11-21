@@ -9,19 +9,14 @@ The one principle behind the layout: **musical logic lives in `core/`, portable 
 firmware (`app/`), the desktop tools and a future plugin all compile the same files, so a take or a patch behaves
 the same everywhere.
 
-## Where things stand (0.2, 2026-11-21)
+## Where things stand (0.6, 2026-11-21)
 
-0.1 ran on Alex's FM-1 on the day (installed with M-Patcher): "more satisfying than expected". 0.2 answers that first
-session; it passes the host simulator and has not been played yet.
-
-| Piece | State |
-| --- | --- |
-| `core/chords` | Chords from any pitch-class set (eight built in, including Alex's PCO and Noodling sets from the Exquis); ten types as scale steps above the root (stacked thirds, sus, quartal, 11, fifths, ...) and a chromatic V/; CLOSE, OPEN and WIDE voicings, a separate bass, voice leading from the previous chord; names from the notes |
-| `core/harmony` | Whole-loop voice leading (`harmony_voice_loop`), kept for ProgGenie phrases |
-| `core/rec` | Always-on history (32,768 events, 32-bit each); it sleeps, so a pause longer than 4 s costs at most 4 s of playing time; "last phrase" and "everything" captures with held notes and controller values carried across; a player; the take file (`.mvt`), CRC |
-| `app/synth.c` | 8 voices, band-limited saw, key-tracked 18 dB/oct lowpass (dark to bright), attack and release, glide; MPE in: per-note bend (RPN bend range), slide (CC74 per member channel), channel and poly pressure |
-| `app/` | NOTES and CHORDS (white keys degrees, black keys latched types, HOLD on F#5); MPE out over USB; knobs recorded as CC; REC, PLAY, SAVE; CPU load and xruns on screen; USB audio at full level apart from MASTER |
-| Files over USB | fm1-base's companion services: `settings` and `take.mvt`; `tools/mvt2mid.py` makes a MIDI file of a take |
+What 0.6 does, control by control: [MANUAL.md](MANUAL.md). In short: notes or chords (any of eight pitch-class sets,
+two chord banks, three voicing styles, 3 to 6 voices plus a bass, smooth voice leading, HOLD), mvane yard's saw or
+Clipper's 379 factory sounds (22 engines, vendored in `app/clipper/`), MPE in and out, breath and mono legato, an
+always-on history captured after the fact (never copied), eight take slots in the flash, the takes as MIDI files on a
+page and from the command line, and a VIBE FM plugin build (TheFirmwareHub's converter). Device build: 370 KB of
+flash, 61 of 96 KB RAM, 327 of 344 KB pool.
 
 ## Alex's first session (0.1 on the FM-1, 2026-11-21)
 
@@ -71,6 +66,33 @@ the flash (SEQ / HOME), on the page and in `yard.py`; mono legato and breath (CC
 sounds, starting with the FM-1's tried and true engines and patches (Coral Flower's VA, then its FM; Clipper's), so a
 looping take can be tried through different patches, with slide and pressure routed in each; later a minimal Vane
 (its wavetable engine first).
+
+**Sixth session (0.6: Clipper's sounds).** Works well with the Diosynth (breath). Asked, in Alex's words and
+order:
+- **Rethink the knobs and buttons.** SEQ / HOME are not how FM-1 firmwares move through clips: SELECT does, in the
+  SEQ context. In play, K1-K4 should make sense together: one page as Coral Flower's (QUANTIZE, KEY, SCALE, GLIDE),
+  another for the synth's macros (Clipper's BRITE, TIMBR, MOTN, SPACE). Proposal in [PANEL.md](PANEL.md).
+- **Keep both chord banks** and a clear way to switch (ENV does it in 0.6, without saying so on screen: see
+  "Discoverable").
+- **Files in the plugin**: settings above all. VIBE FM's platform imports `vibe_host_store`, likely the firmware's
+  store kept with the DAW project; to test. Fallback: SysEx in a MIDI clip (Bitwig is weak with SysEx).
+- **Streamline Clipper's engines and sounds**: fewer models, similar ones merged (below).
+- **Display a chord's structure as a piano roll** (the voices on a small roll: what moved, what held).
+- **Standalone / plugin build, file-compatible** with the device (beside VIBE FM: M7).
+- **USB MIDI host**: the Diosynth straight into the FM-1's USB-C. fm1-base has it (`usb_host = true`,
+  `plat_usb_host`): the FM-1 hosts a USB-MIDI device or one behind a powered hub. The FM-1 gives no power, so the
+  Diosynth needs its own battery or a powered hub; while hosting, the computer's USB (audio, MIDI, files) is off.
+- **Document everything** (now: [MANUAL.md](MANUAL.md)).
+- **More discoverable UI** (soon): what each control does on screen when it is touched, the chord banks named.
+- **Smooth voice leading as in music-suite**: its reference is `packages/theory/src/voiceLeading.ts`, Tymoczko's
+  minimal taxicab voice leading between pitch-class sets (the dynamic program over cyclic rotations, doublings
+  allowed), with three modes in `packages/proggen/src/generate.js` `voiceProgression`: none (home position), loose
+  (home position moved to the nearest register), strict (minimal taxicab motion). mvane yard's `core/chords` searches
+  voicings within a style's limits and scores each note's distance to the previous chord's nearest: close in spirit to
+  strict, but not the same algorithm. To do: port voiceLeading.ts to C in core/ against music-suite's shared vectors
+  (`vectors/voice-leading.json`), and offer the three modes.
+- **Submit to the FM-1 Firmware Hub**, eventually: <https://thefirmwarehub.com/submit/> (fm1.toml's install, repo and
+  screenshot fields, a release build, firmware.json).
 
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
@@ -147,6 +169,34 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 ### M2c: why it sounds different from Coral Flower
 - Read Coral Flower's chord engine (GPL-3.0) for its voicings, register and doublings, and render the same
   progression through both (VIBE FM runs Coral Flower) for an A/B by ear.
+
+### M2d: streamlining Clipper's engines and sounds
+
+0.6 carries 22 of Clipper's 23 engines and their 379 sounds (WAVE left out for RAM). Proposal, to agree with Alex:
+keep the ones that suit chords, keys and leads, merge or drop the rest.
+
+| Keep | Why |
+| --- | --- |
+| HYBRID | Clipper's own voice: pads, strings, keys, leads, bells |
+| JUNO | Juno pads and strings, its chorus |
+| STRINGS | string machines |
+| ANALOG | warm pads, basses, leads |
+| FM6 / FMX | FM keys, bells, pads (merge into one list: same family) |
+| DIGITAL | electric pianos, bells (merge with FM?) |
+| WHEEL | organs |
+| VOICE | choirs |
+| PHYS | plucks, bells, bowed (some are percussion: FX) |
+| MACRO | chords, swarm, additive |
+
+| Drop or fold in | Why |
+| --- | --- |
+| ACID, NOISE, LOFI, TRIO | basslines, noises, chiptune: a groovebox's |
+| GRAIN, SAMPLE | synthesized sources, few sounds |
+| VPS, TERRAIN, PHASE | experimental timbres; a few sounds could join a "TEXTURES" list |
+| WSEQ, VECTOR | wave sequencing, vector: interesting, heavier to drive without their editor |
+
+A curated list of sounds by kind (pads, keys, strings, bells, leads, organs, choirs, basses) on PRESETS, the rest in
+an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (WAVE could come back).
 
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
