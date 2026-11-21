@@ -16,7 +16,7 @@ $(B)/rec_test: core/rec.c core/rec.h core/rec_test.c
 	@mkdir -p $(B)
 	$(CC) $(CFLAGS) core/rec.c core/rec_test.c -o $@
 
-$(B)/chords_test: core/chords.c core/chords.h core/harmony.h core/chords_test.c
+$(B)/chords_test: core/chords.c core/chords.h core/port.h core/chords_test.c
 	@mkdir -p $(B)
 	$(CC) $(CFLAGS) core/chords.c core/chords_test.c -o $@
 

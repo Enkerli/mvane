@@ -1,0 +1,17 @@
+# worst case for headroom: MASTER fully up, six upper voices plus bass, hard velocity, bright, full pressure
+wait 600
+master 4096
+turn K1 40
+tap LFO
+wav loud.wav
+key 0 down 127,127
+wait 1500
+key 9 down 127,127
+key 0 up
+wait 1500
+key 2 down 127,127
+key 9 up
+wait 1500
+key 2 up
+wait 600
+wavstop

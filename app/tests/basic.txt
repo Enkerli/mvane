@@ -4,11 +4,12 @@ wait 600
 shot boot.png
 expect mode 1
 expect style 1
-# a chord: bass and four upper voices, each on its own MPE channel
+# a chord: bass and five upper voices (the default), each on its own MPE channel
+expect nvoices 5
 key 0 down 100
 wait 50
-expect chord_n 5
-expect voices 5
+expect chord_n 6
+expect voices 6
 shot chord.png
 key 0 up
 wait 50
@@ -22,14 +23,14 @@ tapkey 25 90
 expect hold 1
 tapkey 2 90
 wait 200
-expect chord_n 5
+expect chord_n 6
 tapkey 4 90
 wait 200
-expect chord_n 5
+expect chord_n 6
 # a type change re-voices what sounds
 tapkey 1 90
 expect type 0
-expect chord_n 5
+expect chord_n 6
 shot hold.png
 tapkey 25 90
 expect hold 0
@@ -42,15 +43,27 @@ tap FX
 expect style 2
 key 6 down 100
 wait 50
-expect chord_n 5
+expect chord_n 6
 shot wide-pco.png
 key 6 up
 tap EDIT
 key 6 down 100
 wait 50
-expect chord_n 4
+expect chord_n 5
 key 6 up
 tap EDIT
+# six upper voices, then three
+tap LFO
+expect nvoices 6
+key 6 down 100
+wait 50
+expect chord_n 7
+key 6 up
+tap LFO
+expect nvoices 3
+tap LFO
+tap LFO
+expect nvoices 5
 turn SELECT -5
 wait 30
 expect scale 0
@@ -85,7 +98,7 @@ expect playing 0
 press PLAY
 wait 25
 expect playing 1
-expect voices 5
+expect voices 6
 release PLAY
 wait 9000
 expect playing 0

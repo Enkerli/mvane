@@ -38,6 +38,16 @@ session; it passes the host simulator and has not been played yet.
   above it, 18 dB/oct; attack on K4 for softer starts.
 - The synth took MPE but not per-note bend, and slide wasn't per note. **0.2:** both.
 
+**Second session (0.2 on the FM-1).** Crackling got worse, and went away with the volume down; no xruns, CPU 11%
+even with 11th chords. Cause: MASTER was applied inside the render before a hard clamp at full scale, so a five-voice
+chord at full volume clipped. **0.3:** each voice at about half the old level, and a soft limiter (clean to half
+scale, smooth to 0.95) instead of the clamp; the worst case measured (six voices plus bass, velocity and pressure
+full, MASTER up) peaks at -4 dBFS. MPE works; slide was too subtle (the Exquis's Y axis rests at 64 and goes both
+ways). **0.3:** slide is bipolar around 64, four octaves of cutoff either way. Tone is better but could go further.
+**0.3:** a wider, S-shaped range. Chords: "don't dislike them, but they sound quite different from Coral Flower";
+richer chords wanted. **0.3:** 3 to 6 upper voices plus the bass (LFO), STACK reaching 11 and 13. The VIBE FM
+converter failed on `memset`/`memcpy`/`memcmp` (see M7).
+
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
 top row's last key (F#5). Then a simple recorded sequence is replayed with different presets, preferably ones
@@ -99,6 +109,18 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   (spread over three octaves, drop-2-and-4, bass an octave lower), strum and arpeggio from pressure or a knob.
 - Study Coral Flower's source (GPL-3.0) for what else to keep.
 
+### M2b: chord memory and pads (Alex, second session)
+- A progression made and voiced on the device (smooth voice leading, drop voicings, any style), saved, then played
+  from the **bottom row: 16 chord pads**, the octave buttons paging to more sets, like the chord-pad plugins Alex uses.
+  The top row varies things (inversion, spread, type, strum).
+- Pads keep their exact voicing; editing one re-voices its neighbours only on request.
+- The arpeggiator generates patterns from the pad's chord: basslines plus comping.
+- Saved as files over USB (M6) and shared with the plugin (M7).
+
+### M2c: why it sounds different from Coral Flower
+- Read Coral Flower's chord engine (GPL-3.0) for its voicings, register and doublings, and render the same
+  progression through both (VIBE FM runs Coral Flower) for an A/B by ear.
+
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
   weights (`packages/proggen/src/curation.js` in music-suite). Phrases come out as chord events that
@@ -136,6 +158,11 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   from fm1-base's `plat.h` to `vibe_wasm_*`. fm1-base's browser emulator (`--web`) is already a WebAssembly build of
   the same app, which should make the mapping small.
 - Fallback: a plugin of our own around `core/` and `synth.c` in music-suite's plugin shells, next to Vane.
+- First attempt (2026-11-21) failed in TheFirmwareHub's converter: `tools/fm1/dinghy/libc/string.h` conflicts with
+  `memset`, `memcpy` and `memcmp`. Those definitions are felucca-bsp's (`base/bsp/chip/libc.c`, with `unsigned n`
+  where the converter's libc has `size_t`), not mvane's: mvane never declared `memcmp`. Since 0.3, `core/` declares
+  no library function at all. The remaining clash is between felucca-bsp and the converter, to report to
+  TheFirmwareHub (any fm1-base firmware would hit it), or to work around with a build of our own for VIBE.
 
 ### M8: a Vane voice
 - A mono WindCore lead first, as `docs/starter-notes.md` planned: take the DSP out of Vane, render it at
@@ -143,6 +170,16 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   core (`cpu2`) is the reserve if one core isn't enough.
 - Delay lines go in the pool, so the recorder's history and WindCore compete for the same RAM: decide the split with
   measurements.
+
+## Panel conventions
+
+The 0.x panel is improvised (FX for voicing, LFO for voice count, EDIT for bass, GLO for USB level, SELECT for the
+scale). Before 1.0, map controls the way FM-1 players expect from M-VAVE's firmware and the popular custom ones
+(Clipper, Coral Flower): the printed labels, shift layers and pages, so that nothing surprises.
+
+## Name
+
+"mvane" reads like a typo for M-VAVE. A second word, or another name, before a first release.
 
 ## Open questions for Alex
 - Where to find VIBE FM's SDK or converter (TheFirmwareHub's documentation, or its author).

@@ -3,7 +3,7 @@
 A custom firmware for the M-VAVE FM-1, on [fm1-base](https://github.com/charlesvestal/fm1-base). See
 [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
 
-**0.2:** an 8-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
+**0.3:** a 12-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
 chords from any of eight pitch-class sets with a separate bass and smooth voice leading, MPE out over USB, duplex USB
 audio (from fm1-base), and a recorder that is always on: play, then decide to keep it. The history sleeps when you
 stop, so waiting costs nothing.
@@ -11,11 +11,12 @@ stop, so waiting costs nothing.
 | Control | Does |
 | --- | --- |
 | White keys | NOTES: notes from F3, each on its own MPE channel with its pressure. CHORDS: the scale's degrees, up the keyboard (higher ones voiced higher). Common tones hold and the moving voices glide |
-| Black keys | CHORDS: the chord type, latched (9, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
+| Black keys | CHORDS: the chord type, latched (STACK, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
 | ALGO | NOTES (left) / CHORDS (right) |
 | PRESET | the key, C to B |
 | SELECT | the scale: MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC |
 | FX | voicing: CLOSE, OPEN, WIDE |
+| LFO | chord size: 3 to 6 upper voices (plus the bass) |
 | EDIT | bass on / off |
 | GLO | USB audio at full level (MASTER for speaker and headphones only) or at MASTER |
 | K1, K2, K3, K4 | tone, release, glide, attack: sent as CC74, CC72, CC5, CC73 on the master channel and recorded, so a take replays your knob gestures |

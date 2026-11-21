@@ -17,7 +17,7 @@ static uint32_t rec__make(uint32_t dt, uint32_t st, uint32_t d1, uint32_t d2)
 
 void rec_init(rec_ring *r, uint32_t *buf, uint32_t capacity_pow2)
 {
-    memset(r, 0, sizeof *r);
+    mvane_zero(r, sizeof *r);
     r->buf = buf;
     r->mask = capacity_pow2 - 1u;
 }
@@ -131,8 +131,8 @@ uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_ta
         }
     }
     for (;;) { /* what sounds at the start, then whether it fits */
-        memset(&pre_n, 0, sizeof pre_n);
-        memset(&pre_c, 0, sizeof pre_c);
+        mvane_zero(&pre_n, sizeof pre_n);
+        mvane_zero(&pre_c, sizeof pre_c);
         for (i = oldest; i != start; i++)
             rec__track(&pre_n, &pre_c, r->buf[i & r->mask]);
         if (pre_n.n + pre_c.n + (r->head - start) <= take->cap)
@@ -144,7 +144,7 @@ uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_ta
         take->words[out++] = rec__make(0, pre_c.st[i], pre_c.d1[i], pre_c.d2[i]);
     for (i = 0; i < pre_n.n; i++)
         take->words[out++] = rec__make(0, pre_n.st[i], pre_n.d1[i], pre_n.d2[i]);
-    memset(&end_n, 0, sizeof end_n);
+    mvane_zero(&end_n, sizeof end_n);
     for (i = 0; i < pre_n.n; i++)
         rec__held_note(&end_n, pre_n.st[i], pre_n.d1[i], pre_n.d2[i]);
     t = last_t = 0;
@@ -217,7 +217,7 @@ uint32_t rec_crc32(uint32_t c, const uint8_t *p, uint32_t n)
 /* ------------------------------------------------------------ player --- */
 void rec_play_start(rec_player *p, const rec_take *take, uint32_t now_ms)
 {
-    memset(p, 0, sizeof *p);
+    mvane_zero(p, sizeof *p);
     p->take = take;
     p->start_ms = now_ms;
     p->playing = take && take->count;
@@ -230,7 +230,7 @@ static void rec__release_all(rec_player *p, rec_emit_fn emit, void *ctx)
         for (note = 0; note < 128u; note++)
             if (p->held[ch][note >> 3] >> (note & 7u) & 1u)
                 emit(ctx, (uint8_t)(0x80u | ch), (uint8_t)note, 0);
-    memset(p->held, 0, sizeof p->held);
+    mvane_zero(p->held, sizeof p->held);
 }
 
 int rec_play_poll(rec_player *p, uint32_t now_ms, rec_emit_fn emit, void *ctx)

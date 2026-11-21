@@ -3,7 +3,7 @@
 #include "fastmath.h"
 
 #define SR 44100.0f
-#define NVOICE 8u
+#define NVOICE 12u
 
 typedef struct {
     uint8_t ch, note, gate, used;
@@ -28,6 +28,7 @@ void synth_init(const uint8_t p[SP_N])
         prm[i] = p[i];
     for (i = 0; i < 16u; i++) {
         bend_range[i] = i ? 48u : 2u;    /* MPE's defaults: members 48, the master 2 */
+        slide[i] = 0.5f;                 /* CC74 at rest: 64 (bipolar controllers rest there) */
         rpn_msb[i] = rpn_lsb[i] = 127u;
     }
 }
@@ -104,7 +105,7 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
     else if (kind == 0xB0u) {
         if (d1 == SYNTH_CC_TONE) {
             if (ch)
-                slide[ch] = (float)d2 * (1.0f / 127.0f);   /* MPE slide: this note's brightness */
+                slide[ch] = (float)d2 * (1.0f / 127.0f);   /* MPE slide: this note's brightness, 64 neutral */
             else
                 prm[SP_TONE] = (uint8_t)d2;
         } else if (d1 == SYNTH_CC_REL && !ch)
@@ -119,8 +120,10 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
             rpn_lsb[ch] = (uint8_t)d2;
         else if (d1 == 6u && rpn_msb[ch] == 0u && rpn_lsb[ch] == 0u)
             bend_range[ch] = (uint8_t)(d2 > 96u ? 96u : d2);   /* RPN 0: this channel's bend range */
-        else if (d1 == 121u)             /* reset controllers */
-            bend[ch] = slide[ch] = press[ch] = 0.0f;
+        else if (d1 == 121u) {           /* reset controllers */
+            bend[ch] = press[ch] = 0.0f;
+            slide[ch] = 0.5f;
+        }
         else if (d1 == 123u)
             for (i = 0; i < NVOICE; i++)
                 vc[i].gate = 0;
@@ -130,7 +133,7 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
 void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     uint32_t i, j;
-    float gain = (float)master_q12 * (1.0f / 4096.0f) * 8300000.0f * 0.2f;
+    float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.11f;   /* each voice: a seven-note chord stays under 1 */
     float rel_s = 0.005f * fm_exp2f((float)prm[SP_REL] * (8.6f / 127.0f));      /* 5 ms .. 2 s */
     float att_s = 0.002f * fm_exp2f((float)prm[SP_ATTACK] * (10.0f / 127.0f));  /* 2 ms .. 2 s */
     float rel = 1.0f - fm_exp2f(-4.0f / (SR * rel_s));
@@ -150,9 +153,11 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         p = fm_maxf(fm_maxf(press[v->ch], press[0]), v->poly);
         b = bend[v->ch] + (v->ch ? bend[0] : 0.0f);
         mul = fm_exp2f(b * (1.0f / 12.0f));
-        /* the cutoff follows the note: tone 0 under the fundamental (nearly a sine), 127 seven octaves above */
-        oct = -0.7f + 7.0f * tone + 2.5f * p + 2.5f * slide[v->ch] + 0.6f * (v->vel - 0.25f);
-        fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 30.0f, 15000.0f);
+        /* the cutoff follows the note: tone 0 under the fundamental (a sine), 127 eight octaves above; pressure up to
+         * three more; slide four octaves either way of 64 */
+        oct = -1.5f + 9.0f * tone * tone * (3.0f - 2.0f * tone) + 3.0f * p + 8.0f * (slide[v->ch] - 0.5f)
+            + 0.6f * (v->vel - 0.25f);
+        fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 20.0f, 16000.0f);
         g = fm_tanf(3.14159265f * fc * (1.0f / SR));
         a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
         c1 = fm_minf(1.0f, 6.2831853f * fc * (1.0f / SR));
@@ -183,10 +188,13 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         }
         v->ic1 = fm_flush(v->ic1), v->ic2 = fm_flush(v->ic2), v->lp = fm_flush(v->lp);
     }
-    for (i = 0; i < n && i < 256u; i++) {
+    for (i = 0; i < n && i < 256u; i++) {   /* MASTER, then a soft limiter: no hard clip at any volume */
         float s;
         gain_now += (gain - gain_now) * 0.004f;
-        s = fm_clampf(acc[i] * gain_now, -8300000.0f, 8300000.0f);
+        s = acc[i] * gain_now;
+        if (s > 0.5f || s < -0.5f)          /* clean to half scale, then bends smoothly toward 0.95 */
+            s = (s > 0.0f ? 1.0f : -1.0f) * (0.5f + 0.45f * fm_tanhf((fm_fabsf(s) - 0.5f) * (1.0f / 0.45f)));
+        s *= 8300000.0f;
         lr[2 * i] = (int32_t)s;
         lr[2 * i + 1] = (int32_t)s;
     }

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* mvane 0.2. Everything played becomes MIDI-like events on one bus, which feeds the synth (synth.c), USB-MIDI out
+/* mvane 0.3. Everything played becomes MIDI-like events on one bus, which feeds the synth (synth.c), USB-MIDI out
  * (MPE, lower zone) and the always-on history (core/rec). REC captures from the history after the fact, PLAY
  * replays the take through the same bus, SAVE keeps it in the flash, and the companion services give it to a
  * computer as take.mvt (tools/mvt2mid.py makes a MIDI file of it).
@@ -9,7 +9,8 @@
  *              chord type and stay latched (9, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/); the last black
  *              key (F#5) is HOLD. A separate bass, smooth voice leading, common tones held, moving voices glide
  *   ALGO       NOTES / CHORDS    PRESET  the key (C .. B)    SELECT  the scale (pitch-class set)
- *   FX         voicing: CLOSE / OPEN / WIDE        EDIT  bass on / off       GLO  USB audio level: full / MASTER
+ *   FX         voicing: CLOSE / OPEN / WIDE        LFO   upper voices: 3 .. 6      EDIT  bass on / off
+ *   GLO        USB audio level: full / MASTER
  *   K1 tone    K2 release    K3 glide    K4 attack (CC74, CC72, CC5, CC73 on the master channel: recorded, replayed)
  *   OCT- OCT+  octave        REC  tap: capture the last phrase; hold: capture the whole history
  *   PLAY       play / stop the take                    SAVE  the settings and the take, kept across power-off
@@ -28,7 +29,7 @@
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564132u            /* "MVA2" */
+#define SET_MAGIC 0x4D564133u            /* "MVA3" */
 typedef struct {
     uint32_t magic;
     uint8_t mode;                        /* 0 notes, 1 chords */
@@ -37,7 +38,8 @@ typedef struct {
     int8_t octave;                       /* -2 .. +2 */
     uint8_t p[SP_N];                     /* tone, release, glide, attack: 0..127 */
     uint8_t type, style, bass, usb_full;
-    uint8_t rsv[4];
+    uint8_t voices;                      /* upper voices, 3..6 */
+    uint8_t rsv[3];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -57,6 +59,7 @@ static void settings_defaults(void)
     set.style = CHORD_OPEN;
     set.bass = 1;
     set.usb_full = 1;
+    set.voices = 5;
 }
 
 static void settings_load(void)
@@ -67,7 +70,8 @@ static void settings_load(void)
     for (i = 0; i < SP_N; i++)
         bad |= set.p[i] > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
-        || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u)
+        || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
+        || set.voices < 3u || set.voices > CHORD_MAX)
         settings_defaults();
 }
 
@@ -247,8 +251,8 @@ static struct {
     int32_t chord_key;                   /* the key whose chord sounds (-1 none; held by HOLD: still set) */
     uint8_t chord_degree, chord_vel, hold;
     int8_t chord_lift;
-    uint8_t chord_n, chord_note[5], chord_ch[5];
-    Voicing prev;
+    uint8_t chord_n, chord_note[CHORD_MAX + 1u], chord_ch[CHORD_MAX + 1u];
+    chord_voicing prev;
     uint8_t have_prev;
     char chord_name[16];
     uint32_t rec_t;
@@ -297,16 +301,16 @@ static void chord_release(void)
 static void chord_sound(void)
 {
     uint32_t i, j, nn = 0;
-    uint8_t notes[5], chs[5];
-    chord_pcs c = chord_build(CHORD_SCALES[set.scale].mask, set.tonic, ui.chord_degree, set.type);
-    Voicing v;
+    uint8_t notes[CHORD_MAX + 1u], chs[CHORD_MAX + 1u];
+    chord_pcs c = chord_build(CHORD_SCALES[set.scale].mask, set.tonic, ui.chord_degree, set.type, set.voices);
+    chord_voicing v;
     if (!chord_voice(c, set.style, ui.chord_lift, ui.have_prev ? &ui.prev : 0, &v))
         return;
     ui.prev = v;
     ui.have_prev = 1;
     if (set.bass)
         notes[nn++] = (uint8_t)out_note(v.bass);
-    for (i = 0; i < HARMONY_VOICES; i++)
+    for (i = 0; i < v.n; i++)
         notes[nn++] = (uint8_t)out_note(v.upper[i]);
     /* common tones hold; the voices that leave are released first, so the new ones glide from them */
     for (i = 0; i < ui.chord_n; i++) {
@@ -486,6 +490,13 @@ static void input(void)
             set.style = (uint8_t)((set.style + 1u) % CHORD_STYLES);
             harmony_changed();
             app_say("VOICING", CHORD_STYLE_NAMES[set.style]);
+        } else if (k == B_LFO) {
+            set.voices = (uint8_t)(set.voices >= CHORD_MAX ? 3u : set.voices + 1u);
+            harmony_changed();
+            {
+                char t[4] = {(char)('0' + set.voices), 0};
+                app_say("VOICES", t);
+            }
         } else if (k == B_EDIT) {
             set.bass ^= 1u;
             harmony_changed();
@@ -607,7 +618,11 @@ static void draw(void)
         text_cat(t, CHORD_TYPE_NAMES[set.type]);
         text_cat(t, "  ");
         text_cat(t, CHORD_STYLE_NAMES[set.style]);
-        text_cat(t, set.bass ? "  BASS" : "");
+        {
+            char nv[4] = {' ', ' ', (char)('0' + set.voices), 0};
+            text_cat(t, nv);
+        }
+        text_cat(t, set.bass ? "+BASS" : "");
         cv_text(10, 44, &FONT_XS, t, C_GRAY);
         if (ui.hold)
             cv_text(200, 44, &FONT_XS, "HOLD", C_HI);
@@ -769,6 +784,8 @@ int app_expect(const char *what, int *got)
         *got = set.type;
     else if (!strcmp(what, "style"))
         *got = set.style;
+    else if (!strcmp(what, "nvoices"))
+        *got = set.voices;
     else if (!strcmp(what, "hold"))
         *got = ui.hold;
     else if (!strcmp(what, "chord_n"))
