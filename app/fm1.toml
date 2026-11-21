@@ -6,6 +6,7 @@ usb_product = "MVANE YARD FM-1"
 usb_serial = true
 include = ["../core", "clipper", "clipper/src", "clipper/gen", "clipper/hal"]   # the portable core; Clipper's synth (app/clipper)
 o2 = ["synth.c", "clipper/clp.c"]   # mvane yard's synth and Clipper's, each its own unit at -O2
+o2_cflags = ["-Os"]            # Clipper is built at -Os, as Clipper builds it (fewer 64-bit multiplies inlined beside loads: felucca-bsp docs/CPU.md)
 vendored = ["clipper/"]        # Clipper's sources as they are: the register check skips them (their tables)
 words = "words.tsv"
 font_full = ["L", "M"]         # lower case in the big fonts: chord names (Dm9)
