@@ -170,10 +170,38 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
 #define TAKEF_N (30u * 4096u)            /* 120 KiB a copy: the head and a full take */
 static const plat_file_t TAKEF = {PLAT_DATA_LO, PLAT_DATA_LO + TAKEF_N, TAKEF_N};   /* A/B, at the data area's start */
 
+/* The take kept in the flash, through plat_file_* (fm1-base's companion services). A WebAssembly build that is
+ * not fm1-base's own emulator (VIBE FM's converter: its platform has no plat_file_*) keeps the take in RAM only.
+ * MVY_TAKE_FLASH 0 or 1 overrides */
+#ifndef MVY_TAKE_FLASH
+#if defined(__wasm__) && !defined(PLAT_HOST)
+#define MVY_TAKE_FLASH 0
+#else
+#define MVY_TAKE_FLASH 1
+#endif
+#endif
+#if MVY_TAKE_FLASH
+#define tf_size plat_file_size
+#define tf_data plat_file_data
+#define tf_read plat_file_read
+#define tf_begin plat_file_begin
+#define tf_write plat_file_write
+#define tf_commit plat_file_commit
+#define tf_delete plat_file_delete
+#else
+static int tf_size(const plat_file_t *f) { (void)f; return -1; }
+static const uint8_t *tf_data(const plat_file_t *f) { (void)f; return 0; }
+static int tf_read(const plat_file_t *f, uint32_t o, void *d, uint32_t n) { (void)f, (void)o, (void)d, (void)n; return -1; }
+static int tf_begin(const plat_file_t *f, uint32_t n) { (void)f, (void)n; return -1; }
+static int tf_write(const plat_file_t *f, uint32_t o, const void *s, uint32_t n) { (void)f, (void)o, (void)s, (void)n; return -1; }
+static int tf_commit(const plat_file_t *f, uint32_t n, uint32_t c) { (void)f, (void)n, (void)c; return -1; }
+static int tf_delete(const plat_file_t *f) { (void)f; return -1; }
+#endif
+
 static void take_load(void)
 {
-    int n = plat_file_size(&TAKEF);
-    const uint8_t *p = plat_file_data(&TAKEF);
+    int n = tf_size(&TAKEF);
+    const uint8_t *p = tf_data(&TAKEF);
     take.words = take_buf;
     take.count = 0;
     if (n > 0 && p && rec_load(&take, p, (uint32_t)n) != 0)
@@ -182,13 +210,15 @@ static void take_load(void)
 
 static int take_save(void)
 {
+    if (!MVY_TAKE_FLASH)
+        return take_dirty = 0, 0;   /* kept in RAM: nowhere to save it */
     uint32_t head[REC_HEAD_WORDS], size = rec_file_size(&take), crc;
     rec_file_head(&take, head);
     crc = rec_crc32(0, (const uint8_t *)head, sizeof head);   /* the FM-1 and the host are little-endian */
     crc = rec_crc32(crc, (const uint8_t *)take.words, 4u * take.count);
-    if (plat_file_begin(&TAKEF, size) || plat_file_write(&TAKEF, 0, head, sizeof head)
-        || (take.count && plat_file_write(&TAKEF, sizeof head, take.words, 4u * take.count))
-        || plat_file_commit(&TAKEF, size, crc))
+    if (tf_begin(&TAKEF, size) || tf_write(&TAKEF, 0, head, sizeof head)
+        || (take.count && tf_write(&TAKEF, sizeof head, take.words, 4u * take.count))
+        || tf_commit(&TAKEF, size, crc))
         return -1;
     take_dirty = 0;
     return 0;
@@ -742,7 +772,7 @@ int app_file(uint32_t i, plat_file_info_t *f)
     int n;
     if (i)
         return -1;
-    n = plat_file_size(&TAKEF);
+    n = tf_size(&TAKEF);
     f->name = "take.mvt";
     f->kind = PLAT_FK_PATTERN;
     f->flags = PLAT_FF_READ | PLAT_FF_WRITE | PLAT_FF_DELETE;
@@ -750,15 +780,15 @@ int app_file(uint32_t i, plat_file_info_t *f)
     f->room = TAKEF.n - PLAT_FILE_HEAD;
     return 0;
 }
-int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n) { return i ? -1 : plat_file_read(&TAKEF, off, dst, n); }
-int app_file_begin(uint32_t i, uint32_t size) { return i ? -1 : plat_file_begin(&TAKEF, size); }
+int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n) { return i ? -1 : tf_read(&TAKEF, off, dst, n); }
+int app_file_begin(uint32_t i, uint32_t size) { return i ? -1 : tf_begin(&TAKEF, size); }
 int app_file_write(uint32_t i, uint32_t off, const uint8_t *src, uint32_t n)
 {
-    return i ? -1 : plat_file_write(&TAKEF, off, src, n);
+    return i ? -1 : tf_write(&TAKEF, off, src, n);
 }
 int app_file_commit(uint32_t i, uint32_t size, uint32_t crc)
 {
-    int rc = i ? -1 : plat_file_commit(&TAKEF, size, crc);
+    int rc = i ? -1 : tf_commit(&TAKEF, size, crc);
     if (!rc) {                           /* a take from the computer: the one PLAY plays */
         take_load();
         take_dirty = 0;
@@ -768,7 +798,7 @@ int app_file_commit(uint32_t i, uint32_t size, uint32_t crc)
 }
 int app_file_delete(uint32_t i)
 {
-    int rc = i ? -1 : plat_file_delete(&TAKEF);
+    int rc = i ? -1 : tf_delete(&TAKEF);
     if (!rc)
         take.count = 0, ui.redraw = 1;
     return rc;

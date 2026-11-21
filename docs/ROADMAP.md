@@ -57,6 +57,13 @@ top row, per its display: M6 M7 M9 S2 S4 m6 m7 m9 M m; its quantization goes off
 a second bank of fixed qualities on the black keys (ENV switches banks; on by default). Quartal (the scale bank) is
 "likely what I want". Coral Flower was itself inspired by Telepathic Instruments' Orchid. Name: **mvane yard**.
 
+**Fourth session (0.4 on the FM-1).** "Getting somewhere": the Coral Flower qualities sound as they should. A tiny
+bit of distortion remains through headphones at full volume; acceptable, to keep in mind (the headphone stage's
+headroom: a per-output level or a limiter on the headphone path if it matters later). The VIBE FM conversion now
+compiles everything and stops at the link: its platform has no `plat_file_*`. **0.4.1:** under WebAssembly (not
+fm1-base's own emulator) the take stays in RAM, so the plugin build captures and replays but doesn't keep a take
+between sessions; next, `vibe_host_store` for that.
+
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
 top row's last key (F#5). Then a simple recorded sequence is replayed with different presets, preferably ones
@@ -180,7 +187,8 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   `#include "libc.c"` (felucca-bsp's). Workaround with a real chance: declare the three in felucca-bsp's
   `chip/libc.c` with `__SIZE_TYPE__ n`, which is every compiler's own `size_t` (`unsigned long` in WebAssembly,
   what the JieLi compiler expects on the device): a fix upstream (hugelton/felucca-bsp, then fm1-base's pin), or in
-  forks that mvane yard's submodules point to until then.
+  forks that mvane yard's submodules point to until then. (Forks made on Alex's OK, Enkerli/felucca-bsp and
+  Enkerli/fm1-base, then not needed: the next conversion got past the clash. They are untouched copies.)
 
 ### M8: a Vane voice
 - A mono WindCore lead first, as `docs/starter-notes.md` planned: take the DSP out of Vane, render it at
