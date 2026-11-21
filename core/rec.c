@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "rec.h"
 
-#include <string.h>
+#include "port.h"
 
 #define W_DT(w) ((w) >> 24)
 #define W_ST(w) (((w) >> 16) & 0xFFu)

@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "harmony.h"
 
-#include <limits.h>
-#include <stdlib.h>
+#include "port.h"
 
 static const uint8_t hm__intervals[][HARMONY_VOICES] = {
     {3, 7, 10, 14}, {4, 10, 14, 21}, {4, 7, 11, 14},
@@ -33,14 +32,14 @@ static unsigned hm__enumerate(Chord chord, Voicing *result)
 
 static int hm__placement(const Voicing *v)
 {
-    return abs((int)v->upper[0] + v->upper[3] - 127);
+    return mvane_abs((int)v->upper[0] + v->upper[3] - 127);
 }
 
 static int hm__motion(const Voicing *a, const Voicing *b)
 {
     int cost = 0;
     for (unsigned i = 0; i < HARMONY_VOICES; ++i) {
-        int distance = abs((int)a->upper[i] - b->upper[i]);
+        int distance = mvane_abs((int)a->upper[i] - b->upper[i]);
         cost += 4 * distance;
         if (distance > 4) cost += 3 * (distance - 4);
     }
@@ -52,7 +51,7 @@ int harmony_voice_live(Chord chord, const Voicing *previous, Voicing *result)
     Voicing candidates[HARMONY_CANDIDATES];
     if (!result) return 0;
     unsigned count = hm__enumerate(chord, candidates);
-    int best = INT_MAX;
+    int best = MVANE_INT_MAX;
     unsigned best_index = 0;
     for (unsigned i = 0; i < count; ++i) {
         int score = hm__placement(&candidates[i]);
@@ -75,17 +74,17 @@ int harmony_voice_loop(const Chord *chords, unsigned length,
         if (!s->count[bar]) return 0;
     }
 
-    int best = INT_MAX;
+    int best = MVANE_INT_MAX;
     for (unsigned start = 0; start < s->count[0]; ++start) {
         int previous[HARMONY_CANDIDATES];
         for (unsigned i = 0; i < s->count[0]; ++i)
-            previous[i] = i == start ? hm__placement(&s->candidates[0][i]) : INT_MAX;
+            previous[i] = i == start ? hm__placement(&s->candidates[0][i]) : MVANE_INT_MAX;
         for (unsigned bar = 1; bar < length; ++bar) {
             int next[HARMONY_CANDIDATES];
             for (unsigned j = 0; j < s->count[bar]; ++j) {
-                next[j] = INT_MAX;
+                next[j] = MVANE_INT_MAX;
                 for (unsigned i = 0; i < s->count[bar - 1]; ++i) {
-                    if (previous[i] == INT_MAX) continue;
+                    if (previous[i] == MVANE_INT_MAX) continue;
                     int score = previous[i] + hm__placement(&s->candidates[bar][j])
                         + hm__motion(&s->candidates[bar - 1][i], &s->candidates[bar][j]);
                     if (score < next[j]) {
@@ -98,7 +97,7 @@ int harmony_voice_loop(const Chord *chords, unsigned length,
         }
         unsigned last = length - 1;
         for (unsigned end = 0; end < s->count[last]; ++end) {
-            if (previous[end] == INT_MAX) continue;
+            if (previous[end] == MVANE_INT_MAX) continue;
             int score = previous[end] + hm__motion(&s->candidates[last][end],
                                                &s->candidates[0][start]);
             if (score >= best) continue;
