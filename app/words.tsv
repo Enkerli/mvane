@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# mvane's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
-# url: https://enkerli.github.io/mvane/words/
-MVANE	m vane
+# mvane yard's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://enkerli.github.io/mvane-yard/words/
+MVANE YARD	m vane yard
+QUALITIES	qualities
+FROM SCALE	from scale
 NOTES	notes
 CHORDS	chords
 TONE	tone

@@ -1,4 +1,4 @@
-# mvane roadmap
+# mvane yard roadmap
 
 A custom firmware for the M-VAVE FM-1 that brings together MPE, duplex USB audio, a Coral Flower-like chord mode,
 ProgGenie progressions with smooth voice leading, an always-on recorder that captures minutes after the fact,
@@ -47,6 +47,15 @@ ways). **0.3:** slide is bipolar around 64, four octaves of cutoff either way. T
 **0.3:** a wider, S-shaped range. Chords: "don't dislike them, but they sound quite different from Coral Flower";
 richer chords wanted. **0.3:** 3 to 6 upper voices plus the bass (LFO), STACK reaching 11 and 13. The VIBE FM
 converter failed on `memset`/`memcpy`/`memcmp` (see M7).
+
+**Third session (0.3 on the FM-1).** Distortion still came with velocity. In the simulator the output is clean at
+velocity 127 (energy off the chord's harmonics about -51 dB, no clipping), and Alex's recording isn't clipped either,
+so the likely cause is the FM-1's analog output running out of headroom: 0.3 peaked at -4.5 dBFS in the worst case.
+**0.4:** about 5 dB lower (worst case -9.3 dBFS), velocity over about 8 dB of level instead of 12, a little more of it
+in brightness; pressure, slide and bend smoothed in two stages and the filter updated every 16 samples. Coral Flower's
+top row, per its display: M6 M7 M9 S2 S4 m6 m7 m9 M m; its quantization goes off, basic, full. **0.4:** those ten as
+a second bank of fixed qualities on the black keys (ENV switches banks; on by default). Quartal (the scale bank) is
+"likely what I want". Coral Flower was itself inspired by Telepathic Instruments' Orchid. Name: **mvane yard**.
 
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
@@ -103,9 +112,12 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 
 ### M2: chord mode, Coral Flower-like
 - Done in 0.2: latched types on the black keys, HOLD on F#5, pitch-class sets, CLOSE/OPEN/WIDE, bass on/off.
-- Quantization ("full", as Alex uses it): chord changes land on a grid of the internal or external clock.
+- Quantization as Coral Flower's: off, basic, full (Alex uses full): chord changes land on a grid of the internal or
+  external clock.
 - A take replayed through other sounds: presets (M6) switchable while PLAY runs.
-- Pitch-class sets from the Exquis's scale files (`<SCALE ... m2="1" .../>`) loaded over USB; more voicing styles
+- **Any pitch-class set by its number**, music-suite's convention (bit 0 the root, C major 2741 = `0xAB5`; Alex's
+  PCO is 1723, Noodling 1267): entered on the device, sent as a companion parameter, or read from the Exquis's scale
+  files (`<SCALE ... m2="1" .../>`). 0.4 shows the current set's number on screen. More voicing styles
   (spread over three octaves, drop-2-and-4, bass an octave lower), strum and arpeggio from pressure or a knob.
 - Study Coral Flower's source (GPL-3.0) for what else to keep.
 
@@ -163,6 +175,12 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   where the converter's libc has `size_t`), not mvane's: mvane never declared `memcmp`. Since 0.3, `core/` declares
   no library function at all. The remaining clash is between felucca-bsp and the converter, to report to
   TheFirmwareHub (any fm1-base firmware would hit it), or to work around with a build of our own for VIBE.
+- Why Clipper and Coral Flower convert: Clipper's own `firmware/src/libc.c` has the same `unsigned n` signatures, so
+  the converter must leave that file out by name. In fm1-base it can't, because `device/unity.c` does
+  `#include "libc.c"` (felucca-bsp's). Workaround with a real chance: declare the three in felucca-bsp's
+  `chip/libc.c` with `__SIZE_TYPE__ n`, which is every compiler's own `size_t` (`unsigned long` in WebAssembly,
+  what the JieLi compiler expects on the device): a fix upstream (hugelton/felucca-bsp, then fm1-base's pin), or in
+  forks that mvane yard's submodules point to until then.
 
 ### M8: a Vane voice
 - A mono WindCore lead first, as `docs/starter-notes.md` planned: take the DSP out of Vane, render it at
@@ -170,6 +188,17 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   core (`cpu2`) is the reserve if one core isn't enough.
 - Delay lines go in the pool, so the recorder's history and WindCore compete for the same RAM: decide the split with
   measurements.
+
+### M9: shaping a chord's spectrum (Alex, 2026-11-21)
+- Each chord voice gets its own filter, and the filters morph together: a curve across the chord (by voice, pitch
+  or register) that moves as one gesture, so the chord's overall spectrum is shaped rather than each note alone.
+  Pressure, slide, a knob or a take's recorded gesture drives the morph.
+- Especially in **just intonation**: chord voices tuned to simple ratios over the bass, so their partials coincide.
+  Per-voice filters can then bring out or soften the shared partials, colouring the chord as one sound. Ties into
+  Vane's tuning work and just-interval chording (Vane priorities: pitch input, JI chords).
+- Needs: a tuning table per chord (12-TET or JI from the root or bass), voice pitches as ratios in the synth (MPE
+  out then carries the JI offsets as per-note bend), and a filter per voice whose cutoff and resonance follow a
+  chord-wide morph curve.
 
 ## Panel conventions
 
@@ -179,7 +208,7 @@ scale). Before 1.0, map controls the way FM-1 players expect from M-VAVE's firmw
 
 ## Name
 
-"mvane" reads like a typo for M-VAVE. A second word, or another name, before a first release.
+**mvane yard** (Alex, 2026-11-21): "mvane" alone read like a typo for M-VAVE. Package identity unchanged (`FM-1_17...`).
 
 ## Open questions for Alex
 - Where to find VIBE FM's SDK or converter (TheFirmwareHub's documentation, or its author).

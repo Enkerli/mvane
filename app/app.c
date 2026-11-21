@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* mvane 0.3. Everything played becomes MIDI-like events on one bus, which feeds the synth (synth.c), USB-MIDI out
+/* mvane yard 0.4. Everything played becomes MIDI-like events on one bus, which feeds the synth (synth.c), USB-MIDI out
  * (MPE, lower zone) and the always-on history (core/rec). REC captures from the history after the fact, PLAY
  * replays the take through the same bus, SAVE keeps it in the flash, and the companion services give it to a
  * computer as take.mvt (tools/mvt2mid.py makes a MIDI file of it).
@@ -10,6 +10,8 @@
  *              key (F#5) is HOLD. A separate bass, smooth voice leading, common tones held, moving voices glide
  *   ALGO       NOTES / CHORDS    PRESET  the key (C .. B)    SELECT  the scale (pitch-class set)
  *   FX         voicing: CLOSE / OPEN / WIDE        LFO   upper voices: 3 .. 6      EDIT  bass on / off
+ *   ENV        black keys: types from the scale (STACK 7 TRIAD ADD9 SUS 6/9 QUARTAL 11 FIFTHS V/) or fixed
+ *              qualities, as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m)
  *   GLO        USB audio level: full / MASTER
  *   K1 tone    K2 release    K3 glide    K4 attack (CC74, CC72, CC5, CC73 on the master channel: recorded, replayed)
  *   OCT- OCT+  octave        REC  tap: capture the last phrase; hold: capture the whole history
@@ -29,7 +31,7 @@
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564133u            /* "MVA3" */
+#define SET_MAGIC 0x4D564134u            /* "MVA4" */
 typedef struct {
     uint32_t magic;
     uint8_t mode;                        /* 0 notes, 1 chords */
@@ -39,7 +41,8 @@ typedef struct {
     uint8_t p[SP_N];                     /* tone, release, glide, attack: 0..127 */
     uint8_t type, style, bass, usb_full;
     uint8_t voices;                      /* upper voices, 3..6 */
-    uint8_t rsv[3];
+    uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
+    uint8_t rsv[2];
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -60,6 +63,8 @@ static void settings_defaults(void)
     set.bass = 1;
     set.usb_full = 1;
     set.voices = 5;
+    set.bank = 1;
+    set.type = CHORD_BANK + 1u;          /* M7 */
 }
 
 static void settings_load(void)
@@ -71,7 +76,7 @@ static void settings_load(void)
         bad |= set.p[i] > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
-        || set.voices < 3u || set.voices > CHORD_MAX)
+        || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u)
         settings_defaults();
 }
 
@@ -352,7 +357,7 @@ static void chord_key_down(uint32_t k, uint32_t vel)
     }
     for (i = 0; i < 11u; i++)            /* a black key: the chord type, latched; what sounds takes it at once */
         if (BK[i] == k) {
-            set.type = (uint8_t)(i < CHORD_NTYPES ? i : 0);
+            set.type = (uint8_t)(set.bank * CHORD_BANK + (i < CHORD_BANK ? i : 0u));
             set_dirty = 1;
             if (ui.chord_n)
                 chord_sound();
@@ -497,6 +502,11 @@ static void input(void)
                 char t[4] = {(char)('0' + set.voices), 0};
                 app_say("VOICES", t);
             }
+        } else if (k == B_ENV) {         /* the black keys' bank: types from the scale, or fixed qualities */
+            set.bank ^= 1u;
+            set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
+            harmony_changed();
+            app_say("CHORDS", set.bank ? "QUALITIES" : "FROM SCALE");
         } else if (k == B_EDIT) {
             set.bass ^= 1u;
             harmony_changed();
@@ -623,6 +633,11 @@ static void draw(void)
             text_cat(t, nv);
         }
         text_cat(t, set.bass ? "+BASS" : "");
+        {
+            char pcs[8] = "  ";
+            int_text((int32_t)CHORD_SCALES[set.scale].mask, pcs + 2);   /* the set's number (music-suite: C major 2741) */
+            text_cat(t, pcs);
+        }
         cv_text(10, 44, &FONT_XS, t, C_GRAY);
         if (ui.hold)
             cv_text(200, 44, &FONT_XS, "HOLD", C_HI);

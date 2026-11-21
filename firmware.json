@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "id": "mvane",
-  "name": "mvane",
+  "id": "mvane-yard",
+  "name": "mvane yard",
   "author": "Alexandre Enkerli",
   "license": "GPL-3.0-only",
   "tagline": "chords, MPE and a recorder that never stops",
   "description": "A performance firmware for the M-VAVE FM-1: notes or diatonic chords with smooth voice leading, MPE out over USB, and an always-on history you capture after the fact and replay.",
   "tags": ["synth", "chords", "sequencer", "midi"],
-  "source": "https://github.com/Enkerli/mvane",
+  "source": "https://github.com/Enkerli/mvane-yard",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],

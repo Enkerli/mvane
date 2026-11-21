@@ -41,7 +41,7 @@ jobs:
       - name: Host simulator checks
         run: |
           ./build.sh --host
-          app/build/host/mvane_host app/tests/basic.txt app/build/host | tee host.log
+          app/build/host/mvane-yard_host app/tests/basic.txt app/build/host | tee host.log
           ! grep -q '^FAIL' host.log
 
       - name: The FM-1 package

@@ -54,6 +54,13 @@ int main(void)
         }
         chord_name(chord_build(0xAB5u, 0, 4, 4, 4), name);
         assert(!strcmp(name, "Gsus"));
+        /* the qualities bank: on D in C major, m7 is Dm7 and M is D (not diatonic, as asked) */
+        chord_name(chord_build(0xAB5u, 0, 1, CHORD_BANK + 6, 4), name);
+        assert(!strcmp(name, "Dm7"));
+        chord_name(chord_build(0xAB5u, 0, 1, CHORD_BANK + 8, 3), name);
+        assert(!strcmp(name, "D"));
+        chord_name(chord_build(0xAB5u, 0, 1, CHORD_BANK + 2, 4), name);
+        assert(!strcmp(name, "Dmaj9"));
     }
     {   /* wide voicings are wide, close ones close; six voices fit */
         chord_voicing w, c, six;

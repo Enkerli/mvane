@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Chords from any pitch-class set: a scale is a 12-bit mask (bit 0 the tonic), a chord is built on one of its
- * degrees by a type (scale steps above the root, in order of importance: stacked thirds, sus, quartal, ...), takes
+ * degrees by a type (scale steps above the root, in order of importance: stacked thirds, sus, quartal, ...; or, in
+ * the second bank, a fixed quality on the degree's root: M6 M7 M9 S2 S4 m6 m7 m9 M m, as Coral Flower's), takes
  * its first 3 to 6 of them as upper voices, and is voiced over a separate bass in a style (close, open, wide), led
  * smoothly from the previous chord. Portable C99. */
 #ifndef MVANE_CHORDS_H
@@ -20,7 +21,8 @@ enum { CHORD_CLOSE, CHORD_OPEN, CHORD_WIDE, CHORD_STYLES };
 extern const chord_scale CHORD_SCALES[];
 extern const unsigned CHORD_NSCALES;
 extern const char *const CHORD_TYPE_NAMES[];
-extern const unsigned CHORD_NTYPES;
+extern const unsigned CHORD_NTYPES;     /* two banks of CHORD_BANK: from the scale, then fixed qualities */
+#define CHORD_BANK 10u
 extern const char *const CHORD_STYLE_NAMES[CHORD_STYLES];
 
 typedef struct {

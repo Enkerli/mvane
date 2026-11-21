@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* mvane: the app's half of the contract with fm1-base (base/device/unity.c, base/host/plat_host.c). */
+/* mvane yard: the app's half of the contract with fm1-base (base/device/unity.c, base/host/plat_host.c). */
 #pragma once
 #include <stdint.h>
 #include "plat.h"
 
-#define APP_NAME "MVANE"
-#define APP_VERSION "0.3-dev"
+#define APP_NAME "MVANE YARD"
+#define APP_VERSION "0.4-dev"
 #define APP_SPLASH_RGB RGB(120, 200, 170)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_TOUCH                        /* velocity and pressure from the keys (lib/touch.h) */

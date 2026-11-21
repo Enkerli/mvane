@@ -1,9 +1,9 @@
-# mvane
+# mvane yard
 
 A custom firmware for the M-VAVE FM-1, on [fm1-base](https://github.com/charlesvestal/fm1-base). See
 [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
 
-**0.3:** a 12-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
+**0.4:** a 12-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
 chords from any of eight pitch-class sets with a separate bass and smooth voice leading, MPE out over USB, duplex USB
 audio (from fm1-base), and a recorder that is always on: play, then decide to keep it. The history sleeps when you
 stop, so waiting costs nothing.
@@ -11,12 +11,13 @@ stop, so waiting costs nothing.
 | Control | Does |
 | --- | --- |
 | White keys | NOTES: notes from F3, each on its own MPE channel with its pressure. CHORDS: the scale's degrees, up the keyboard (higher ones voiced higher). Common tones hold and the moving voices glide |
-| Black keys | CHORDS: the chord type, latched (STACK, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
+| Black keys | CHORDS: the chord type, latched: qualities (M6 M7 M9 S2 S4 m6 m7 m9 M m) or, with ENV, types from the scale (STACK, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
 | ALGO | NOTES (left) / CHORDS (right) |
 | PRESET | the key, C to B |
-| SELECT | the scale: MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC |
+| SELECT | the scale: MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO (1723), NOODLING (1267), OCTATONIC; its pitch-class-set number on screen (music-suite's convention) |
 | FX | voicing: CLOSE, OPEN, WIDE |
 | LFO | chord size: 3 to 6 upper voices (plus the bass) |
+| ENV | the black keys' bank: fixed qualities as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m, the default) or types from the scale |
 | EDIT | bass on / off |
 | GLO | USB audio at full level (MASTER for speaker and headphones only) or at MASTER |
 | K1, K2, K3, K4 | tone, release, glide, attack: sent as CC74, CC72, CC5, CC73 on the master channel and recorded, so a take replays your knob gestures |
@@ -46,8 +47,8 @@ MIDI file of it, MPE channels kept.
     git clone --recursive <this repository>
     make check                   # core checks on the desktop (any C compiler)
     ./build.sh --host            # the host simulator, then:
-    app/build/host/mvane_host app/tests/basic.txt app/build/host
-    ./build.sh                   # app/build/mvane.fwsc: needs the JieLi toolchain (below)
+    app/build/host/mvane-yard_host app/tests/basic.txt app/build/host
+    ./build.sh                   # app/build/mvane-yard.fwsc: needs the JieLi toolchain (below)
 
 The host build needs Python 3 with Pillow and FriBiDi (`brew install fribidi` on macOS).
 
@@ -58,7 +59,7 @@ The JieLi toolchain only runs on Linux x86-64. Three ways to get the `.fwsc`:
 3. **This Mac, in a container:** install Docker or Podman; `base/tools/build.py` runs the toolchain in the pinned
    image by itself.
 
-Install with M-Patcher, or `python3 base/tools/fm1_install.py app/build/mvane.fwsc`. Back up the current firmware
+Install with M-Patcher, or `python3 base/tools/fm1_install.py app/build/mvane-yard.fwsc`. Back up the current firmware
 first.
 
 ## Licence

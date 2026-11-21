@@ -30,8 +30,24 @@ static const uint8_t TYPE_STEPS[][CHORD_MAX] = {
     {4, R, 8, 4, R, 8},    /* FIFTHS: open, with the ninth */
     {0, 0, 0, 0, 0, 0},    /* V/: the dominant of the degree, chromatic (3 b7 b9 13 5 #9) */
 };
-const char *const CHORD_TYPE_NAMES[] = {"STACK", "7", "TRIAD", "ADD9", "SUS", "6/9", "QUARTAL", "11", "FIFTHS", "V/"};
-const unsigned CHORD_NTYPES = sizeof TYPE_STEPS / sizeof TYPE_STEPS[0];
+/* the second bank: fixed qualities on the degree's root, whatever the scale says (as Coral Flower's top row, in its
+ * order), as semitones above the root, in order of importance */
+static const uint8_t QUALITY[][CHORD_MAX] = {
+    {4, 7, 9, 0, 4, 7},   /* M6 */
+    {4, 7, 11, 0, 4, 7},  /* M7 */
+    {4, 7, 11, 2, 0, 7},  /* M9 */
+    {2, 7, 0, 2, 7, 0},   /* S2 */
+    {5, 7, 0, 5, 7, 0},   /* S4 */
+    {3, 7, 9, 0, 3, 7},   /* m6 */
+    {3, 7, 10, 0, 3, 7},  /* m7 */
+    {3, 7, 10, 2, 0, 7},  /* m9 */
+    {4, 7, 0, 4, 7, 0},   /* M */
+    {3, 7, 0, 3, 7, 0},   /* m */
+};
+#define NSCALE_TYPES (sizeof TYPE_STEPS / sizeof TYPE_STEPS[0])
+const char *const CHORD_TYPE_NAMES[] = {"STACK", "7", "TRIAD", "ADD9", "SUS", "6/9", "QUARTAL", "11", "FIFTHS", "V/",
+                                        "M6", "M7", "M9", "S2", "S4", "m6", "m7", "m9", "M", "m"};
+const unsigned CHORD_NTYPES = NSCALE_TYPES + sizeof QUALITY / sizeof QUALITY[0];
 const char *const CHORD_STYLE_NAMES[CHORD_STYLES] = {"CLOSE", "OPEN", "WIDE"};
 
 unsigned chord_scale_size(uint16_t mask)
@@ -55,6 +71,11 @@ chord_pcs chord_build(uint16_t mask, uint8_t tonic, unsigned degree, unsigned ty
     type = type < CHORD_NTYPES ? type : 0;
     c.n = (uint8_t)(n < 3u ? 3u : n > CHORD_MAX ? CHORD_MAX : n);
     c.root = scale[degree];
+    if (type >= NSCALE_TYPES) {
+        for (j = 0; j < CHORD_MAX; j++)
+            c.pc[j] = (uint8_t)((c.root + QUALITY[type - NSCALE_TYPES][j]) % 12u);
+        return c;
+    }
     if (type == CHROMATIC_DOM) {
         static const uint8_t I[CHORD_MAX] = {4, 10, 13, 21, 7, 15};
         c.root = (uint8_t)((c.root + 7u) % 12u);

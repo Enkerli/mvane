@@ -9,6 +9,7 @@ typedef struct {
     uint8_t ch, note, gate, used;
     float vel, level, phase, base, target, poly;
     float ic1, ic2, lp;                  /* the filter's state */
+    float sp, ss, sb, sp1, ss1, sb1;     /* pressure, slide and bend, smoothed twice (no zipper) */
     uint32_t age;
 } voice_t;
 
@@ -78,8 +79,11 @@ static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
         v->base = v->target;
     v->ch = (uint8_t)ch;
     v->note = (uint8_t)note;
-    v->vel = 0.25f + 0.75f * (float)vel * (1.0f / 127.0f);
+    v->vel = 0.4f + 0.6f * (float)vel * (1.0f / 127.0f);   /* velocity: about 8 dB of level, and brightness */
     v->poly = 0.0f;
+    v->sp = v->sp1 = fm_maxf(press[ch], press[0]);   /* the controls start where they are: no sweep from the last note */
+    v->ss = v->ss1 = slide[ch];
+    v->sb = v->sb1 = bend[ch] + (ch ? bend[0] : 0.0f);
     v->gate = 1;
     v->used = 1;
     v->age = ++clock_age;
@@ -133,7 +137,9 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
 void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     uint32_t i, j;
-    float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.11f;   /* each voice: a seven-note chord stays under 1 */
+    /* each voice: a seven-note chord at full velocity peaks near -10 dBFS (the FM-1's output stage distorts well
+     * before digital full scale: Alex, 2026-11-21) */
+    float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.06f;
     float rel_s = 0.005f * fm_exp2f((float)prm[SP_REL] * (8.6f / 127.0f));      /* 5 ms .. 2 s */
     float att_s = 0.002f * fm_exp2f((float)prm[SP_ATTACK] * (10.0f / 127.0f));  /* 2 ms .. 2 s */
     float rel = 1.0f - fm_exp2f(-4.0f / (SR * rel_s));
@@ -147,44 +153,53 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         acc[i] = 0.0f;
     for (j = 0; j < NVOICE; j++) {
         voice_t *v = &vc[j];
-        float p, b, mul, fc, g, k = 1.1f, a1, a2, a3, c1, oct;
+        float p, b, k = 1.1f, shape = -1.5f + 9.0f * tone * tone * (3.0f - 2.0f * tone) + 0.8f * (v->vel - 0.4f);
+        uint32_t i0;
         if (!v->gate && v->level < 1e-4f)
             continue;
         p = fm_maxf(fm_maxf(press[v->ch], press[0]), v->poly);
         b = bend[v->ch] + (v->ch ? bend[0] : 0.0f);
-        mul = fm_exp2f(b * (1.0f / 12.0f));
-        /* the cutoff follows the note: tone 0 under the fundamental (a sine), 127 eight octaves above; pressure up to
-         * three more; slide four octaves either way of 64 */
-        oct = -1.5f + 9.0f * tone * tone * (3.0f - 2.0f * tone) + 3.0f * p + 8.0f * (slide[v->ch] - 0.5f)
-            + 0.6f * (v->vel - 0.25f);
-        fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 20.0f, 16000.0f);
-        g = fm_tanf(3.14159265f * fc * (1.0f / SR));
-        a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
-        c1 = fm_minf(1.0f, 6.2831853f * fc * (1.0f / SR));
-        for (i = 0; i < n && i < 256u; i++) {
-            float s, t, inc, v1, v2, v3;
-            v->base += (v->target - v->base) * glide;
-            inc = v->base * mul;
-            v->phase += inc;
-            if (v->phase >= 1.0f)
-                v->phase -= 1.0f;
-            t = v->phase;
-            s = 2.0f * t - 1.0f;         /* a saw, its steps smoothed (polyBLEP, the division only at a step) */
-            if (t < inc) {
-                float x = t / inc;
-                s -= x + x - x * x - 1.0f;
-            } else if (t > 1.0f - inc) {
-                float x = (t - 1.0f) / inc;
-                s -= x * x + x + x + 1.0f;
+        /* every 16 samples: the controls glide toward where MIDI left them (two stages of about 9 ms), and the filter
+         * follows: a control arriving 50 times a second in steps moves the sound smoothly */
+        for (i0 = 0; i0 < n && i0 < 256u; i0 += 16u) {
+            float mul, fc, g, a1, a2, a3, c1, oct;
+            uint32_t i, end = i0 + 16u < n ? i0 + 16u : n;
+            v->sp1 += (p - v->sp1) * 0.04f, v->sp += (v->sp1 - v->sp) * 0.04f;   /* two stages, ~9 ms each */
+            v->ss1 += (slide[v->ch] - v->ss1) * 0.04f, v->ss += (v->ss1 - v->ss) * 0.04f;
+            v->sb1 += (b - v->sb1) * 0.04f, v->sb += (v->sb1 - v->sb) * 0.04f;
+            mul = fm_exp2f(v->sb * (1.0f / 12.0f));
+            /* the cutoff follows the note: tone 0 under the fundamental (a sine), 127 eight octaves above; pressure
+             * up to three more; slide four octaves either way of 64 */
+            oct = shape + 3.0f * v->sp + 8.0f * (v->ss - 0.5f);
+            fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 20.0f, 16000.0f);
+            g = fm_tanf(3.14159265f * fc * (1.0f / SR));
+            a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
+            c1 = fm_minf(1.0f, 6.2831853f * fc * (1.0f / SR));
+            for (i = i0; i < end; i++) {
+                float s, t, inc, v1, v2, v3;
+                v->base += (v->target - v->base) * glide;
+                inc = v->base * mul;
+                v->phase += inc;
+                if (v->phase >= 1.0f)
+                    v->phase -= 1.0f;
+                t = v->phase;
+                s = 2.0f * t - 1.0f;     /* a saw, its steps smoothed (polyBLEP, the division only at a step) */
+                if (t < inc) {
+                    float x = t / inc;
+                    s -= x + x - x * x - 1.0f;
+                } else if (t > 1.0f - inc) {
+                    float x = (t - 1.0f) / inc;
+                    s -= x * x + x + x + 1.0f;
+                }
+                v3 = s - v->ic2;         /* state-variable lowpass (12 dB/oct), then a one-pole: 18 dB/oct */
+                v1 = a1 * v->ic1 + a2 * v3;
+                v2 = v->ic2 + a2 * v->ic1 + a3 * v3;
+                v->ic1 = 2.0f * v1 - v->ic1;
+                v->ic2 = 2.0f * v2 - v->ic2;
+                v->lp += (v2 - v->lp) * c1;
+                v->level += v->gate ? (v->vel - v->level) * att : -v->level * rel;
+                acc[i] += v->lp * v->level;
             }
-            v3 = s - v->ic2;             /* state-variable lowpass (12 dB/oct), then a one-pole: 18 dB/oct */
-            v1 = a1 * v->ic1 + a2 * v3;
-            v2 = v->ic2 + a2 * v->ic1 + a3 * v3;
-            v->ic1 = 2.0f * v1 - v->ic1;
-            v->ic2 = 2.0f * v2 - v->ic2;
-            v->lp += (v2 - v->lp) * c1;
-            v->level += v->gate ? (v->vel - v->level) * att : -v->level * rel;
-            acc[i] += v->lp * v->level;
         }
         v->ic1 = fm_flush(v->ic1), v->ic2 = fm_flush(v->ic2), v->lp = fm_flush(v->lp);
     }
