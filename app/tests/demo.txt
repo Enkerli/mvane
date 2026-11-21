@@ -1,26 +1,57 @@
-# a short listening demo: I vi ii V I in C with glide, then a captured phrase replayed
+# listening demo 0.2: dark-to-bright tone sweep on OPEN voicings, then WIDE, then the PCO set with a slow attack
 wait 600
+turn K1 -28
 turn K3 10
 wav demo.wav
 key 0 down 90
-wait 900
+wait 1000
+turn K1 10
 key 9 down 90
 key 0 up
-wait 900
+wait 1000
+turn K1 10
 key 2 down 80
 key 9 up
-wait 900
-key 8 down 100
+wait 1000
+turn K1 10
+key 7 down 100
 key 2 up
-wait 900
+wait 1000
+turn K1 10
 key 0 down 90
-key 8 up
-wait 1400
-key 0 up
+key 7 up
 wait 1500
-tap REC
-press PLAY
-wait 30
-release PLAY
-wait 6500
+key 0 up
+wait 800
+tap FX
+turn K1 -16
+key 0 down 90
+wait 1000
+key 9 down 90
+key 0 up
+wait 1000
+key 2 down 80
+key 9 up
+wait 1000
+key 7 down 100
+key 2 up
+wait 1000
+key 7 up
+wait 800
+turn SELECT 5
+turn K4 18
+tap FX
+key 0 down 90
+wait 1400
+key 4 down 90
+key 0 up
+wait 1400
+key 6 down 90
+key 4 up
+wait 1400
+key 11 down 90
+key 6 up
+wait 1800
+key 11 up
+wait 1500
 wavstop

@@ -35,6 +35,8 @@ void rec_put(rec_ring *r, uint32_t now_ms, uint8_t status, uint8_t d1, uint8_t d
         return;
     if (r->started)
         gap = now_ms - r->last_ms;
+    if (r->sleep_ms && gap > r->sleep_ms)
+        gap = r->sleep_ms;
     r->started = 1;
     r->last_ms = now_ms;
     while (gap >= 255u) {
@@ -54,8 +56,11 @@ uint32_t rec_span_ms(const rec_ring *r, uint32_t now_ms)
         return 0;
     for (i = r->head - n + 1u; i != r->head; i++) /* the oldest word's own dt reaches before the history */
         t += rec__word_dt(r->buf[i & r->mask]);
-    return t + (now_ms - r->last_ms);
+    t += now_ms - r->last_ms > r->sleep_ms && r->sleep_ms ? r->sleep_ms : now_ms - r->last_ms;
+    return t;
 }
+
+int rec_sleeping(const rec_ring *r, uint32_t now_ms) { return r->sleep_ms && now_ms - r->last_ms > r->sleep_ms; }
 
 /* ---------------------------------------------------------- capture --- */
 typedef struct {
@@ -157,7 +162,12 @@ uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_ta
         take->words[out++] = w;
     }
     /* notes still held at the press last until the press; otherwise the take ends on its last event */
-    take->duration_ms = end_n.n ? t + (now_ms - r->last_ms) : last_t;
+    {
+        uint32_t tail = now_ms - r->last_ms;
+        if (r->sleep_ms && tail > r->sleep_ms)
+            tail = r->sleep_ms;
+        take->duration_ms = end_n.n ? t + tail : last_t;
+    }
     take->count = out;
     return out;
 }

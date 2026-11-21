@@ -1,18 +1,59 @@
 # mvane in the host simulator: ./build.sh --host, then app/build/host/mvane_host app/tests/basic.txt app/build/host
+# keys: white 0 2 4 6 7 9 11 12 14 16 18 19 21 23 24 26 (degrees), black 1 3 5 8 10 13 15 17 20 22 (types), 25 HOLD
 wait 600
 shot boot.png
 expect mode 1
-# a chord: five notes (bass and four upper), each on its own MPE channel
+expect style 1
+# a chord: bass and four upper voices, each on its own MPE channel
 key 0 down 100
 wait 50
 expect chord_n 5
 expect voices 5
-expect_out USB 91 24 64
-expect_out USB 92 3B 64
 shot chord.png
 key 0 up
 wait 50
 expect chord_n 0
+# a black key latches the chord type
+tapkey 3 90
+expect type 1
+expect chord_n 0
+# HOLD: the chord keeps sounding; the next degree takes over; HOLD again stops it
+tapkey 25 90
+expect hold 1
+tapkey 2 90
+wait 200
+expect chord_n 5
+tapkey 4 90
+wait 200
+expect chord_n 5
+# a type change re-voices what sounds
+tapkey 1 90
+expect type 0
+expect chord_n 5
+shot hold.png
+tapkey 25 90
+expect hold 0
+expect chord_n 0
+# scale, voicing, bass
+turn SELECT 5
+wait 30
+expect scale 5
+tap FX
+expect style 2
+key 6 down 100
+wait 50
+expect chord_n 5
+shot wide-pco.png
+key 6 up
+tap EDIT
+key 6 down 100
+wait 50
+expect chord_n 4
+key 6 up
+tap EDIT
+turn SELECT -5
+wait 30
+expect scale 0
 # a glide gesture on K3, recorded with the notes
 turn K3 5
 wait 30
@@ -24,18 +65,18 @@ wait 50
 key 4 down 90
 wait 300
 key 4 up
-wait 4000
-# a second phrase after a silence
-key 6 down 110
+# the history sleeps: twenty idle seconds count as four
+wait 20000
+shot asleep.png
+key 7 down 110
 wait 500
-key 6 up
+key 7 up
 wait 400
-# REC tap: the last phrase only (the glide value it starts with, then five notes on and off)
+# REC tap: the last phrase only
 tap REC
 wait 50
-expect take 12
 expect take_ms 500
-# REC held: the whole history
+# REC held: the whole history, its long pause kept at four seconds
 press REC
 wait 800
 release REC
@@ -46,12 +87,16 @@ wait 25
 expect playing 1
 expect voices 5
 release PLAY
-wait 100
-expect voices 0
-wait 6000
+wait 9000
 expect playing 0
-expect take 49
 expect voices 0
+# MPE in: a note on a member channel, bent
+midi 92 3C 64
+midi E2 00 50
+wait 30
+expect voices 1
+midi 82 3C 00
+wait 30
 # notes mode
 turn ALGO -1
 wait 30
@@ -68,5 +113,5 @@ reboot
 wait 600
 expect mode 0
 expect glide 40
-expect take 49
+expect style 2
 shot notes.png

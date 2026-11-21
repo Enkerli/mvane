@@ -3,9 +3,10 @@ CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror
 B = build/desktop
 .PHONY: check host fwsc clean
-check: $(B)/harmony_demo $(B)/rec_test
+check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
+	$(B)/chords_test
 
 $(B)/harmony_demo: core/harmony.c core/harmony.h core/demo.c
 	@mkdir -p $(B)
@@ -14,6 +15,10 @@ $(B)/harmony_demo: core/harmony.c core/harmony.h core/demo.c
 $(B)/rec_test: core/rec.c core/rec.h core/rec_test.c
 	@mkdir -p $(B)
 	$(CC) $(CFLAGS) core/rec.c core/rec_test.c -o $@
+
+$(B)/chords_test: core/chords.c core/chords.h core/harmony.h core/chords_test.c
+	@mkdir -p $(B)
+	$(CC) $(CFLAGS) core/chords.c core/chords_test.c -o $@
 
 host:   # the firmware in the host simulator, and its scripted checks
 	./build.sh --host

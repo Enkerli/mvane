@@ -22,6 +22,7 @@ typedef struct {
     uint32_t mask;   /* capacity - 1 */
     uint32_t head;   /* words ever written (the next one goes at head & mask) */
     uint32_t last_ms;
+    uint32_t sleep_ms; /* pauses longer than this are kept this long (0: as they were): the history sleeps */
     uint8_t started;
 } rec_ring;
 
@@ -44,7 +45,8 @@ void rec_init(rec_ring *r, uint32_t *buf, uint32_t capacity_pow2);
 /* one message at time now_ms (any monotonic ms clock; wraps are fine) */
 void rec_put(rec_ring *r, uint32_t now_ms, uint8_t status, uint8_t d1, uint8_t d2);
 uint32_t rec_count(const rec_ring *r);            /* words held */
-uint32_t rec_span_ms(const rec_ring *r, uint32_t now_ms);   /* how far back the history reaches */
+uint32_t rec_span_ms(const rec_ring *r, uint32_t now_ms);   /* how far back the history reaches, in playing time */
+int rec_sleeping(const rec_ring *r, uint32_t now_ms);       /* 1: idle past sleep_ms (nothing new since) */
 
 /* Copy history into take. gap_ms 0 = everything held; otherwise only what follows the most recent silence of at
  * least gap_ms (the last phrase). Notes still sounding and the latest controller values at the capture's start

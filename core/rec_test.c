@@ -105,6 +105,18 @@ int main(void)
         assert(gap >= 120000u);
     }
 
+    /* asleep: a pause past sleep_ms is kept at sleep_ms, and the span stops growing */
+    r.sleep_ms = 4000;
+    {
+        uint32_t span = rec_span_ms(&r, now);
+        assert(!rec_sleeping(&r, now) || span > 0);
+        rec_put(&r, now += 600000u, 0x96, 64, 90); /* ten minutes later */
+        assert(rec_span_ms(&r, now) <= span + 4000u);
+        assert(rec_span_ms(&r, now + 999999u) <= span + 8000u && rec_sleeping(&r, now + 5000u));
+        rec_put(&r, now += 100, 0x86, 64, 0);
+    }
+    r.sleep_ms = 0;
+
     /* overflow: the ring keeps the newest, and a capture still starts with the right state */
     for (unsigned i = 0; i < 10000; i++)
         rec_put(&r, now += 5, 0xD1, (uint8_t)(i & 127), 0);
