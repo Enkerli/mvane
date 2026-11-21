@@ -158,6 +158,12 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 - Breath (CC2) from a wind controller as a gain and brightness source.
 
 ### M6: patches, files and the web editor
+- Done (2026-11-21, after the plugin conversion worked): the take over USB, both ways. `web/index.html` (Connect,
+  piano roll, Download as MIDI or .mvt, send a MIDI or .mvt file as the take, settings backup and restore) and
+  `tools/yard.py` (the same from the command line), on fm1-base's companion services; tested against the browser
+  emulator and the host simulator. To publish the page: GitHub Pages from `web/` (Web MIDI needs HTTPS).
+- Next: several takes (a list the page shows and names), the take's tempo for the MIDI file once there is a clock,
+  and the history itself as a file (everything played since power-on, not only what REC kept).
 - A versioned patch format: engine ID, stable parameter IDs, expression routes. JSON in the editor, compact binary on
   the device.
 - A web editor on WebMIDI and fm1-base's companion services: patches, takes (with MIDI export in the page), settings,

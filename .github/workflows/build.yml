@@ -44,6 +44,11 @@ jobs:
           app/build/host/mvane-yard_host app/tests/basic.txt app/build/host | tee host.log
           ! grep -q '^FAIL' host.log
 
+      - name: File transfer checks (the take as MIDI, a MIDI file in; the page's conversions)
+        run: |
+          python3 tools/yard_test.py
+          node web/take_test.mjs
+
       - name: The FM-1 package
         run: ./build.sh
 

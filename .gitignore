@@ -4,3 +4,4 @@ app/web/words/
 .DS_Store
 docs/media/*.wav
 dist/
+web/emu/

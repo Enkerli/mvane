@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+"""mvane yard's files over USB, through fm1-base's companion services (base/docs/COMPANION.md).
+
+    tools/yard.py take [OUT.mid]          the FM-1's saved take as a MIDI file (default take.mid); --mvt keeps the .mvt
+    tools/yard.py put FILE                a take to the FM-1: a .mvt, or a MIDI file (its notes, controllers, pressure
+                                          and bend, all tracks merged; at most 30,000 events)
+    tools/yard.py settings [OUT]          the settings as a file (default settings.bin); --put FILE sends one back
+    tools/yard.py ls                      what the FM-1 has
+
+Options: --port NAME (part of the FM-1's MIDI port name), --serve-cmd CMD (a host simulator instead of an FM-1:
+"app/build/host/mvane-yard_host --serve"). The take on the FM-1 is the one SAVE kept (REC, then SAVE). Needs mido with
+python-rtmidi for an FM-1. Stop PLAY first: the FM-1 refuses files while a take plays.
+"""
+import argparse
+import os
+import struct
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "base", "tools"))
+sys.path.insert(0, HERE)
+import fm1_companion as fc  # noqa: E402
+import mvt2mid  # noqa: E402
+
+TAKE, SETTINGS = "take.mvt", "settings"
+MAX_WORDS = 30000
+
+
+def connect(a, link=None):
+    link = link or (fc.ServeLink(a.serve_cmd) if a.serve_cmd else fc.find(None, a.port))
+    c = fc.Client(link)
+    c.hello()
+    return c, link
+
+
+def read_file(c, name):
+    return bytes(c.read(c.index_of(name)["index"]))
+
+
+# ------------------------------------------------------------ MIDI file -> take ---
+def read_mid(path):
+    """a standard MIDI file -> [(ms, status, d1, d2)], all tracks merged, tempo changes honoured"""
+    b = open(path, "rb").read()
+    if b[:4] != b"MThd":
+        raise SystemExit(f"{path}: not a MIDI file")
+    _, fmt, ntrk, div = struct.unpack(">IHHH", b[4:14])
+    if div & 0x8000:
+        raise SystemExit(f"{path}: SMPTE time is not supported")
+    pos, tracks = 8 + struct.unpack(">I", b[4:8])[0], []
+    for _ in range(ntrk):
+        if b[pos:pos + 4] != b"MTrk":
+            break
+        n = struct.unpack(">I", b[pos + 4:pos + 8])[0]
+        tracks.append(b[pos + 8:pos + 8 + n])
+        pos += 8 + n
+    events, tempos = [], [(0, 500000)]
+    for trk in tracks:
+        i = tick = 0
+        run = 0
+        while i < len(trk):
+            d = 0
+            while True:
+                x = trk[i]; i += 1
+                d = d << 7 | (x & 0x7F)
+                if x < 0x80:
+                    break
+            tick += d
+            st = trk[i]
+            if st < 0x80:
+                st = run
+            else:
+                i += 1
+            if st == 0xFF:
+                typ = trk[i]; i += 1
+                ln = 0
+                while True:
+                    x = trk[i]; i += 1
+                    ln = ln << 7 | (x & 0x7F)
+                    if x < 0x80:
+                        break
+                if typ == 0x51:
+                    tempos.append((tick, int.from_bytes(trk[i:i + 3], "big")))
+                i += ln
+                continue
+            if st in (0xF0, 0xF7):
+                ln = 0
+                while True:
+                    x = trk[i]; i += 1
+                    ln = ln << 7 | (x & 0x7F)
+                    if x < 0x80:
+                        break
+                i += ln
+                continue
+            run = st
+            k = st & 0xF0
+            if k in (0xC0, 0xD0):
+                events.append((tick, st, trk[i], 0)); i += 1
+            else:
+                events.append((tick, st, trk[i], trk[i + 1])); i += 2
+    tempos.sort()
+
+    def ms(t):  # ticks -> ms through the tempo map
+        out, last_t, us = 0.0, 0, 500000
+        for tt, u in tempos:
+            if tt >= t:
+                break
+            out += (tt - last_t) * us / div / 1000.0
+            last_t, us = tt, u
+        return out + (t - last_t) * us / div / 1000.0
+
+    return sorted(((round(ms(t)), st, d1, d2) for t, st, d1, d2 in events if st & 0xF0 != 0xC0),
+                  key=lambda e: e[0])
+
+
+def take_words(events):
+    """[(ms, status, d1, d2)] -> core/rec.h words: dt in the top byte, time words for gaps of 255 ms and more"""
+    words, last = [], 0
+    for t, st, d1, d2 in events:
+        gap = max(0, t - last)
+        last = t
+        while gap >= 255:
+            g = min(gap, 0xFFFFFF)
+            words.append((g >> 16) << 24 | (g & 0xFFFF))
+            gap -= g
+        words.append(gap << 24 | st << 16 | (d1 & 0x7F) << 8 | (d2 & 0x7F))
+    return words, last
+
+
+def take_file(words, duration):
+    if len(words) > MAX_WORDS:
+        raise SystemExit(f"{len(words)} events: the FM-1 keeps {MAX_WORDS} at most")
+    return struct.pack(f"<4I{len(words)}I", 0x3154564D, 1, len(words), duration, *words)
+
+
+# ------------------------------------------------------------------- commands ---
+def main(argv=None, link=None):
+    """link: an open link to use (a test's simulator), left open"""
+    own = link is None
+    p = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
+                                epilog=__doc__.split("\n", 2)[2])
+    p.add_argument("cmd", choices=["take", "put", "settings", "ls"])
+    p.add_argument("file", nargs="?")
+    p.add_argument("--mvt", action="store_true", help="take: keep the .mvt beside the MIDI file")
+    p.add_argument("--put", metavar="FILE", help="settings: send this file to the FM-1")
+    p.add_argument("--port")
+    p.add_argument("--serve-cmd")
+    a = p.parse_args(argv)
+    try:
+        c, link = connect(a, link)
+    except fc.CompanionError as e:
+        print(f"yard: {e}", file=sys.stderr)
+        return fc.EXIT.get(e.code, 1)
+    try:
+        if a.cmd == "ls":
+            for f in c.files():
+                print(f"{f['name']:<12} {f['size']:>7} B  (room {f['room']})")
+        elif a.cmd == "take":
+            data = read_file(c, TAKE)
+            if len(data) < 16:
+                print("yard: no take saved on the FM-1 (REC, then SAVE)", file=sys.stderr)
+                return 6
+            out = a.file or "take.mid"
+            mvt = out.rsplit(".", 1)[0] + ".mvt"
+            open(mvt, "wb").write(data)
+            ev, dur = mvt2mid.read_take(mvt)
+            mvt2mid.write_mid(ev, dur, out)
+            if not a.mvt:
+                os.remove(mvt)
+            notes = sum(1 for e in ev if e[1] & 0xF0 == 0x90 and e[3])
+            print(f"{out}: {dur / 1000:.1f} s, {notes} notes, {len(ev)} events" + (f" (and {mvt})" if a.mvt else ""))
+        elif a.cmd == "put":
+            if not a.file:
+                raise SystemExit("yard put FILE")
+            raw = open(a.file, "rb").read()
+            if raw[:4] == b"MThd":
+                ev = read_mid(a.file)
+                words, last = take_words(ev)
+                raw = take_file(words, last)
+            elif raw[:4] != struct.pack("<I", 0x3154564D):
+                raise SystemExit(f"{a.file}: neither a take (.mvt) nor a MIDI file")
+            c.write(c.index_of(TAKE)["index"], raw)
+            print(f"{a.file} -> the FM-1's take ({len(raw)} B): PLAY plays it")
+        elif a.cmd == "settings":
+            i = c.index_of(SETTINGS)["index"]
+            if a.put:
+                c.write(i, open(a.put, "rb").read())
+                print(f"{a.put} -> the FM-1's settings")
+            else:
+                out = a.file or "settings.bin"
+                open(out, "wb").write(bytes(c.read(i)))
+                print(f"settings -> {out}")
+    except fc.CompanionError as e:
+        print(f"yard: {e}", file=sys.stderr)
+        return fc.EXIT.get(e.code, 1)
+    finally:
+        close = getattr(link, "close", None)
+        if close and own:
+            close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

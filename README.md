@@ -29,8 +29,19 @@ stop, so waiting costs nothing.
 MIDI in (USB, TRS) plays the synth with MPE: per-note pitch bend (bend range by RPN), slide (CC74 on a member
 channel), channel and poly pressure. It goes into the history too.
 
-A take is also a file over USB (`take.mvt`, fm1-base's companion services). `tools/mvt2mid.py take.mvt` makes a
-MIDI file of it, MPE channels kept.
+## Your take on the computer
+
+The take SAVE keeps is a file over USB (fm1-base's companion services). Two ways to get it:
+
+- **The page** (`web/index.html`): Connect, see the take as a piano roll, **Download as MIDI** (or `.mvt`), or send a
+  MIDI file to the FM-1 as the take PLAY plays; settings download and restore. Chrome or Edge, served over `http://localhost`
+  or HTTPS (Web MIDI needs a secure page): `python3 -m http.server 8737 --directory web`, then http://localhost:8737.
+- **The command line**: `python3 tools/yard.py take` writes `take.mid`; `tools/yard.py put song.mid` sends a MIDI file
+  (notes, controllers, pressure, bend; tracks merged; tempo honoured); `tools/yard.py settings` saves the settings.
+  Needs `pip install mido python-rtmidi`.
+
+Stop PLAY first: the FM-1 refuses files while a take plays. The MIDI file keeps the MPE channels, so an MPE instrument
+(Vane, Bitwig's) plays it back as played. In the VIBE FM plugin the take stays in memory (no flash there).
 
 ## Layout
 
@@ -39,7 +50,8 @@ MIDI file of it, MPE channels kept.
 | `core/` | Portable C99, no platform calls: `chords` (pitch-class sets, chord types, voicing styles, names), `harmony` (whole-loop voice leading, for ProgGenie), `rec` (history, capture, player, take files). Shared by the firmware, the tools and a future plugin |
 | `app/` | The firmware app: `app.c` (panel, bus, recorder, chords), `synth.c` (the voice, at -O2), `fm1.toml`, the host-simulator tests |
 | `base/` | fm1-base, a git submodule pinned at 565fafe (with felucca-bsp inside) |
-| `tools/` | `mvt2mid.py` |
+| `tools/` | `yard.py` (take and settings over USB), `mvt2mid.py` (take to MIDI), their tests |
+| `web/` | The page: take as MIDI, MIDI as the take, settings (`take.js` converts; `lib/companion.js` and `fm1ports.js` are fm1-base's, MPL-2.0) |
 | `docs/` | The roadmap; the earlier starter notes (platform bring-up, recording design, Vane feasibility) |
 
 ## Build and test
