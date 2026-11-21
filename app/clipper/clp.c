@@ -15,6 +15,10 @@ int memcmp(const void *a, const void *b, unsigned n);
 #include "clp.h"
 
 #define CLIPPER_SYNTH 1
+#ifndef CLP_WAVE
+#define CLP_WAVE 0                              /* WAVE: off, for RAM (src/eng_wave_off.c) */
+#endif
+#define CLP_DLY_LEN 16384u                      /* the delay line: 0.74 s at its half rate (Clipper: 1.49 s) */
 #ifdef PLAT_HOST
 #define CLP_POOL
 #define CLP_LOWRAM

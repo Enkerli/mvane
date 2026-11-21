@@ -7,7 +7,9 @@ Instruments): its 23 engines, their 407 factory sounds, the voices, modulation, 
 (the notices are in `src/phys_dsp.c`, `src/phys_symp.c`).
 
 Changes to Clipper's files: one, mechanical: `__attribute__((section(".pool")))`, `(".lowram")` and `(".noinit")`
-became `CLP_POOL`, `CLP_LOWRAM`, `CLP_NOINIT` (`clp.c` defines them for the FM-1 and the host). `src/seq_ctl.c` is
+became `CLP_POOL`, `CLP_LOWRAM`, `CLP_NOINIT` (`clp.c` defines them for the FM-1 and the host). Two switches for
+RAM: `engines.c` builds `eng_wave_off.c` (WAVE silent, no tables: 72 KB) unless `CLP_WAVE`, and `fx.c`'s delay line
+is `CLP_DLY_LEN` long (16384: 0.74 s, half Clipper's). `src/seq_ctl.c` is
 copied verbatim from Clipper's `seq.c` (the part's controllers and the standard CC map). `hal/fm1_xip.h` is mvane
 yard's stand-in (nothing reads the flash). `gen/` holds the tables Clipper's `tools/gen_*.py` make.
 

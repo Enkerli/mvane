@@ -58,7 +58,11 @@ static uint32_t uni_turns(uint32_t r, int32_t p16, int32_t d16)
 #include "eng_noise.c"          /* NOISE: from Felucca 1.0; SLOOP 2.5 */
 #include "eng_hybrid.c"         /* HYBRID: the Clipper voice (3 oscillators, 2 filters, the matrix) */
 #if CLIPPER_SYNTH
+#if CLP_WAVE                    /* (mvane yard: off unless asked for, eng_wave_off.c) */
 #include "eng_wave.c"           /* WAVE: wavetables (Clipper 0.2) */
+#else
+#include "eng_wave_off.c"
+#endif
 #include "eng_acid.c"           /* ACID: a 303-style bass line */
 #include "eng_strings.c"        /* STRINGS: a string machine */
 #include "eng_macro.c"          /* MACRO: chords, swarm, additive, speech (after Plaits) */

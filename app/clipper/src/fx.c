@@ -4,7 +4,7 @@
  * Stereo dry mix; the chorus and the reverb come back in stereo, the delay in the middle. */
 #if CLIPPER_SYNTH                /* Clipper: the line at half the rate (22.05 kHz, its repeats are low-passed anyway):
                                   * the same 1.49 s in half the memory (64 KB for the wavetables) */
-#define DLY_LEN 32768u
+#define DLY_LEN CLP_DLY_LEN      /* (mvane yard: clp.c, 16384: 0.74 s; Clipper 32768: 1.49 s) */
 #define DLY_SPAN (2u * DLY_LEN)  /* samples the line holds */
 #else
 #define DLY_LEN 65536u           /* 1.49 s: 1/4 down to 41 BPM, 1/8 dotted down to 31 (clamped below) */
