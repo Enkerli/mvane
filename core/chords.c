@@ -103,7 +103,7 @@ int chord_voice(chord_pcs c, unsigned style, int lift, const Voicing *prev, Voic
         int n;
         nc[j] = 0;
         for (n = lo; n <= hi && nc[j] < 8; n++)
-            if (n % 12 == c.pc[j] % 12u)
+            if (n % 12 == (int)(c.pc[j] % 12u))
                 cand[j][nc[j]++] = n;
         if (!nc[j])
             return 0;

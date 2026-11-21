@@ -9,17 +9,40 @@ The one principle behind the layout: **musical logic lives in `core/`, portable 
 firmware (`app/`), the desktop tools and a future plugin all compile the same files, so a take or a patch behaves
 the same everywhere.
 
-## Where things stand (0.1, 2026-11-21)
+## Where things stand (0.2, 2026-11-21)
 
-Built and tested in fm1-base's host simulator. The device package has not been built or played yet.
+0.1 ran on Alex's FM-1 on the day (installed with M-Patcher): "more satisfying than expected". 0.2 answers that first
+session; it passes the host simulator and has not been played yet.
 
 | Piece | State |
 | --- | --- |
-| `core/harmony` | Four-voice rootless voicings over a bass note; live voice leading (`harmony_voice_live`) and whole-loop voice leading (`harmony_voice_loop`); diatonic degrees in major and minor, plus secondary dominants |
-| `core/rec` | Always-on history (32-bit events, pauses of any length), "last phrase" and "everything" captures with held notes and controller values carried across the boundary, a player, the take file format (`.mvt`), CRC |
-| `app/` | 8-voice saw synth with pressure-driven brightness and per-voice glide; NOTES and CHORDS modes; MPE out over USB (lower zone, 15 member channels, configured on connect); K1 tone, K2 release, K3 glide sent and recorded as CC74, CC72 and CC5, so knob gestures replay with the take; REC captures, PLAY replays, SAVE keeps the settings and the take in flash |
-| Duplex USB audio | Comes with fm1-base: on by default (`usb_audio_in`, `usb_audio_out`); untested on this firmware |
-| Files over USB | fm1-base's companion services: `settings` and `take.mvt`, read and write; `tools/mvt2mid.py` makes a MIDI file of a take |
+| `core/chords` | Chords from any pitch-class set (eight built in, including Alex's PCO and Noodling sets from the Exquis); ten types as scale steps above the root (stacked thirds, sus, quartal, 11, fifths, ...) and a chromatic V/; CLOSE, OPEN and WIDE voicings, a separate bass, voice leading from the previous chord; names from the notes |
+| `core/harmony` | Whole-loop voice leading (`harmony_voice_loop`), kept for ProgGenie phrases |
+| `core/rec` | Always-on history (32,768 events, 32-bit each); it sleeps, so a pause longer than 4 s costs at most 4 s of playing time; "last phrase" and "everything" captures with held notes and controller values carried across; a player; the take file (`.mvt`), CRC |
+| `app/synth.c` | 8 voices, band-limited saw, key-tracked 18 dB/oct lowpass (dark to bright), attack and release, glide; MPE in: per-note bend (RPN bend range), slide (CC74 per member channel), channel and poly pressure |
+| `app/` | NOTES and CHORDS (white keys degrees, black keys latched types, HOLD on F#5); MPE out over USB; knobs recorded as CC; REC, PLAY, SAVE; CPU load and xruns on screen; USB audio at full level apart from MASTER |
+| Files over USB | fm1-base's companion services: `settings` and `take.mvt`; `tools/mvt2mid.py` makes a MIDI file of a take |
+
+## Alex's first session (0.1 on the FM-1, 2026-11-21)
+
+- Audio went to USB, speaker and headphones at once. Headphones mute the speaker (in hardware). The headphone
+  sound had glitchy artefacts. **0.2:** the saw's anti-aliasing step used a reciprocal computed once a block, which
+  goes wrong while a voice glides (fixed); CPU load and xruns are now on screen, to tell a render overrun from
+  anything else. To check on the device: are the artefacts gone, and does XRUNS stay at 0?
+- USB and speaker usually have separate levels. **0.2:** USB audio at full level, MASTER for the speaker and
+  headphones (GLO toggles; on by default).
+- The history kept running while idle. **0.2:** it sleeps.
+- Capture should be as long as wanted, since memory is about events. **0.2:** a take can hold nearly the whole
+  history (30,000 events). REC tap stays "last phrase"; REC hold "everything" stays too ("really neat").
+- The tone knob stayed bright. **0.2:** the filter follows the note from under the fundamental to seven octaves
+  above it, 18 dB/oct; attack on K4 for softer starts.
+- The synth took MPE but not per-note bend, and slide wasn't per note. **0.2:** both.
+
+**How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
+going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
+top row's last key (F#5). Then a simple recorded sequence is replayed with different presets, preferably ones
+without a strong attack. Wanted beyond it: no startup chime (mvane has none), USB audio, other pitch-class sets (PCO
+and Noodling), more chord types and voicings, very broad open ones especially; the separate bass is useful.
 
 ## The platform choice
 
@@ -41,8 +64,10 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 ## Memory budget (fm1-base's numbers, to be measured on this build)
 
 - 96 KB RAM for `.data`/`.bss`, a 336 KB pool for big buffers (the template without radio uses 68 KB of pool).
-- 0.1 uses 128 KB of pool for the history (32,768 events) and 64 KB for the take (16,384 events).
-- 581 KB app flash; data area 0x97000..0xDFFFF (about 292 KB): two 68 KB take copies (A/B) live there now.
+- 0.2 uses 128 KB of pool for the history (32,768 events) and 117 KB for the take (30,000 events). 0.1 measured
+  270 of 344 KB of pool with a 64 KB take, so about 323 KB now: little room left in the pool for WindCore's delay
+  lines until takes move to flash pages (M1).
+- 581 KB app flash; data area 0x97000..0xDFFFF (about 292 KB): two 120 KB take copies (A/B) live there now.
 - What 32,768 events buys: notes alone, roughly an hour of noodling; notes plus pressure, which dominates, about
   8-30 minutes depending on how much pressure moves. Pressure is thinned to 50 updates a second per key with a
   2-step deadband; in CHORDS mode one pressure stream serves the whole chord (MPE master channel).
@@ -67,11 +92,12 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 - History length on screen in minutes, and a warning before it starts dropping its oldest events.
 
 ### M2: chord mode, Coral Flower-like
-- Study Coral Flower's chord mode (GPL-3.0, source on GitHub) and list what to keep: layouts, inversions, strum,
-  hold/latch, spread.
-- Chord memory and latch; strum and arpeggio from the pressure or a knob.
-- Voicing families (drop-2, spread, close), register limits, bass on/off, all through `core/harmony`.
-- Black keys: today the dominant of the degree to their left; add borrowed chords (iv, bVII) as an option.
+- Done in 0.2: latched types on the black keys, HOLD on F#5, pitch-class sets, CLOSE/OPEN/WIDE, bass on/off.
+- Quantization ("full", as Alex uses it): chord changes land on a grid of the internal or external clock.
+- A take replayed through other sounds: presets (M6) switchable while PLAY runs.
+- Pitch-class sets from the Exquis's scale files (`<SCALE ... m2="1" .../>`) loaded over USB; more voicing styles
+  (spread over three octaves, drop-2-and-4, bass an octave lower), strum and arpeggio from pressure or a knob.
+- Study Coral Flower's source (GPL-3.0) for what else to keep.
 
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
@@ -100,11 +126,16 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   the device.
 
 ### M7: one patch, two places (the plugin)
-- The firmware already runs on a Mac in fm1-base's host simulator, and in the browser as WebAssembly. A plugin built
-  on the same C (the `core/` modules plus the synth) plays the same patches and takes by construction.
-- Two routes to compare: a plugin that wraps `core/` and the synth directly (in music-suite's plugin shells, next to
-  Vane), or the existing FM-1 plugins if their formats can be read. To decide: which "plugin versions of the FM-1"
-  you mean, and whether they load third-party patches.
+- Alex mostly uses **VIBE FM VST** (from TheFirmwareHub), also m1vst (FM1VST) and Virtual FM-1. VIBE FM loads
+  firmwares converted to WebAssembly: `~/Library/Application Support/VIBE FM/Firmware/` holds `clipper.wasm` and
+  `coralflower.wasm` with a JSON manifest each (`"protocol": 7`, "converted (tools/fm1)"). Their exports are a
+  `vibe_wasm_*` interface (init, audio, MIDI out, parameters, editor, draw, LEDs, store) and they import only
+  `vibe_host_log` and `vibe_host_store`.
+- So the most direct route: build mvane for VIBE FM, the same C as the hardware. Patches and takes then mean the same
+  thing in both by construction. Needed: VIBE's SDK or the `tools/fm1` converter (TheFirmwareHub), and a mapping
+  from fm1-base's `plat.h` to `vibe_wasm_*`. fm1-base's browser emulator (`--web`) is already a WebAssembly build of
+  the same app, which should make the mapping small.
+- Fallback: a plugin of our own around `core/` and `synth.c` in music-suite's plugin shells, next to Vane.
 
 ### M8: a Vane voice
 - A mono WindCore lead first, as `docs/starter-notes.md` planned: take the DSP out of Vane, render it at
@@ -114,6 +145,6 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   measurements.
 
 ## Open questions for Alex
-- Which FM-1 plugins: M-VAVE's own, RemoteFM1, something else?
-- Coral Flower features you rely on most, so M2 starts from the right ones.
-- Whether a take should default to "last phrase" (now: 3 s of silence ends a phrase) or "everything".
+- Where to find VIBE FM's SDK or converter (TheFirmwareHub's documentation, or its author).
+- "Full" quantization in Coral Flower: to the bar, the beat, or the next chord's slot?
+- Which voicing shapes you reach for on the Exquis, to add as styles.

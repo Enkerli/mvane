@@ -1,6 +1,6 @@
 # Desktop checks for the portable core (core/): no FM-1 toolchain needed.
 CC ?= cc
-CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror
+CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
 .PHONY: check host fwsc clean
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test

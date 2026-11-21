@@ -3,20 +3,29 @@
 A custom firmware for the M-VAVE FM-1, on [fm1-base](https://github.com/charlesvestal/fm1-base). See
 [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
 
-**0.1 (proof of concept):** an 8-voice synth, notes or diatonic chords with smooth voice leading, MPE out over USB,
-duplex USB audio (from fm1-base), and a recorder that is always on: play, then decide to keep it.
+**0.2:** an 8-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
+chords from any of eight pitch-class sets with a separate bass and smooth voice leading, MPE out over USB, duplex USB
+audio (from fm1-base), and a recorder that is always on: play, then decide to keep it. The history sleeps when you
+stop, so waiting costs nothing.
 
 | Control | Does |
 | --- | --- |
-| Keys | NOTES: notes from F3, each on its own MPE channel with its pressure. CHORDS: white keys are the key's degrees (I ii iii IV V vi vii, twice), black keys the dominant of the white key to their left. Common tones hold and the moving voices glide |
+| White keys | NOTES: notes from F3, each on its own MPE channel with its pressure. CHORDS: the scale's degrees, up the keyboard (higher ones voiced higher). Common tones hold and the moving voices glide |
+| Black keys | CHORDS: the chord type, latched (9, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
 | ALGO | NOTES (left) / CHORDS (right) |
 | PRESET | the key, C to B |
-| SELECT | major (left) / minor (right) |
-| K1, K2, K3 | tone, release, glide: sent as CC74, CC72, CC5 and recorded, so a take replays your knob gestures |
+| SELECT | the scale: MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC |
+| FX | voicing: CLOSE, OPEN, WIDE |
+| EDIT | bass on / off |
+| GLO | USB audio at full level (MASTER for speaker and headphones only) or at MASTER |
+| K1, K2, K3, K4 | tone, release, glide, attack: sent as CC74, CC72, CC5, CC73 on the master channel and recorded, so a take replays your knob gestures |
 | OCT- / OCT+ | octave |
 | REC | tap: keep the last phrase (everything since the last 3 s of silence); hold: keep the whole history |
 | PLAY | play / stop the take |
 | SAVE | the settings and the take, kept across power-off |
+
+MIDI in (USB, TRS) plays the synth with MPE: per-note pitch bend (bend range by RPN), slide (CC74 on a member
+channel), channel and poly pressure. It goes into the history too.
 
 A take is also a file over USB (`take.mvt`, fm1-base's companion services). `tools/mvt2mid.py take.mvt` makes a
 MIDI file of it, MPE channels kept.
@@ -25,8 +34,8 @@ MIDI file of it, MPE channels kept.
 
 | Path | What |
 | --- | --- |
-| `core/` | Portable C99, no platform calls: `harmony` (voicing, voice leading, degrees), `rec` (history, capture, player, take files). Shared by the firmware, the tools and a future plugin |
-| `app/` | The firmware app: `app.c`, `app.h`, `fm1.toml`, the host-simulator tests |
+| `core/` | Portable C99, no platform calls: `chords` (pitch-class sets, chord types, voicing styles, names), `harmony` (whole-loop voice leading, for ProgGenie), `rec` (history, capture, player, take files). Shared by the firmware, the tools and a future plugin |
+| `app/` | The firmware app: `app.c` (panel, bus, recorder, chords), `synth.c` (the voice, at -O2), `fm1.toml`, the host-simulator tests |
 | `base/` | fm1-base, a git submodule pinned at 565fafe (with felucca-bsp inside) |
 | `tools/` | `mvt2mid.py` |
 | `docs/` | The roadmap; the earlier starter notes (platform bring-up, recording design, Vane feasibility) |
