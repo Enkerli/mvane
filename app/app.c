@@ -34,7 +34,7 @@
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564135u            /* "MVA5" */
+#define SET_MAGIC 0x4D564136u            /* "MVA6" */
 typedef struct {
     uint32_t magic;
     uint8_t mode;                        /* 0 notes, 1 chords */
@@ -48,7 +48,10 @@ typedef struct {
     uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BREATH, 3 MONO+BREATH (synth_mode) */
     uint8_t slot;                        /* the take's slot (multiple takes) */
     uint16_t sound;                      /* 0 mvane yard's saw; 1.. Clipper's factory sounds (clp.h) */
-    uint8_t rsv[2];
+    uint8_t quant;                       /* QUANT: 0 off, 1 basic, 2 full (the PLAY page; not acting yet) */
+    uint8_t mpe_out;                     /* 1: a channel a note (MPE); 0: everything on channel 1 */
+    uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
+    uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
@@ -72,6 +75,10 @@ static void settings_defaults(void)
     set.bank = 1;
     set.type = CHORD_BANK + 1u;          /* M7 */
     set.sound = 0;
+    set.quant = 0;
+    set.mpe_out = 1;
+    set.bend = 2;                        /* 48 */
+    set.page = 0;
 }
 
 static void settings_load(void)
@@ -83,7 +90,8 @@ static void settings_load(void)
         bad |= set.p[i] > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
-        || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u)
+        || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
+        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u)
         settings_defaults();
 }
 
@@ -172,9 +180,12 @@ static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)
     bus(st, d1, d2, TO_SYNTH | TO_OUT);
 }
 
-static uint32_t mpe_channel(void)        /* a member channel (MIDI 2..16): free longest, else the one with fewest notes */
+static uint32_t mpe_channel(void)        /* a member channel (MIDI 2..16): free longest, else the one with fewest notes;
+                                          * MPE OUT off: channel 1 */
 {
     uint32_t c, best = 1, now = plat_ms();
+    if (!set.mpe_out)
+        return 0;
     for (c = 1; c < 16u; c++)
         if (ch_notes[c] < ch_notes[best] ||
             (ch_notes[c] == ch_notes[best] && now - ch_free_at[c] > now - ch_free_at[best]))
@@ -182,16 +193,20 @@ static uint32_t mpe_channel(void)        /* a member channel (MIDI 2..16): free 
     return best;
 }
 
-static void mpe_config(void)             /* MPE configuration message: lower zone, 15 member channels; bend range 48 */
+static const uint8_t BEND_RANGES[4] = {12, 24, 48, 96};
+static void mpe_config(void)             /* MPE configuration message: lower zone, 15 member channels (MPE OUT off: none);
+                                          * the members' bend range */
 {
     uint32_t c;
     bus(0xB0u, 101u, 0u, TO_OUT);
     bus(0xB0u, 100u, 6u, TO_OUT);
-    bus(0xB0u, 6u, 15u, TO_OUT);
+    bus(0xB0u, 6u, set.mpe_out ? 15u : 0u, TO_OUT);
+    if (!set.mpe_out)
+        return;
     for (c = 1; c < 16u; c++) {
         bus(0xB0u | c, 101u, 0u, TO_OUT);
         bus(0xB0u | c, 100u, 0u, TO_OUT);
-        bus(0xB0u | c, 6u, 48u, TO_OUT);
+        bus(0xB0u | c, 6u, BEND_RANGES[set.bend & 3u], TO_OUT);
     }
 }
 
@@ -363,8 +378,9 @@ static struct {
     uint32_t link;
     uint32_t hist_ms, hist_at;
     uint32_t slot_warn;                  /* when a slot change last warned of an unsaved take */
-    uint32_t sel_t;                      /* SEL went down (0: not held) */
-    uint8_t sel_used;                    /* SELECT turned while SEL was held: no tap */
+    int8_t held, latched;                /* the layer button held, the layer a tap left open (-1: none) */
+    uint8_t held_used;                   /* a knob turned while it was held: no tap */
+    uint32_t knob_at[NE];                /* when each encoder last turned (its label lit) */
     uint8_t redraw;
 } ui;
 
@@ -551,6 +567,210 @@ static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous sl
     app_say(t, n);
 }
 
+/* ------------------------------------------------------------- the panel --- */
+/* The knobs' meaning comes from the context: a layer held (EDIT, FX, GLO, SEQ), or one a tap left open, else the
+ * page (HOME: PLAY, SOUND). knob_info names them for the screen; knob_turn and select_turn act. docs/PANEL.md */
+static const char *const QUANT_N[3] = {"OFF", "BASIC", "FULL"};
+static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
+static int32_t layer_now(void) { return ui.held >= 0 ? ui.held : ui.latched; }
+static const char *layer_name(int32_t l)
+{
+    return l == B_EDIT ? "CHORD" : l == B_FX ? "FX" : l == B_GLO ? "SETTINGS" : l == B_SEQ ? "TAKES" : 0;
+}
+
+static void knob_info(uint32_t i, const char **label, char *val)
+{
+    static const char *const SAW_N[4] = {"TONE", "ATTACK", "RELEASE", "GLIDE"};
+    static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_REL, SP_GLIDE};
+    static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
+    static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
+    int32_t l = layer_now();
+    val[0] = 0;
+    *label = "";
+    if (l == B_EDIT) {
+        static const char *const N[4] = {"VOICING", "VOICES", "BASS", "BANK"};
+        *label = N[i];
+        if (i == 0)
+            text_cat(val, CHORD_STYLE_NAMES[set.style]);
+        else if (i == 1)
+            int_text(set.voices, val);
+        else if (i == 2)
+            text_cat(val, set.bass ? "ON" : "OFF");
+        else
+            text_cat(val, set.bank ? "QUALITY" : "SCALE");
+    } else if (l == B_FX) {
+        *label = FX_N[i];
+        if (set.sound)
+            int_text((int32_t)clp_fx(i), val);
+        else
+            text_cat(val, "-");
+    } else if (l == B_GLO) {
+        static const char *const N[4] = {"PLAY", "USB AUDIO", "MPE OUT", "BEND"};
+        *label = N[i];
+        if (i == 0)
+            text_cat(val, PLAY_N[set.play & 3u]);
+        else if (i == 1)
+            text_cat(val, set.usb_full ? "FULL" : "MASTER");
+        else if (i == 2)
+            text_cat(val, set.mpe_out ? "ON" : "OFF");
+        else
+            int_text(BEND_RANGES[set.bend & 3u], val);
+    } else if (l == B_SEQ) {
+        if (i == 0) {
+            *label = "SLOT";
+            int_text((int32_t)set.slot + 1, val);
+        }
+    } else if (!set.page) {              /* PLAY: as Coral Flower's */
+        static const char *const N[4] = {"QUANT", "KEY", "SCALE", "GLIDE"};
+        *label = N[i];
+        if (i == 0)
+            text_cat(val, QUANT_N[set.quant % 3u]);
+        else if (i == 1)
+            text_cat(val, NOTE_N[set.tonic]);
+        else if (i == 2)
+            text_cat(val, CHORD_SCALES[set.scale].name);
+        else
+            int_text(knob[SP_GLIDE], val);
+    } else if (set.sound) {              /* SOUND: Clipper's four macros */
+        *label = MAC_N[i];
+        int_text((int32_t)clp_macro(i), val);
+    } else {                             /* SOUND: mvane yard's saw */
+        *label = SAW_N[i];
+        int_text((int32_t)synth_param(SAW_P[i]), val);
+    }
+}
+
+static void cc_turn(uint32_t cc, uint32_t now_v, int32_t e, const char *name)   /* a CC by e steps, recorded */
+{
+    char t[8];
+    int32_t v = clamp((int32_t)now_v + e * 2, 0, 127);
+    bus(0xB0u, cc, (uint32_t)v, LIVE);
+    int_text(v, t);
+    app_say(name, t);
+}
+
+static void play_set(uint32_t p)         /* POLY / MONO / +BREATH, both engines */
+{
+    set.play = (uint8_t)(p & 3u);
+    set_dirty = 1;
+    all_off();
+    synth_mode(set.play & 1u, set.play >> 1);
+    clp_mode(set.play & 1u, set.play >> 1);
+    app_say("PLAY", PLAY_N[set.play]);
+}
+
+static void knob_turn(uint32_t i, int32_t e)
+{
+    int32_t l = layer_now(), d = e > 0 ? 1 : -1;
+    const char *label;
+    char val[16];
+    if (l == B_EDIT) {
+        if (i == 0)
+            set.style = (uint8_t)((set.style + CHORD_STYLES + (uint32_t)d) % CHORD_STYLES);
+        else if (i == 1)
+            set.voices = (uint8_t)clamp(set.voices + d, 3, (int32_t)CHORD_MAX);
+        else if (i == 2)
+            set.bass = (uint8_t)(e > 0);
+        else {
+            set.bank = (uint8_t)(e > 0);
+            set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
+        }
+        harmony_changed();
+    } else if (l == B_FX) {
+        static const uint8_t CC[4] = {12, 93, 94, 91};   /* DRIVE (mvane yard's CC 12), CHORUS, DELAY, REVERB */
+        static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
+        if (!set.sound) {
+            app_say("FX", "CLIPPER SOUNDS");
+            return;
+        }
+        cc_turn(CC[i], clp_fx(i), e, FX_N[i]);
+        return;
+    } else if (l == B_GLO) {
+        if (i == 0) {
+            play_set((set.play + 4u + (uint32_t)d) & 3u);
+            return;
+        } else if (i == 1) {
+            set.usb_full = (uint8_t)(e > 0);
+            plat_usb_audio_full(set.usb_full);
+        } else if (i == 2) {
+            all_off();
+            set.mpe_out = (uint8_t)(e > 0);
+            mpe_config();
+        } else {
+            set.bend = (uint8_t)clamp(set.bend + d, 0, 3);
+            mpe_config();
+        }
+        set_dirty = 1;
+    } else if (l == B_SEQ) {
+        if (i == 0)
+            slot_step(d);
+        return;
+    } else if (!set.page) {
+        if (i == 0)
+            set.quant = (uint8_t)clamp(set.quant + d, 0, 2);
+        else if (i == 1) {
+            set.tonic = (uint8_t)((set.tonic + 12u + (uint32_t)d) % 12u);
+            harmony_changed();
+        } else if (i == 2) {
+            set.scale = (uint8_t)((set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
+            harmony_changed();
+        } else {
+            turn_knob(SP_GLIDE, SYNTH_CC_GLIDE, e, "GLIDE");
+            return;
+        }
+        set_dirty = 1;
+    } else if (set.sound) {
+        static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
+        cc_turn(16u + i, clp_macro(i), e, MAC_N[i]);   /* Clipper's macros, CC 16..19: recorded */
+        return;
+    } else {
+        static const uint8_t P[4] = {SP_TONE, SP_ATTACK, SP_REL, SP_GLIDE};
+        static const uint8_t CC[4] = {SYNTH_CC_TONE, SYNTH_CC_ATTACK, SYNTH_CC_REL, SYNTH_CC_GLIDE};
+        static const char *const N[4] = {"TONE", "ATTACK", "RELEASE", "GLIDE"};
+        turn_knob(P[i], CC[i], e, N[i]);
+        return;
+    }
+    knob_info(i, &label, val);
+    app_say(label, val);
+}
+
+static void select_turn(int32_t e)       /* SELECT: what the context lists */
+{
+    int32_t l = layer_now(), d = e > 0 ? 1 : -1;
+    if (l == B_EDIT) {                   /* the chord type, in its bank */
+        set.type = (uint8_t)(set.bank * CHORD_BANK + (set.type % CHORD_BANK + CHORD_BANK + (uint32_t)d) % CHORD_BANK);
+        set_dirty = 1;
+        if (ui.chord_n)
+            chord_sound();
+        app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
+    } else if (l == B_FX) {              /* the reverb's model */
+        if (set.sound)
+            app_say("REVERB", clp_reverb_step(d));
+    } else if (l == B_GLO) {             /* USB: a computer, or host to a MIDI device (the Diosynth) */
+        plat_usb_host(e > 0);
+        app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
+    } else if (l == B_SEQ)
+        slot_step(d);
+    else {                               /* the play pages: a jump to the next / previous engine's sounds */
+        uint32_t ns = clp_sounds() + 1u, k = set.sound, n;
+        const char *eng = set.sound ? clp_sound_engine(set.sound - 1u) : "";
+        for (n = 0; n < ns; n++) {
+            k = (k + ns + (uint32_t)d) % ns;
+            if (!k || clp_sound_engine(k - 1u) != eng)
+                break;
+        }
+        if (d < 0 && k) {                /* back: to that engine's first sound */
+            const char *e2 = clp_sound_engine(k - 1u);
+            while (k > 1u && clp_sound_engine(k - 2u) == e2)
+                k--;
+        }
+        set.sound = (uint16_t)k;
+        set_dirty = 1;
+        sound_apply();
+        app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_name());
+    }
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), k, pass, now = plat_ms(), pkt;
@@ -559,6 +779,14 @@ static void input(void)
     if (plat_midi_out_link() != ui.link) {   /* a new USB connection: tell it this is MPE */
         ui.link = plat_midi_out_link();
         mpe_config();
+    }
+    {                                    /* USB host (GLO + SELECT): what happened, once */
+        static const char *const M[7] = {"", "LOOKING", "OFF", "DEVICE", "NOT MIDI", "NO POWER", "LOST"};
+        int m = plat_usb_host_msg();
+        if (m > USBH_MSG_NONE && m <= USBH_MSG_LOST)
+            app_say("USB HOST", m == USBH_MSG_MIDI && plat_usb_host_name()[0] ? plat_usb_host_name() : M[m]);
+        if (plat_usb_lost())
+            all_off();
     }
     while (plat_midi_in(&pkt, &port)) {  /* MIDI in plays the synth and goes into the history (not echoed) */
         uint32_t st = (pkt >> 8) & 0xFFu;
@@ -610,45 +838,30 @@ static void input(void)
         if (!(btn & bit) || (ui.btn & bit))
             continue;
         if (k == B_OCTDN || k == B_OCTUP) {
-            int32_t o = clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
-            char t[4];
-            if (o != set.octave) {
+            uint32_t other = k == B_OCTDN ? B_OCTUP : B_OCTDN;
+            if (btn >> other & 1u) {     /* both: panic, everything off */
                 all_off();
-                set.octave = (int8_t)o;
-                set_dirty = 1;
-                t[0] = o < 0 ? '-' : '+', t[1] = (char)('0' + (o < 0 ? -o : o)), t[2] = 0;
-                app_say("OCTAVE", t);
+                bus(0xB0u, 123u, 0u, TO_SYNTH | TO_OUT);
+                app_say("PANIC", "ALL OFF");
+            } else {
+                int32_t o = clamp(set.octave + (k == B_OCTUP ? 1 : -1), -2, 2);
+                char t[4];
+                if (o != set.octave) {
+                    all_off();
+                    set.octave = (int8_t)o;
+                    set_dirty = 1;
+                    t[0] = o < 0 ? '-' : '+', t[1] = (char)('0' + (o < 0 ? -o : o)), t[2] = 0;
+                    app_say("OCTAVE", t);
+                }
             }
-        } else if (k == B_FX) {
-            set.style = (uint8_t)((set.style + 1u) % CHORD_STYLES);
-            harmony_changed();
-            app_say("VOICING", CHORD_STYLE_NAMES[set.style]);
-        } else if (k == B_LFO) {
-            set.voices = (uint8_t)(set.voices >= CHORD_MAX ? 3u : set.voices + 1u);
-            harmony_changed();
-            {
-                char t[4] = {(char)('0' + set.voices), 0};
-                app_say("VOICES", t);
-            }
-        } else if (k == B_SEQ || k == B_HOME) {
-            slot_step(k == B_SEQ ? 1 : -1);
-        } else if (k == B_SEL) {         /* SEL: held, SELECT is the scale; a tap, how the synth plays (on release) */
-            ui.sel_t = now ? now : 1u;
-            ui.sel_used = 0;
-        } else if (k == B_ENV) {         /* the black keys' bank: types from the scale, or fixed qualities */
-            set.bank ^= 1u;
-            set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
-            harmony_changed();
-            app_say("CHORDS", set.bank ? "QUALITIES" : "FROM SCALE");
-        } else if (k == B_EDIT) {
-            set.bass ^= 1u;
-            harmony_changed();
-            app_say("BASS", set.bass ? "ON" : "OFF");
-        } else if (k == B_GLO) {
-            set.usb_full ^= 1u;
+        } else if (k == B_EDIT || k == B_FX || k == B_GLO || k == B_SEQ) {   /* a layer: held, or a tap opens it */
+            ui.held = (int8_t)k;
+            ui.held_used = 0;
+        } else if (k == B_HOME) {        /* the knobs' page: PLAY / SOUND */
+            ui.latched = -1;
+            set.page ^= 1u;
             set_dirty = 1;
-            plat_usb_audio_full(set.usb_full);
-            app_say("USB AUDIO", set.usb_full ? "FULL" : "MASTER");
+            app_say("KNOBS", set.page ? "SOUND" : "PLAY");
         } else if (k == B_REC)
             ui.rec_t = now ? now : 1u;
         else if (k == B_PLAY) {
@@ -673,17 +886,11 @@ static void input(void)
             app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : "");
         }
     }
-    if (ui.sel_t && !(btn >> B_SEL & 1u)) {   /* SEL let go: a tap (SELECT not turned): POLY, MONO, +BREATH */
-        static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BREATH", "MONO+BREATH"};
-        if (!ui.sel_used) {
-            set.play = (uint8_t)((set.play + 1u) & 3u);
-            set_dirty = 1;
-            all_off();
-            synth_mode(set.play & 1u, set.play >> 1);
-            clp_mode(set.play & 1u, set.play >> 1);
-            app_say("PLAY", PLAY_N[set.play]);
-        }
-        ui.sel_t = 0;
+    if (ui.held >= 0 && !(btn >> ui.held & 1u)) {   /* a layer button let go: a tap opens or closes its page */
+        if (!ui.held_used)
+            ui.latched = ui.latched == ui.held ? -1 : ui.held;
+        ui.held = -1;
+        ui.redraw = 1;
     }
     if (ui.rec_t) {                      /* REC: held, the whole history; a tap, the last phrase */
         if (btn >> B_REC & 1u) {
@@ -699,6 +906,9 @@ static void input(void)
     for (k = 0; k < NE; k++) {
         if ((e = plat_enc((int)k)) == 0)
             continue;
+        ui.knob_at[k] = now ? now : 1u;
+        if (ui.held >= 0)
+            ui.held_used = 1;
         if (k == EN_ALGO) {
             all_off();
             set.mode = (uint8_t)(e > 0);
@@ -711,25 +921,10 @@ static void input(void)
             set_dirty = 1;
             sound_apply();
             app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_name());
-        } else if (k == EN_SELECT) {     /* SELECT: the key; with SEL held, the scale */
-            if (ui.sel_t) {
-                ui.sel_used = 1;
-                set.scale = (uint8_t)((set.scale + (e > 0 ? 1u : CHORD_NSCALES - 1u)) % CHORD_NSCALES);
-                harmony_changed();
-                app_say("SCALE", CHORD_SCALES[set.scale].name);
-            } else {
-                set.tonic = (uint8_t)((set.tonic + (e > 0 ? 1u : 11u)) % 12u);
-                harmony_changed();
-                app_say("KEY", NOTE_N[set.tonic]);
-            }
-        } else if (k == EN_K1)
-            turn_knob(SP_TONE, SYNTH_CC_TONE, e, "TONE");
-        else if (k == EN_K2)
-            turn_knob(SP_REL, SYNTH_CC_REL, e, "RELEASE");
-        else if (k == EN_K3)
-            turn_knob(SP_GLIDE, SYNTH_CC_GLIDE, e, "GLIDE");
-        else if (k == EN_K4)
-            turn_knob(SP_ATTACK, SYNTH_CC_ATTACK, e, "ATTACK");
+        } else if (k == EN_SELECT)
+            select_turn(e);
+        else
+            knob_turn(k - EN_K1, e);
         ui.redraw = 1;
     }
     if (player.playing && !rec_play_poll(&player, now, play_emit, 0))
@@ -740,7 +935,7 @@ static void input(void)
     ui.btn = btn;
     plat_glow(1);
     plat_leds(btn | (set_dirty || take_dirty ? 1u << B_SAVE : 0u) | (player.playing ? 1u << B_PLAY : 0u)
-                  | (set.usb_full ? 1u << B_GLO : 0u) | (set.bass && set.mode ? 1u << B_EDIT : 0u),
+                  | (layer_now() >= 0 ? 1u << layer_now() : 0u) | (set.page ? 1u << B_HOME : 0u),
               keys | (ui.hold && set.mode ? 1u << HOLD_KEY : 0u));
     plat_play_red(0);
 }
@@ -758,20 +953,43 @@ static void draw(void)
 {
     char t[24];
     uint32_t now = plat_ms(), i;
-    static const char *const KN[SP_N] = {"TONE", "REL", "GLIDE", "ATTACK"};
+    int32_t lay = layer_now();
     cv_begin(240, 32, C_BLACK);
     if (now < ui.msg_until) {
         int32_t x = cv_text(10, 6, &FONT_B, ui.msg[0], C_WHITE);
         cv_text(x + 8, 6, &FONT_B, ui.msg[1], C_HI);
     } else {
         const char *sn = sound_name();
-        cv_text(10, 6, &FONT_B, set.mode ? "CHORDS" : "NOTES", C_HI);
+        if (lay >= 0)                    /* a layer open: its name, lit */
+            cv_text(10, 6, &FONT_B, layer_name(lay), C_WHITE);
+        else
+            cv_text(10, 6, &FONT_B, set.mode ? "CHORDS" : set.page ? "NOTES" : "NOTES", C_HI);
         cv_text(230 - text_w(&FONT_B, sn), 6, &FONT_B, sn, C_WHITE);
     }
     cv_blit(0, 0);
 
-    cv_begin(240, 64, C_BLACK);          /* what sounds: the chord's name, or the notes held */
-    if (set.mode) {
+    cv_begin(240, 64, C_BLACK);          /* what sounds: the chord's name, or the notes held; a layer's own page */
+    if (lay == B_SEQ) {                  /* TAKES: the eight slots, the current one lit, the full ones filled */
+        for (i = 0; i < TAKE_SLOTS; i++) {
+            int32_t x = 10 + (int32_t)i * 28, full = i == set.slot ? take.count != 0 : takes_size(i) > 16;
+            char d[3] = {(char)('1' + i), 0, 0};
+            cv_rect(x, 6, 24, 30, i == set.slot ? C_HI : C_LINE);
+            if (!full)
+                cv_rect(x + 2, 8, 20, 26, C_BLACK);
+            cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
+        }
+        cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   REC, PLAY, SAVE AS EVER", C_GRAY);
+    } else if (lay == B_EDIT) {          /* CHORD: the black keys' types in this bank */
+        int32_t x = 10;
+        for (i = 0; i < CHORD_BANK; i++) {
+            uint32_t ty = set.bank * CHORD_BANK + i;
+            x = cv_text(x, i < 5u ? 4 : 22, &FONT_S, CHORD_TYPE_NAMES[ty], ty == set.type ? C_WHITE : C_GRAY) + 10;
+            if (i == 4u)
+                x = 10;
+        }
+        cv_text(10, 44, &FONT_XS, set.bank ? "BLACK KEYS: QUALITIES   SELECT: TYPE" : "BLACK KEYS: FROM THE SCALE   SELECT: TYPE",
+                C_GRAY);
+    } else if (set.mode) {
         if (ui.chord_name[0])
             cv_text((240 - text_w(&FONT_L, ui.chord_name)) / 2, 2, &FONT_L, ui.chord_name,
                     ui.chord_n ? C_WHITE : C_DIM);
@@ -804,10 +1022,13 @@ static void draw(void)
     }
     cv_blit(0, 34);
 
-    cv_begin(240, 36, C_BLACK);          /* the knobs */
-    for (i = 0; i < SP_N; i++) {
-        int_text((int32_t)(eng_want ? knob[i] : synth_param(i)), t);   /* (Clipper: the knob as sent, CC74 72 5 73) */
-        label_value(8 + (int32_t)i * 58, 0, KN[i], t);
+    cv_begin(240, 36, C_BLACK);          /* the knobs: what they are here, the one turning lit */
+    for (i = 0; i < 4u; i++) {
+        const char *lb;
+        int lit = ui.knob_at[EN_K1 + i] && now - ui.knob_at[EN_K1 + i] < 1200u;
+        knob_info(i, &lb, t);
+        cv_text(8 + (int32_t)i * 58, 0, &FONT_XS, lb, lit ? C_WHITE : C_GRAY);
+        cv_text(8 + (int32_t)i * 58, 14, &FONT_S, t, lit ? C_WHITE : C_HI);
     }
     cv_blit(0, 100);
 
@@ -855,7 +1076,8 @@ static void draw(void)
         static const char *const PLAY_S[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
         cv_text(132, 82, &FONT_XS, PLAY_S[set.play], set.play ? C_HI : C_DIM);
     }
-    cv_text(188, 82, &FONT_XS, set.usb_full ? "USB FULL" : "USB MAS", C_DIM);
+    cv_text(188, 82, &FONT_XS, plat_usb_host_state() == USBH_CONNECTED ? "USB HOST" : plat_usb_host_state() ? "USB ..."
+                                : set.usb_full ? "USB FULL" : "USB MAS", plat_usb_host_state() ? C_HI : C_DIM);
     cv_blit(0, 140);
 }
 
@@ -879,6 +1101,7 @@ void app_ui_init(void)
     touch_on(1);
     lcd_fill(0, 0, 240, 240, C_BLACK);
     ui.chord_key = -1;
+    ui.held = ui.latched = -1;
     ui.link = ~plat_midi_out_link();     /* the first frame sends the MPE configuration */
     ui.redraw = 1;
 }
@@ -999,6 +1222,20 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_sounds();
     else if (!strcmp(what, "slot"))
         *got = set.slot;
+    else if (!strcmp(what, "layer"))
+        *got = layer_now();
+    else if (!strcmp(what, "page"))
+        *got = set.page;
+    else if (!strcmp(what, "mpe_out"))
+        *got = set.mpe_out;
+    else if (!strcmp(what, "quant"))
+        *got = set.quant;
+    else if (!strcmp(what, "bass"))
+        *got = set.bass;
+    else if (!strcmp(what, "bank"))
+        *got = set.bank;
+    else if (!strcmp(what, "nvoices2"))
+        *got = set.voices;
     else if (!strcmp(what, "play"))
         *got = set.play;
     else if (!strcmp(what, "nvoices"))

@@ -5,10 +5,11 @@
 #include "plat.h"
 
 #define APP_NAME "MVANE YARD"
-#define APP_VERSION "0.6-dev"
+#define APP_VERSION "0.7-dev"
 #define APP_SPLASH_RGB RGB(120, 200, 170)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_TOUCH                        /* velocity and pressure from the keys (lib/touch.h) */
+#define APP_USB_HOST_NAME                /* the USB host's device by name (plat_usb_host_name): the Diosynth */
 
 /* the store: the settings and the panel calibration (the platform's), A/B sector pairs */
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };

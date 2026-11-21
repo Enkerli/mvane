@@ -36,50 +36,77 @@ shot hold.png
 tapkey 25 90
 expect hold 0
 expect chord_n 0
-# the other bank: types from the scale
-tap ENV
+# the other bank: types from the scale (EDIT held, K4); SELECT under EDIT steps the type
+press EDIT
+expect layer 4
+turn K4 -1
 expect type 0
-tap ENV
+turn SELECT 1
+expect type 1
+turn SELECT -1
+turn K4 1
 expect type 10
-# scale, voicing, bass
-press SEL
-turn SELECT 5
-release SEL
+release EDIT
+expect layer -1
+# scale (the PLAY page's K3), voicing (EDIT K1), bass (EDIT K3)
+expect page 0
+turn K3 1
+turn K3 1
+turn K3 1
+turn K3 1
+turn K3 1
 wait 30
 expect scale 5
 expect play 0
-tap FX
+press EDIT
+turn K1 1
+release EDIT
 expect style 2
 key 6 down 100
 wait 50
 expect chord_n 6
 shot wide-pco.png
 key 6 up
+# a tap opens the CHORD layer until the next tap
 tap EDIT
+expect layer 4
+shot chord-layer.png
+turn K3 -1
+expect bass 0
 key 6 down 100
 wait 50
 expect chord_n 5
 key 6 up
+turn K3 1
 tap EDIT
-# six upper voices, then three
-tap LFO
+expect layer -1
+# six upper voices, then three (EDIT K2)
+press EDIT
+turn K2 1
+release EDIT
 expect nvoices 6
 key 6 down 100
 wait 50
 expect chord_n 7
 key 6 up
-tap LFO
+press EDIT
+turn K2 -1
+turn K2 -1
+turn K2 -1
 expect nvoices 3
-tap LFO
-tap LFO
+turn K2 1
+turn K2 1
+release EDIT
 expect nvoices 5
-press SEL
-turn SELECT -5
-release SEL
+turn K3 -1
+turn K3 -1
+turn K3 -1
+turn K3 -1
+turn K3 -1
 wait 30
 expect scale 0
-# a glide gesture on K3, recorded with the notes
-turn K3 5
+# a glide gesture on K4 (the PLAY page), recorded with the notes
+turn K4 5
 wait 30
 expect glide 40
 key 2 down 90
@@ -139,8 +166,12 @@ expect mode 0
 expect glide 40
 expect style 2
 shot notes.png
-# mono legato: two notes held sound as one voice; releasing the second goes back to the first
-tap SEL
+turn ALGO 1
+wait 30
+# mono legato (GLO held, K1): two notes held sound as one voice; releasing the second goes back to the first
+press GLO
+turn K1 1
+release GLO
 expect play 1
 midi 92 3C 64
 midi 93 40 64
@@ -152,15 +183,45 @@ expect voices 1
 midi 82 3C 00
 wait 30
 expect voices 0
-# breath: SEL again (POLY+BREATH), then back to POLY
-tap SEL
+# breath: GLO K1 again (POLY+BREATH), then back to POLY; MPE OUT off puts the notes on channel 1
+press GLO
+turn K1 1
 expect play 2
-tap SEL
-tap SEL
+turn K1 -1
+turn K1 -1
 expect play 0
+turn K3 -1
+expect mpe_out 0
+release GLO
+turn ALGO -1
+out
+key 7 down 100
+wait 30
+expect_out USB 90 3C 64
+key 7 up
+wait 30
+turn ALGO 1
+press GLO
+turn K3 1
+release GLO
+expect mpe_out 1
+# both octave buttons: panic
+press OCT-
+press OCT+
+release OCT-
+release OCT+
+expect voices 0
+# HOME: the SOUND page (on the saw: TONE ATTACK RELEASE GLIDE)
+tap HOME
+expect page 1
+shot sound-page.png
+tap HOME
+expect page 0
 # take slots: the take saved above is in slot 1; slot 2 starts empty, gets its own; both survive a reboot
 expect slot 0
-tap SEQ
+press SEQ
+turn SELECT 1
+release SEQ
 expect slot 1
 expect take 0
 turn ALGO 1
@@ -171,19 +232,26 @@ key 0 up
 wait 300
 tap REC
 wait 30
-tap SEQ
+# an unsaved take: the first turn warns
+press SEQ
+turn SELECT 1
+release SEQ
 expect slot 1
 tap SAVE
 wait 100
-tap HOME
+tap SEQ
+expect layer 9
+shot takes-layer.png
+turn SELECT -1
 expect slot 0
-expect take_ms 8378
+expect take_ms 8866
+turn SELECT 1
 tap SEQ
 expect slot 1
 reboot
 wait 600
 expect slot 1
-expect take_ms 872
+expect take_ms 1590
 shot slots.png
 # the sound: PRESETS through Clipper's factory sounds and back to mvane yard's saw; a chord sounds on each
 expect sound 0

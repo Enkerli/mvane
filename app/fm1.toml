@@ -11,6 +11,7 @@ vendored = ["clipper/"]        # Clipper's sources as they are: the register che
 words = "words.tsv"
 font_full = ["L", "M"]         # lower case in the big fonts: chord names (Dm9)
 ble = false                    # no radio: keeps the build free of JieLi's closed Bluetooth libraries (GPL app)
+usb_host = true                # USB MIDI host on request (GLO + SELECT): a controller with its own power (the Diosynth)
 companion = true               # settings and the take as files over USB (base/web/companion, tools/fm1_companion.py)
 tagline = "chords, MPE and a recorder that never stops"
 repo = "https://github.com/Enkerli/mvane-yard"

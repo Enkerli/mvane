@@ -69,7 +69,7 @@ looping take can be tried through different patches, with slide and pressure rou
 
 **Sixth session (0.6: Clipper's sounds).** Works well with the Diosynth (breath). Asked, in Alex's words and
 order:
-- **Rethink the knobs and buttons.** SEQ / HOME are not how FM-1 firmwares move through clips: SELECT does, in the
+- **Rethink the knobs and buttons.** Done in 0.7 ([PANEL.md](PANEL.md)); QUANT is in place, not acting yet. SEQ / HOME are not how FM-1 firmwares move through clips: SELECT does, in the
   SEQ context. In play, K1-K4 should make sense together: one page as Coral Flower's (QUANTIZE, KEY, SCALE, GLIDE),
   another for the synth's macros (Clipper's BRITE, TIMBR, MOTN, SPACE). Proposal in [PANEL.md](PANEL.md).
 - **Keep both chord banks** and a clear way to switch (ENV does it in 0.6, without saying so on screen: see
@@ -79,7 +79,7 @@ order:
 - **Streamline Clipper's engines and sounds**: fewer models, similar ones merged (below).
 - **Display a chord's structure as a piano roll** (the voices on a small roll: what moved, what held).
 - **Standalone / plugin build, file-compatible** with the device (beside VIBE FM: M7).
-- **USB MIDI host**: the Diosynth straight into the FM-1's USB-C. fm1-base has it (`usb_host = true`,
+- **USB MIDI host**: the Diosynth straight into the FM-1's USB-C. In 0.7: GLO held, SELECT (the Diosynth has a battery). fm1-base has it (`usb_host = true`,
   `plat_usb_host`): the FM-1 hosts a USB-MIDI device or one behind a powered hub. The FM-1 gives no power, so the
   Diosynth needs its own battery or a powered hub; while hosting, the computer's USB (audio, MIDI, files) is off.
 - **Document everything** (now: [MANUAL.md](MANUAL.md)).

@@ -1,15 +1,16 @@
-# mvane yard manual (0.6)
+# mvane yard manual (0.7)
 
 mvane yard is a performance firmware for the M-VAVE FM-1: play notes or chords, through mvane yard's own synth or
 Clipper's 379 factory sounds, with MPE and breath, while a recorder keeps everything you play. Keep what you liked
 after the fact, replay it, save it in one of eight slots, and take it to your computer as a MIDI file.
 
-The panel layout is a first draft: it will change (see [ROADMAP.md](ROADMAP.md), "Panel conventions").
+The panel follows the FM-1's habits (PRESETS the sound, SELECT what the context lists, a held button a layer); its
+design is in [PANEL.md](PANEL.md).
 
 ## Install
 
 Install `mvane-yard-X.Y.fwsc` with M-Patcher (or fm1-base's installer). Back up your current firmware first. Settings
-start from their defaults after an update that changes their layout (0.6 does).
+start from their defaults after an update that changes their layout (0.6 and 0.7 do).
 
 ## The screen
 
@@ -26,24 +27,42 @@ start from their defaults after an update that changes their layout (0.6 does).
 
 ## Controls
 
+The four knobs' names are on the screen above them, and the one you turn lights up. What they do depends on the
+**page** (HOME) or the **layer** (a button held, or tapped to leave it open until the next tap).
+
+### Knob pages (HOME switches)
+
+| Page | K1 | K2 | K3 | K4 |
+| --- | --- | --- | --- | --- |
+| **PLAY** (as Coral Flower's) | QUANT (off, basic, full: not acting yet) | KEY | SCALE | GLIDE |
+| **SOUND**, Clipper's sounds | BRITE | TIMBR | MOTN | SPACE (Clipper's four macros) |
+| **SOUND**, mvane yard's saw | TONE | ATTACK | RELEASE | GLIDE |
+
+Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 to 74), so a take replays it.
+
+### Layers: hold a button and turn a knob (or tap it, turn, tap again)
+
+| Layer | K1 | K2 | K3 | K4 | SELECT |
+| --- | --- | --- | --- | --- | --- |
+| **EDIT**: CHORD | VOICING (close, open, wide) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
+| **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
+| **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
+| **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
+
+### Encoders and buttons
+
 | Control | Does |
 | --- | --- |
-| **ALGORITHM** | NOTES (turn left) / CHORDS (turn right) |
-| **PRESETS** | The sound: mvane yard's saw first, then Clipper's sounds (a fast turn moves eight at a time) |
-| **SELECT** | The key, C to B |
-| **SEL held + SELECT** | The scale (pitch-class set) |
-| **SEL tapped** | POLY, MONO (legato), POLY+BREATH, MONO+BREATH |
-| **K1 K2 K3 K4** | Tone, release, glide, attack. They are sent and recorded as CC74, CC72, CC5, CC73, so a take replays your knob moves. On Clipper's sounds they act through its standard CC map (74: the engine's cutoff or brightness) |
-| **FX** | Voicing: CLOSE, OPEN, WIDE |
-| **LFO** | Chord size: 3 to 6 upper voices (plus the bass) |
-| **EDIT** | Bass on / off |
-| **ENV** | The black keys' chord bank: fixed qualities (Coral Flower's) or types from the scale |
-| **GLO** | USB audio level: FULL (MASTER for the speaker and headphones only) or MASTER |
-| **OCT- / OCT+** | Octave |
+| **ALGORITHM** | NOTES (left) / CHORDS (right) |
+| **PRESETS** | The sound: mvane yard's saw, then Clipper's sounds (a fast turn moves eight at a time) |
+| **SELECT** | On the pages: the next or previous engine's sounds. In a layer: as above |
+| **HOME** | PLAY page / SOUND page |
+| **OCT- / OCT+** | Octave; both together: panic (everything off) |
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history |
 | **PLAY** | Play / stop the take |
 | **SAVE** | Save the settings, and the take into its slot |
-| **SEQ / HOME** | Next / previous take slot (1 to 8). With a take not saved, the first press warns; a second press within 3 s moves on and drops it |
+
+Moving to another slot with a take not saved: the first turn warns, a second within 3 s moves on and drops it.
 
 ## Playing
 
@@ -77,7 +96,7 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 - MIDI in (USB or the TRS jack) plays the sound with MPE: per-note pitch bend (the bend range from RPN 0, 48 by
   default on member channels), slide (CC74 on a member channel, centred on 64), channel and poly pressure. mvane yard
   sends an MPE configuration message when a computer connects.
-- **Breath** (SEL: POLY+BREATH or MONO+BREATH): CC2 or CC11 from a wind controller sets the level and the brightness;
+- **Breath** (GLO, K1: POLY+BREATH or MONO+BREATH): CC2 or CC11 from a wind controller sets the level and the brightness;
   notes are silent until you blow. Tried with a Diosynth.
 - **MONO** is legato: a note played over a held one slides to it without restarting the envelope (the glide time, or
   20 ms at GLIDE 0); letting it go returns to the note still held.
@@ -102,7 +121,7 @@ aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (7
 - **PLAY** replays the take through the current sound: try a take through different sounds.
 - **SAVE** writes the take into the current slot (the sound stops for a moment while the flash is written). Saved takes
   play from the flash.
-- **SEQ / HOME** pick one of eight slots.
+- **SEQ** (held or tapped) and SELECT pick one of eight slots.
 
 ## Your takes on the computer
 
@@ -123,13 +142,17 @@ closes. Whether settings persist with the DAW project depends on VIBE's store; s
 ## USB
 
 The FM-1 is a USB audio interface (duplex: it records itself into the computer, and plays the computer's audio) and a
-USB MIDI device. GLO sets the recording's level.
+USB MIDI device. GLO, K2 sets the recording's level.
 
-## Known limits (0.6)
+**USB host**: GLO held, SELECT right: the FM-1 hosts a USB MIDI device plugged into its USB-C port, such as the
+Diosynth (on its own battery: the FM-1 gives the port no power; or behind a powered hub). The screen names the device.
+Meanwhile there is no computer: no USB audio, no files. GLO held, SELECT left: back to the computer.
+
+## Known limits (0.7)
 
 - Clipper's code has 64-bit multiplies beside 16-bit loads, which on this CPU can occasionally flip a register bit
   and crash (felucca-bsp's docs/CPU.md). It is Clipper's code as Clipper ships it. If mvane yard crashes or glitches on
   Clipper's sounds, say so: the fix is known (those multiplies out of line).
 - Headphones at full volume may distort a little (the FM-1's output stage).
 - One processor core for the sound (Clipper uses two).
-- No quantization, no arpeggiator, no sequencer yet.
+- QUANT is on the PLAY page but does not act yet; no arpeggiator, no sequencer yet.

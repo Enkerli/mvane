@@ -8,25 +8,7 @@ chords from any of eight pitch-class sets with a separate bass and smooth voice 
 audio (from fm1-base), and a recorder that is always on: play, then decide to keep it. The history sleeps when you
 stop, so waiting costs nothing.
 
-| Control | Does |
-| --- | --- |
-| White keys | NOTES: notes from F3, each on its own MPE channel with its pressure. CHORDS: the scale's degrees, up the keyboard (higher ones voiced higher). Common tones hold and the moving voices glide |
-| Black keys | CHORDS: the chord type, latched: qualities (M6 M7 M9 S2 S4 m6 m7 m9 M m) or, with ENV, types from the scale (STACK, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/ the dominant of the degree); a sounding chord takes it at once. The last one (F#5) is HOLD |
-| ALGO | NOTES (left) / CHORDS (right) |
-| PRESET | the key, C to B |
-| SELECT | the scale: MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO (1723), NOODLING (1267), OCTATONIC; its pitch-class-set number on screen (music-suite's convention) |
-| FX | voicing: CLOSE, OPEN, WIDE |
-| LFO | chord size: 3 to 6 upper voices (plus the bass) |
-| ENV | the black keys' bank: fixed qualities as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m, the default) or types from the scale |
-| EDIT | bass on / off |
-| GLO | USB audio at full level (MASTER for speaker and headphones only) or at MASTER |
-| K1, K2, K3, K4 | tone, release, glide, attack: sent as CC74, CC72, CC5, CC73 on the master channel and recorded, so a take replays your knob gestures |
-| OCT- / OCT+ | octave |
-| REC | tap: keep the last phrase (everything since the last 3 s of silence); hold: keep the whole history |
-| PLAY | play / stop the take |
-| SAVE | the settings, and the take into its slot, kept across power-off |
-| SEQ / HOME | the next / previous of eight take slots (an unsaved take: a warning first, a second press goes on) |
-| SEL | POLY, MONO (legato), POLY+BREATH, MONO+BREATH: breath is CC2 or CC11 from a wind controller, as level and brightness |
+The controls, page by page and layer by layer: [docs/MANUAL.md](docs/MANUAL.md).
 
 MIDI in (USB, TRS) plays the synth with MPE: per-note pitch bend (bend range by RPN), slide (CC74 on a member
 channel), channel and poly pressure. It goes into the history too.

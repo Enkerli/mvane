@@ -264,12 +264,45 @@ void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block
     else if (kind == 0xE0u || kind == 0xD0u || kind == 0xA0u)
         part_ctl_event(t, kind, d1, d2);
     else if (kind == 0xB0u) {
+        if (d1 == 12u) {                         /* (mvane yard) CC 12: the DRIVE send, which Clipper's map has none for */
+            t->p[P_DIST] = (int16_t)(TP[P_DIST].min + ((int32_t)d2 * (TP[P_DIST].max - TP[P_DIST].min) + 63) / 127);
+            return;
+        }
         midi_cc(t, d1, d2);                      /* mod wheel, expression, breath, sustain, the macros (16..19),
                                                   * the standard CC map (74 cutoff, 71 resonance, 73 attack, ...) */
     }
 }
 
 void clp_panic(void) { trk_all_off(&trk[0]); }
+
+/* a parameter as 0..127 over its range (as a CC sets it, seq.c midi_cc), and back */
+static uint32_t clp_q(uint32_t pi, int32_t v)
+{
+    int32_t lo = TP[pi].min, hi = TP[pi].max;
+    return hi > lo ? (uint32_t)clamp((v - lo) * 127 / (hi - lo), 0, 127) : 0u;
+}
+uint32_t clp_macro(uint32_t i)                  /* BRITE TIMBR MOTN SPACE, 0..127 (as CC 16..19 set them) */
+{
+    const track_t *t = &trk[0];
+    if (i > 3u)
+        return 0;
+    if (t->eng_req == ENGI_HYBRID)
+        return (uint32_t)clamp(t->p[P_E4 + i], 0, 127);
+    return (uint32_t)clamp(t->p[P_MAC1 + i] + (i < 2u ? 64 : 0), 0, 127);
+}
+uint32_t clp_fx(uint32_t i)                     /* DRIVE CHORUS DELAY REVERB sends, 0..127 */
+{
+    static const uint8_t P[4] = {P_DIST, P_CHOR, P_DLY, P_REV};
+    return i < 4u ? clp_q(P[i], trk[0].p[P[i]]) : 0u;
+}
+const char *clp_reverb_step(int32_t d)          /* the reverb's model (main loop): -> its name */
+{
+    const param_desc_t *g = &GP[G_RTYPE];
+    int32_t n = g->max - g->min + 1, v = song.g[G_RTYPE] - g->min;
+    if (d)
+        song.g[G_RTYPE] = (int16_t)(g->min + ((v + (d > 0 ? 1 : n - 1)) % n));
+    return g->names ? g->names[song.g[G_RTYPE] - g->min] : "";
+}
 
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {

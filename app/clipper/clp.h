@@ -15,4 +15,7 @@ void clp_select(uint32_t i);                  /* play sound i (main loop: the pa
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2);   /* a MIDI message (render: before clp_render) */
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12);   /* n stereo frames, 24-bit, MASTER as the render has it */
 void clp_panic(void);
-void clp_mode(uint32_t mono, uint32_t breath);   /* mvane yard's SEL: mono legato; breath (CC2) the level */
+void clp_mode(uint32_t mono, uint32_t breath);
+uint32_t clp_macro(uint32_t i);              /* BRITE TIMBR MOTN SPACE as CC 16..19 set them: 0..127 */
+uint32_t clp_fx(uint32_t i);                 /* DRIVE (CC 12) CHORUS (93) DELAY (94) REVERB (91) sends: 0..127 */
+const char *clp_reverb_step(int32_t d);      /* the reverb's model, d steps on (0: as it is) -> its name */   /* mvane yard's SEL: mono legato; breath (CC2) the level */
