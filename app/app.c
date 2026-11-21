@@ -266,7 +266,8 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
 }
 
 /* -------------------------------------------------------------- the take --- */
-static const plat_file_t TAKEF = {0x97000u, 0xA8000u, 0x11000u};   /* A/B, 68 KiB each, in the data area */
+#define TAKEF_N (17u * 4096u)            /* 68 KiB a copy: the head and a full take */
+static const plat_file_t TAKEF = {PLAT_DATA_LO, PLAT_DATA_LO + TAKEF_N, TAKEF_N};   /* A/B, at the data area's start */
 
 static void take_load(void)
 {
