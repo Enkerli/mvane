@@ -408,7 +408,7 @@ static void chord_play(uint32_t k, uint32_t vel)
         if (BK[i] == k)
             degree = AT[i], secondary = 1;
     c = harmony_degree(set.tonic, degree % 7u, set.minor, (int)secondary);
-    if (!harmony_voice_live(c, ui.have_prev ? &ui.prev : NULL, &v))
+    if (!harmony_voice_live(c, ui.have_prev ? &ui.prev : 0, &v))
         return;
     ui.prev = v;
     ui.have_prev = 1;
