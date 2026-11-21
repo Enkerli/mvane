@@ -161,7 +161,7 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
 - Done (2026-11-21, after the plugin conversion worked): the take over USB, both ways. `web/index.html` (Connect,
   piano roll, Download as MIDI or .mvt, send a MIDI or .mvt file as the take, settings backup and restore) and
   `tools/yard.py` (the same from the command line), on fm1-base's companion services; tested against the browser
-  emulator and the host simulator. To publish the page: GitHub Pages from `web/` (Web MIDI needs HTTPS).
+  emulator and the host simulator. Published on GitHub Pages: https://enkerli.github.io/mvane-yard/ (`.github/workflows/pages.yml`, on each push to `web/`).
 - Next: several takes (a list the page shows and names), the take's tempo for the MIDI file once there is a clock,
   and the history itself as a file (everything played since power-on, not only what REC kept).
 - A versioned patch format: engine ID, stable parameter IDs, expression routes. JSON in the editor, compact binary on

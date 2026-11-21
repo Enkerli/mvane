@@ -33,9 +33,9 @@ channel), channel and poly pressure. It goes into the history too.
 
 The take SAVE keeps is a file over USB (fm1-base's companion services). Two ways to get it:
 
-- **The page** (`web/index.html`): Connect, see the take as a piano roll, **Download as MIDI** (or `.mvt`), or send a
-  MIDI file to the FM-1 as the take PLAY plays; settings download and restore. Chrome or Edge, served over `http://localhost`
-  or HTTPS (Web MIDI needs a secure page): `python3 -m http.server 8737 --directory web`, then http://localhost:8737.
+- **The page**, https://enkerli.github.io/mvane-yard/ (`web/index.html`): Connect, see the take as a piano roll, **Download as MIDI** (or `.mvt`), or send a
+  MIDI file to the FM-1 as the take PLAY plays; settings download and restore. Chrome or Edge. To run it from a checkout
+  instead: `python3 -m http.server 8737 --directory web`, then http://localhost:8737 (Web MIDI needs HTTPS or localhost).
 - **The command line**: `python3 tools/yard.py take` writes `take.mid`; `tools/yard.py put song.mid` sends a MIDI file
   (notes, controllers, pressure, bend; tracks merged; tempo honoured); `tools/yard.py settings` saves the settings.
   Needs `pip install mido python-rtmidi`.

@@ -12,6 +12,7 @@ ble = false                    # no radio: keeps the build free of JieLi's close
 companion = true               # settings and the take as files over USB (base/web/companion, tools/fm1_companion.py)
 tagline = "chords, MPE and a recorder that never stops"
 repo = "https://github.com/Enkerli/mvane-yard"
+site = "https://enkerli.github.io/mvane-yard/"   # the page: the take as MIDI, settings
 licence = "GPL-3.0-only"
 credits = "Built on fm1-base (MPL-2.0) and felucca-bsp."
 author = "Alexandre Enkerli"
