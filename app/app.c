@@ -26,7 +26,7 @@
 #include "synth.h"
 
 #define HIST_WORDS (1u << 15)            /* 128 KiB of history: 32,768 events, however long they took to play */
-#define TAKE_WORDS 30000u                /* 117 KiB: a take, in RAM and in the flash */
+#define TAKE_MAX (HIST_WORDS + REC_PRE)  /* the longest take: the whole history (a saved one: in the flash, read in place) */
 #define PHRASE_GAP_MS 3000u              /* REC tap: what followed the last silence this long */
 #define SLEEP_MS 4000u                   /* the history sleeps: a longer pause is kept as this long */
 #define HOLD_KEY 25u                     /* F#5, the last black key */
@@ -111,9 +111,9 @@ void app_panic(void) { synth_panic(); }
 #define TO_SYNTH 1u
 #define TO_OUT 2u
 #define TO_HIST 4u
-static uint32_t hist_buf[HIST_WORDS] PLAT_POOL, take_buf[TAKE_WORDS] PLAT_POOL;
+static uint32_t hist_buf[HIST_WORDS] PLAT_POOL;
 static rec_ring hist;
-static rec_take take = {0, 0, TAKE_WORDS, 0};
+static rec_take take;                   /* a capture (in the history, locked) or a saved take (in the flash) */
 static rec_player player;
 static uint8_t take_dirty;
 static uint8_t ch_notes[16];             /* notes sounding per channel (out): the MPE allocator's view */
@@ -200,8 +200,8 @@ static void take_load(void)              /* the current slot's take into RAM (no
 {
     int n = takes_size(set.slot);
     const uint8_t *p = takes_data(set.slot);
-    take.words = take_buf;
-    take.count = take.duration_ms = 0;
+    rec_unlock(&hist);                   /* a capture not saved is let go */
+    mvane_zero(&take, sizeof take);
     if (n > 0 && p && rec_load(&take, p, (uint32_t)n) != 0)
         take.count = 0;
     take_dirty = 0;
@@ -209,16 +209,28 @@ static void take_load(void)              /* the current slot's take into RAM (no
 
 static int take_save(void)               /* the RAM take into the current slot */
 {
-    uint32_t head[REC_HEAD_WORDS], size = rec_file_size(&take), crc;
+    uint32_t head[REC_HEAD_WORDS], chunk[128], size = rec_file_size(&take), crc, i, k;
     if (!MVY_TAKE_FLASH)
-        return take_dirty = 0, 0;        /* kept in RAM: nowhere to save it */
+        return take_dirty = 0, 0;        /* kept in RAM (in the history): nowhere to save it */
     rec_file_head(&take, head);
     crc = rec_crc32(0, (const uint8_t *)head, sizeof head);   /* the FM-1 and the host are little-endian */
-    crc = rec_crc32(crc, (const uint8_t *)take.words, 4u * take.count);
-    if (takes_begin(set.slot, size) || takes_write(0, head, sizeof head)
-        || (take.count && takes_write(sizeof head, take.words, 4u * take.count)) || takes_commit(crc))
+    for (i = 0; i < take.count; i += k) {   /* the words through a small buffer: the take is not one array */
+        for (k = 0; k < 128u && i + k < take.count; k++)
+            chunk[k] = rec_word(&take, i + k);
+        crc = rec_crc32(crc, (const uint8_t *)chunk, 4u * k);
+    }
+    if (takes_begin(set.slot, size) || takes_write(0, head, sizeof head))
         return -1;
-    take_dirty = old_take = 0;
+    for (i = 0; i < take.count; i += k) {
+        for (k = 0; k < 128u && i + k < take.count; k++)
+            chunk[k] = rec_word(&take, i + k);
+        if (takes_write(4u * (REC_HEAD_WORDS + i), chunk, 4u * k))
+            return -1;
+    }
+    if (takes_commit(crc))
+        return -1;
+    old_take = 0;
+    take_load();                         /* from the flash now: the history is free again */
     return 0;
 }
 
@@ -233,13 +245,23 @@ void app_init(void)
     hist.sleep_ms = SLEEP_MS;
     if (set.slot >= TAKE_SLOTS)
         set.slot = 0;
-    take.words = take_buf;
 #if MVY_TAKE_FLASH
-    if (!takes_init()) {                 /* no slots yet: 0.4's take, if there is one, waits in RAM for SAVE */
+    if (!takes_init()) {                 /* no slots yet: 0.4's take, if there is one, waits in the history for SAVE
+                                          * (copied: its flash is where the first save writes) */
         int n = plat_file_size(&OLD_TAKEF);
         const uint8_t *p = plat_file_data(&OLD_TAKEF);
-        if (n > 0 && p && rec_load(&take, p, (uint32_t)n) == 0 && take.count)
+        rec_take old;
+        if (n > 0 && p && rec_load(&old, p, (uint32_t)n) == 0 && old.count && old.count <= HIST_WORDS) {
+            uint32_t i;
+            for (i = 0; i < old.count; i++)
+                hist_buf[i] = rec_word(&old, i);
+            hist.head = old.count;
+            mvane_zero(&take, sizeof take);
+            take.ring = &hist, take.start = 0, take.nring = take.count = old.count;
+            take.duration_ms = old.duration_ms;
+            hist.lock = 0, hist.locked = 1;
             take_dirty = old_take = 1;
+        }
     } else
 #endif
         take_load();
@@ -461,7 +483,6 @@ static void capture(uint32_t gap)
     char t[16];
     if (player.playing)
         rec_play_stop(&player, play_emit, 0);
-    take.words = take_buf;
     if (!rec_capture(&hist, plat_ms(), gap, &take)) {
         app_say("HISTORY", "EMPTY");
         return;
@@ -745,7 +766,9 @@ static void draw(void)
     int_text((int32_t)(rec_count(&hist) * 100u / HIST_WORDS), t);
     text_cat(t, "% FULL");
     cv_text(80, 20, &FONT_XS, t, C_DIM);
-    if (rec_sleeping(&hist, now) && rec_count(&hist))
+    if (hist.full)                       /* the history reached a capture not yet saved */
+        cv_text(150, 20, &FONT_XS, "FULL: SAVE", C_HI);
+    else if (rec_sleeping(&hist, now) && rec_count(&hist))
         cv_text(150, 20, &FONT_XS, "ASLEEP", C_DIM);
     t[0] = 0;
     if (take.count)
@@ -847,7 +870,7 @@ int app_file(uint32_t i, plat_file_info_t *f)
     f->kind = PLAT_FK_PATTERN;
     f->flags = PLAT_FF_READ | PLAT_FF_WRITE | PLAT_FF_DELETE;
     f->size = n > 0 ? (uint32_t)n : 0u;
-    f->room = 4u * (REC_HEAD_WORDS + TAKE_WORDS);
+    f->room = 4u * (REC_HEAD_WORDS + TAKE_MAX);
     return 0;
 }
 int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n)
@@ -863,7 +886,7 @@ int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n)
 }
 int app_file_begin(uint32_t i, uint32_t size)
 {
-    if (size > 4u * (REC_HEAD_WORDS + TAKE_WORDS))
+    if (size > 4u * (REC_HEAD_WORDS + TAKE_MAX))
         return -1;
     write_slot = (int)i;
     return takes_begin(i, size);

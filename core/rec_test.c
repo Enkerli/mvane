@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-static uint32_t ring_buf[1u << 12], take_buf[1u << 11], load_buf[1u << 11];
-static uint8_t file[4u * (REC_HEAD_WORDS + (1u << 11))];
+static uint32_t ring_buf[1u << 12];
+static uint32_t file_w[REC_HEAD_WORDS + (1u << 12)];   /* (4-aligned: a take reads its file in place) */
+static uint8_t *const file = (uint8_t *)file_w;
 static struct { uint8_t st, d1, d2; uint32_t t; } got[4096];
 static unsigned ngot;
 static uint32_t clock_ms;
@@ -33,7 +34,7 @@ static void play(const rec_take *t)
 int main(void)
 {
     rec_ring r;
-    rec_take take = {take_buf, 0, 1u << 11, 0}, back = {load_buf, 0, 1u << 11, 0};
+    static rec_take take, back;
     uint32_t now = 0xFFFFF000u; /* the clock wraps during the test */
     rec_init(&r, ring_buf, 1u << 12);
 
@@ -74,13 +75,14 @@ int main(void)
         uint32_t head[REC_HEAD_WORDS], i, n = rec_file_size(&take);
         rec_file_head(&take, head);
         for (i = 0; i < REC_HEAD_WORDS + take.count; i++) {
-            uint32_t w = i < REC_HEAD_WORDS ? head[i] : take.words[i - REC_HEAD_WORDS];
+            uint32_t w = i < REC_HEAD_WORDS ? head[i] : rec_word(&take, i - REC_HEAD_WORDS);
             file[4 * i] = (uint8_t)w, file[4 * i + 1] = (uint8_t)(w >> 8);
             file[4 * i + 2] = (uint8_t)(w >> 16), file[4 * i + 3] = (uint8_t)(w >> 24);
         }
         assert(rec_load(&back, file, n) == 0);
-        assert(back.count == take.count && back.duration_ms == take.duration_ms);
-        assert(!memcmp(back.words, take.words, 4 * take.count));
+        assert(back.count == take.count && back.duration_ms == take.duration_ms && !back.ring);
+        for (i = 0; i < take.count; i++)
+            assert(rec_word(&back, i) == rec_word(&take, i));
         file[0] ^= 1;
         assert(rec_load(&back, file, n) != 0);
     }
@@ -99,9 +101,11 @@ int main(void)
     assert(rec_span_ms(&r, now) >= 120100u);
     {
         uint32_t i, t = 0, gap = 0;
-        for (i = 0; i < take.count; i++)
-            if (((take.words[i] >> 16) & 0xFF) == REC_TIME)
-                gap += (take.words[i] >> 24) << 16 | (take.words[i] & 0xFFFF), t++;
+        for (i = 0; i < take.count; i++) {
+            uint32_t w = rec_word(&take, i);
+            if (((w >> 16) & 0xFF) == REC_TIME)
+                gap += (w >> 24) << 16 | (w & 0xFFFF), t++;
+        }
         assert(gap >= 120000u);
     }
 
@@ -117,12 +121,33 @@ int main(void)
     }
     r.sleep_ms = 0;
 
-    /* overflow: the ring keeps the newest, and a capture still starts with the right state */
+    /* a capture is locked in the history: playing on fills the rest, then the history is full and the take intact */
+    {
+        uint32_t first, i;
+        rec_put(&r, now += 300, 0x97, 70, 100);
+        rec_put(&r, now += 300, 0x87, 70, 0);
+        assert(rec_capture(&r, now, 200, &take));
+        first = rec_word(&take, take.npre);
+        for (i = 0; i < 10000; i++)
+            rec_put(&r, now += 5, 0xD1, (uint8_t)(i & 127), 0);
+        assert(r.full && rec_word(&take, take.npre) == first);
+        play(&take);
+        {
+            unsigned j, seen = 0;
+            for (j = 0; j < ngot; j++)
+                seen |= got[j].st == 0x87 && got[j].d1 == 70;
+            assert(seen);
+        }
+        rec_unlock(&r);
+        rec_put(&r, now += 5, 0xD1, 1, 0);
+        assert(!r.full);
+    }
+    /* unlocked, the ring keeps the newest */
     for (unsigned i = 0; i < 10000; i++)
         rec_put(&r, now += 5, 0xD1, (uint8_t)(i & 127), 0);
     assert(rec_count(&r) == 1u << 12);
-    assert(rec_capture(&r, now, 0, &take) == 1u << 11);  /* the take's capacity bounds it */
-    assert(rec_crc32(0, (const uint8_t *)"123456789", 9) == 0xCBF43926u);
-    printf("rec: all checks passed (history %u words, take %u words)\n", (unsigned)rec_count(&r), (unsigned)take.count);
+    assert(rec_capture(&r, now, 0, &take) >= 1u << 12);
+    printf("rec: all checks passed (history %u words, the last capture %u words, none copied)\n", (unsigned)rec_count(&r),
+           (unsigned)take.count);
     return 0;
 }

@@ -28,11 +28,20 @@ static void rec__push(rec_ring *r, uint32_t w)
     r->head++;
 }
 
+static uint32_t rec__room(const rec_ring *r)   /* words the ring can take before a locked capture */
+{
+    return r->locked ? r->mask + 1u - (r->head - r->lock) : 0xFFFFFFFFu;
+}
+
 void rec_put(rec_ring *r, uint32_t now_ms, uint8_t status, uint8_t d1, uint8_t d2)
 {
     uint32_t gap = 0;
     if (status < 0x80u || status >= 0xF0u)
         return;
+    if (rec__room(r) < 4u) {             /* (a time word or two and the event) */
+        r->full = 1;
+        return;
+    }
     if (r->started)
         gap = now_ms - r->last_ms;
     if (r->sleep_ms && gap > r->sleep_ms)
@@ -110,11 +119,26 @@ static void rec__track(rec__held_set *notes, rec__held_set *ctls, uint32_t w)
         rec__held_ctl(ctls, st, W_D1(w), W_D2(w));
 }
 
-uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take)
+void rec_unlock(rec_ring *r) { r->locked = r->full = 0; }
+
+uint32_t rec_word(const rec_take *k, uint32_t i)
+{
+    uint32_t w;
+    if (i < k->npre)
+        return k->pre[i];
+    i -= k->npre;
+    if (!k->ring)
+        return k->flat[i];
+    w = k->ring->buf[(k->start + i) & k->ring->mask];
+    return i ? w : (W_ST(w) == REC_TIME ? 0u : w & 0x00FFFFFFu);   /* the capture starts on its first event */
+}
+
+uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take)
 {
     uint32_t n = rec_count(r), oldest = r->head - n, start = oldest, i, out, t, last_t;
     rec__held_set pre_n, pre_c, end_n;
-    if (!n || !take->cap)
+    rec_unlock(r);
+    if (!n)
         return 0;
     if (gap_ms) { /* the most recent silence of gap_ms or more, before the last event */
         uint32_t run = 0, ev = r->head; /* ev: the event the time words before it lead to */
@@ -130,36 +154,32 @@ uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_ta
             }
         }
     }
-    for (;;) { /* what sounds at the start, then whether it fits */
-        mvane_zero(&pre_n, sizeof pre_n);
-        mvane_zero(&pre_c, sizeof pre_c);
-        for (i = oldest; i != start; i++)
-            rec__track(&pre_n, &pre_c, r->buf[i & r->mask]);
-        if (pre_n.n + pre_c.n + (r->head - start) <= take->cap)
-            break;
-        start = r->head - (take->cap - pre_n.n - pre_c.n);
-    }
+    mvane_zero(&pre_n, sizeof pre_n);    /* what sounds at the start */
+    mvane_zero(&pre_c, sizeof pre_c);
+    for (i = oldest; i != start; i++)
+        rec__track(&pre_n, &pre_c, r->buf[i & r->mask]);
     out = 0;
     for (i = 0; i < pre_c.n; i++)
-        take->words[out++] = rec__make(0, pre_c.st[i], pre_c.d1[i], pre_c.d2[i]);
+        take->pre[out++] = rec__make(0, pre_c.st[i], pre_c.d1[i], pre_c.d2[i]);
     for (i = 0; i < pre_n.n; i++)
-        take->words[out++] = rec__make(0, pre_n.st[i], pre_n.d1[i], pre_n.d2[i]);
+        take->pre[out++] = rec__make(0, pre_n.st[i], pre_n.d1[i], pre_n.d2[i]);
+    take->npre = out;
+    take->ring = r;
+    take->flat = 0;
+    take->start = start;
+    take->nring = r->head - start;
+    take->count = take->npre + take->nring;
     mvane_zero(&end_n, sizeof end_n);
     for (i = 0; i < pre_n.n; i++)
         rec__held_note(&end_n, pre_n.st[i], pre_n.d1[i], pre_n.d2[i]);
     t = last_t = 0;
-    for (i = start; i != r->head; i++) {
-        uint32_t w = r->buf[i & r->mask];
-        if (i == start) /* the capture starts on its first event */
-            w = W_ST(w) == REC_TIME ? 0 : w & 0x00FFFFFFu;   /* (a time word of 0: skipped) */
-        if (W_ST(w) == REC_TIME && !W_GAP(w))
-            continue;
+    for (i = 0; i < take->nring; i++) {
+        uint32_t w = rec_word(take, take->npre + i);
         t += rec__word_dt(w);
         if (W_ST(w) != REC_TIME) {
             last_t = t;
             rec__track(&end_n, &pre_c, w);
         }
-        take->words[out++] = w;
     }
     /* notes still held at the press last until the press; otherwise the take ends on its last event */
     {
@@ -168,8 +188,9 @@ uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_ta
             tail = r->sleep_ms;
         take->duration_ms = end_n.n ? t + tail : last_t;
     }
-    take->count = out;
-    return out;
+    r->lock = start;
+    r->locked = 1;
+    return take->count;
 }
 
 /* ------------------------------------------------------------- files --- */
@@ -187,14 +208,15 @@ static uint32_t rec__le32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 
 
 int rec_load(rec_take *take, const uint8_t *bytes, uint32_t n)
 {
-    uint32_t count, i;
+    uint32_t count;
     if (n < 4u * REC_HEAD_WORDS || rec__le32(bytes) != REC_MAGIC || rec__le32(bytes + 4) != 1u)
         return -1;
     count = rec__le32(bytes + 8);
-    if (count > take->cap || n < 4u * (REC_HEAD_WORDS + count))
+    if (n < 4u * (REC_HEAD_WORDS + count) || ((uintptr_t)bytes & 3u))
         return -1;
-    for (i = 0; i < count; i++)
-        take->words[i] = rec__le32(bytes + 4u * (REC_HEAD_WORDS + i));
+    take->npre = take->nring = take->start = 0;
+    take->ring = 0;
+    take->flat = (const uint32_t *)(const void *)(bytes + 4u * REC_HEAD_WORDS);
     take->count = count;
     take->duration_ms = rec__le32(bytes + 12);
     return 0;
@@ -240,7 +262,7 @@ int rec_play_poll(rec_player *p, uint32_t now_ms, rec_emit_fn emit, void *ctx)
     if (!p->playing)
         return 0;
     while (p->pos < k->count) {
-        uint32_t w = k->words[p->pos], st = W_ST(w), due = p->t_ms + rec__word_dt(w);
+        uint32_t w = rec_word(k, p->pos), st = W_ST(w), due = p->t_ms + rec__word_dt(w);
         if (due > elapsed)
             break;
         p->t_ms = due;

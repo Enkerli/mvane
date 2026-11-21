@@ -23,14 +23,23 @@ typedef struct {
     uint32_t head;   /* words ever written (the next one goes at head & mask) */
     uint32_t last_ms;
     uint32_t sleep_ms; /* pauses longer than this are kept this long (0: as they were): the history sleeps */
-    uint8_t started;
+    uint32_t lock;   /* with locked: the oldest word a capture still reads, never written over */
+    uint8_t started, locked, full;   /* full: the history reached a locked capture; events since are lost */
 } rec_ring;
 
+/* A take is never copied: its prefix (what sounded at its start: notes held, the latest controller values, at time 0)
+ * and then either a run of the history it was captured from (ring: locked there until rec_unlock) or words read
+ * in place (flat: a saved take in the flash, any array of words) */
+#define REC_PRE (2u * REC_MAX_HELD)
 typedef struct {
-    uint32_t *words;
-    uint32_t count, cap;
-    uint32_t duration_ms;
+    uint32_t pre[REC_PRE], npre;
+    const rec_ring *ring;
+    uint32_t start, nring;           /* the ring's words [start, start + nring), absolute */
+    const uint32_t *flat;            /* without a ring */
+    uint32_t count, duration_ms;     /* count: all the words, the prefix's too */
 } rec_take;
+
+uint32_t rec_word(const rec_take *take, uint32_t i);   /* word i of the take */
 
 typedef void (*rec_emit_fn)(void *ctx, uint8_t status, uint8_t d1, uint8_t d2);
 
@@ -48,12 +57,15 @@ uint32_t rec_count(const rec_ring *r);            /* words held */
 uint32_t rec_span_ms(const rec_ring *r, uint32_t now_ms);   /* how far back the history reaches, in playing time */
 int rec_sleeping(const rec_ring *r, uint32_t now_ms);       /* 1: idle past sleep_ms (nothing new since) */
 
-/* Copy history into take. gap_ms 0 = everything held; otherwise only what follows the most recent silence of at
- * least gap_ms (the last phrase). Notes still sounding and the latest controller values at the capture's start
- * are written first, at time 0, from the history before it. Returns the words captured (0: nothing). */
-uint32_t rec_capture(const rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take);
+/* A take from the history: gap_ms 0 = everything held; otherwise only what follows the most recent silence of at
+ * least gap_ms (the last phrase). Notes still sounding and the latest controller values at the capture's start come
+ * first, at time 0, from the history before it. The ring is locked from the take's start (the history goes on until
+ * it would write over it: full). Returns the words captured (0: nothing). */
+uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take);
+void rec_unlock(rec_ring *r);            /* the capture is saved, or let go: the history may write over it again */
 
-/* take <-> file bytes (little-endian words, REC_HEAD_WORDS of header). rec_load returns 0 on a good file */
+/* take <-> file bytes (little-endian words, REC_HEAD_WORDS of header). rec_load returns 0 on a good file and reads
+ * its words in place (bytes 4-aligned, the machine little-endian: the FM-1 and every desktop) */
 uint32_t rec_file_size(const rec_take *take);
 void rec_file_head(const rec_take *take, uint32_t head[REC_HEAD_WORDS]);
 int rec_load(rec_take *take, const uint8_t *bytes, uint32_t n);
