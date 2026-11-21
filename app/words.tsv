@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# mvane's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# url: https://enkerli.github.io/mvane/words/
+MVANE	m vane
+NOTES	notes
+CHORDS	chords
+TONE	tone
+REL	release
+GLIDE	glide
+HISTORY	history
+TAKE	take
+CAPTURED	captured
+PHRASE	phrase
+ALL	all
+EMPTY	empty
+PLAYING	playing
+STOPPED	stopped
+MAJ	major
+MIN	minor

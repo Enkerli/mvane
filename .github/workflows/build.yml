@@ -1,0 +1,57 @@
+# The FM-1 package and the checks, on every push: the JieLi toolchain only runs on Linux x86-64, so the .fwsc is
+# built here (or on a Linux PC, or in a container on the Mac) and downloaded from the run's artifacts.
+# fm1-base's pinned toolchain and SDK files (base/tools/toolchain.lock), each checked by hash.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1 (fm1-base's pin)
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6.1.0 (fm1-base's pin)
+        with:
+          path: base/.toolchain/downloads
+          key: tools-${{ runner.os }}-${{ hashFiles('base/tools/toolchain.lock') }}
+
+      - name: Toolchain, SDK files and Python (pinned, hash-checked)
+        run: |
+          sudo apt-get install -y -qq libfribidi0
+          base/tools/setup_toolchain.sh --only uv,python,jieli,ac79-sdk
+
+      - name: Core checks (desktop)
+        run: make check
+
+      - name: Host simulator checks
+        run: |
+          ./build.sh --host
+          app/build/host/mvane_host app/tests/basic.txt app/build/host | tee host.log
+          ! grep -q '^FAIL' host.log
+
+      - name: The FM-1 package
+        run: ./build.sh
+
+      - uses: actions/upload-artifact@v4   # (to pin by commit, as fm1-base does)
+        with:
+          name: mvane-fwsc
+          path: |
+            app/build/*.fwsc
+            app/build/firmware.json
+            app/build/host/*.png
+          if-no-files-found: error

@@ -1,0 +1,26 @@
+# a short listening demo: I vi ii V I in C with glide, then a captured phrase replayed
+wait 600
+turn K3 10
+wav demo.wav
+key 0 down 90
+wait 900
+key 9 down 90
+key 0 up
+wait 900
+key 2 down 80
+key 9 up
+wait 900
+key 8 down 100
+key 2 up
+wait 900
+key 0 down 90
+key 8 up
+wait 1400
+key 0 up
+wait 1500
+tap REC
+press PLAY
+wait 30
+release PLAY
+wait 6500
+wavstop

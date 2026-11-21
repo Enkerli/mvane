@@ -1,0 +1,18 @@
+# mvane: custom FM-1 firmware (tools: base/tools/build.py app)
+name = "MVANE"
+id_prefix = "FM-1_17"          # package identity: dev FM-1_1700, releases FM-1_17XXYYZZ (unclaimed as far as known)
+usb_manufacturer = "mvane"
+usb_product = "MVANE FM-1"
+usb_serial = true
+include = ["../core"]          # the portable core (harmony, recorder), included by app.c
+words = "words.tsv"
+font_full = ["L", "M"]         # lower case in the big fonts: chord names (Dm9)
+ble = false                    # no radio: keeps the build free of JieLi's closed Bluetooth libraries (GPL app)
+companion = true               # settings and the take as files over USB (base/web/companion, tools/fm1_companion.py)
+tagline = "chords, MPE and a recorder that never stops"
+repo = ""
+licence = "GPL-3.0-only"
+credits = "Built on fm1-base (MPL-2.0) and felucca-bsp."
+author = "Alexandre Enkerli"
+description = "A performance firmware for the M-VAVE FM-1: notes or diatonic chords with smooth voice leading, MPE out over USB, and an always-on history you capture after the fact and replay."
+tags = ["synth", "chords", "sequencer", "midi"]
