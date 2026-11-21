@@ -76,6 +76,28 @@ static uint32_t rng(void)
     s ^= s << 5;
     return s;
 }
+#ifndef PLAT_HOST
+/* the compiler's 64-bit unsigned divide, which the FM-1's toolchain does not link here: PHYS (phys_dsp.c) divides
+ * once a note and block, never a sample. Shift and subtract */
+uint64_t __udivdi3(uint64_t n, uint64_t d);
+uint64_t __udivdi3(uint64_t n, uint64_t d)
+{
+    uint64_t q = 0, r = 0;
+    int i;
+    if (!d)
+        return ~(uint64_t)0;
+    if (!(n >> 32) && !(d >> 32))
+        return (uint32_t)n / (uint32_t)d;
+    for (i = 63; i >= 0; i--) {
+        r = r << 1 | (n >> i & 1u);
+        if (r >= d) {
+            r -= d;
+            q |= (uint64_t)1 << i;
+        }
+    }
+    return q;
+}
+#endif
 static void fm1_irq_on(void) {}
 static void fm1_irq_off(void) {}
 
