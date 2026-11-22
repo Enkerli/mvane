@@ -295,6 +295,12 @@ an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (W
   out then carries the JI offsets as per-note bend), and a filter per voice whose cutoff and resonance follow a
   chord-wide morph curve.
 
+## Optimization
+
+A source-level audit of 0.9-beta, its candidates ranked and checked: [OPTIMIZATION.md](OPTIMIZATION.md). Next
+session (after Alex's usage resets): a baseline on the device, then the event queue, the saw's coefficient tables,
+the effect buffers' memory map.
+
 ## Panel conventions
 
 The 0.x panel is improvised (FX for voicing, LFO for voice count, EDIT for bass, GLO for USB level, SELECT for the

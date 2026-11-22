@@ -1,7 +1,9 @@
 # mvane yard
 
 A custom firmware for the M-VAVE FM-1, on [fm1-base](https://github.com/charlesvestal/fm1-base). See
-[docs/MANUAL.md](docs/MANUAL.md) for how to play it and [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going.
+[docs/MANUAL.md](docs/MANUAL.md) for how to play it, [docs/ROADMAP.md](docs/ROADMAP.md) for where it is going,
+[docs/CONTEXT.md](docs/CONTEXT.md) for how it fits with Alex's Music Suite (music-suite, Vane, ProgGenie), and
+[CREDITS.md](CREDITS.md) for whose work it builds on: Coral Flower's chord mode, Clipper's synth, fm1-base.
 
 **0.4:** a 12-voice synth (band-limited saw, key-tracked lowpass from dark to bright) that plays MPE, notes or
 chords from any of eight pitch-class sets with a separate bass and smooth voice leading, MPE out over USB, duplex USB
@@ -69,5 +71,6 @@ build's provenance (which the FM-1 Firmware Hub checks) and publishes the releas
 
 ## Licence
 
-GPL-3.0-only (see `LICENSE`), so code from Clipper and Coral Flower (both GPL-3.0) can come in. fm1-base and
+GPL-3.0-only (see `LICENSE`), compatible with Clipper's and Coral Flower's (both GPL-3.0); credits in
+[CREDITS.md](CREDITS.md). fm1-base and
 felucca-bsp stay MPL-2.0. The firmware builds without Bluetooth, so none of JieLi's closed libraries are linked.
