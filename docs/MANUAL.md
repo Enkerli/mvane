@@ -1,4 +1,4 @@
-# mvane yard manual (0.7)
+# mvane yard manual (0.9)
 
 mvane yard is a performance firmware for the M-VAVE FM-1: play notes or chords, through mvane yard's own synth or
 Clipper's 379 factory sounds, with MPE and breath, while a recorder keeps everything you play. Keep what you liked
@@ -23,7 +23,7 @@ start from their defaults after an update that changes their layout (0.6 and 0.7
 | Knob row | K1 to K4: tone, release, glide, attack |
 | HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a take not yet saved |
 | TAKE n/8 | The take in the current slot, its length, PLAYING or NOT SAVED |
-| Bottom | CPU load and XRUNS (missed audio deadlines: should stay 0), the play mode, the USB audio level |
+| Bottom | CPU load and XR (missed audio deadlines: should stay 0), the sound's cost (LIGHT, MID, HEAVY), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
 
 ## Controls
 
@@ -80,7 +80,7 @@ pressure apart).
   - Scale bank (ENV): **STACK** (thirds of the scale: 7th, 9th, then 13th and 11th), **7**, **TRIAD**, **ADD9**,
     **SUS**, **6/9**, **QUARTAL**, **11** (no third), **FIFTHS**, **V/** (the dominant of the degree).
 - **F#5**, the last black key, is **HOLD**: a chord keeps sounding after you let its key go; the next white key changes
-  it; HOLD again stops it.
+  it; HOLD again stops it. A held chord follows a change of sound (it sounds again on the new one).
 - Every chord has a separate bass (EDIT turns it off) and 3 to 6 upper voices (LFO).
 - Voice leading: each chord is voiced from the one before, so the voices move as little as they can; notes the two
   chords share are held, and the moving voices glide (K3 sets how long).
@@ -114,11 +114,22 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 ### Sounds
 
 PRESETS steps through mvane yard's saw (a band-limited saw through a key-tracked lowpass, dark to bright), then
-Clipper's factory sounds, engines in an order for chords: HYBRID, JUNO, STRINGS, ANALOG, FM6, FMX, DIGITAL, WHEEL,
+Clipper's factory sounds (337), engines in an order for chords: HYBRID, JUNO, STRINGS, ANALOG, FM6, FMX, DIGITAL, WHEEL,
 PHASE, VOICE, MACRO, PHYS, TRIO, VPS, TERRAIN, WSEQ, VECTOR, GRAIN, SAMPLE. WAVE is left out for now (RAM); ACID,
 NOISE and LOFI are out of the list. Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
 aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (71 resonance, 72 release, 73 attack,
 74 cutoff, 75 decay, 5 glide, 16 to 19 the macros).
+
+**Mono sounds** (89 of them, as Clipper's presets say) show MONO when you pick them, and MONO SOUND on the bottom line
+while POLY is set: they play one note of a chord.
+
+**Cost.** Each sound is tagged LIGHT, MID or HEAVY (shown when you pick it, and on the bottom line), from its render
+time measured on a computer (`make clp-cost`, `tools/clp_cost.c`); the FM-1 is much slower, the ranking holds.
+Engines, lightest first, by their sounds' mean: SAMPLE, PHASE, DIGITAL, WHEEL, WSEQ, TRIO, ANALOG, VOICE, GRAIN, VPS,
+TERRAIN, VECTOR, FM6, FMX, HYBRID, PHYS, JUNO, MACRO, STRINGS; the heaviest sounds are some HYBRID and FMX ones.
+About half of a typical sound's cost is Clipper's chain with nothing playing (its chorus, delay and reverb buses,
+master stage and limiter). Its effect buses stop once every send has been silent for 20 s: turning the CHORUS send
+to 0 (FX, K2) on a sound that has one saves a good share of the CPU.
 
 ## The recorder
 

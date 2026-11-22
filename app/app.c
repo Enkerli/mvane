@@ -141,6 +141,8 @@ static void sound_apply(void)            /* the sound setting to the engines (ma
         clp_select(set.sound - 1u);
     eng_want = set.sound != 0;
 }
+static int sound_mono(void) { return set.sound && clp_sound_mono(set.sound - 1u); }
+static void sound_change_hold(void);     /* (below: what sounds lets go, a held chord comes back on the new sound) */
 
 /* --------------------------------------------------------------------- bus --- */
 #define TO_SYNTH 1u
@@ -380,6 +382,7 @@ static struct {
     uint32_t hist_ms, hist_at;
     uint32_t slot_warn;                  /* when a slot change last warned of an unsaved take */
     int8_t held, latched;                /* the layer button held, the layer a tap left open (-1: none) */
+    uint32_t resound_at;                 /* a held chord sounds again on the new sound then (0: none) */
     uint8_t held_used;                   /* a knob turned while it was held: no tap */
     uint32_t knob_at[NE];                /* when each encoder last turned (its label lit) */
     uint8_t redraw;
@@ -569,6 +572,35 @@ static void capture(uint32_t gap)
 }
 
 static const char *sound_name(void) { return set.sound ? clp_sound_name(set.sound - 1u) : "SAW"; }
+
+static const char *sound_label(void)    /* the sound's name, then MONO for a mono sound and HEAVY for a costly one */
+{
+    static char t[32];
+    t[0] = 0;
+    text_cat(t, sound_name());
+    if (sound_mono())
+        text_cat(t, " MONO");
+    if (set.sound && clp_sound_cost(set.sound - 1u) == 2u)
+        text_cat(t, " HEAVY");
+    return t;
+}
+
+/* a new sound: what sounds lets go first (the engine fades it out and the notes would be lost to it); a chord kept
+ * by HOLD, or held under a finger, sounds again on the new sound once its switch is done (Clipper fades for 6 ms, and
+ * only four notes wait meanwhile) */
+static void sound_change_hold(void)
+{
+    int keep = set.mode && ui.chord_n && ui.chord_key >= 0 && (ui.hold || (ui.keys >> ui.chord_key & 1u));
+    int32_t ck = ui.chord_key;
+    all_off();
+    sound_apply();
+    if (keep) {
+        ui.chord_key = ck;
+        ui.resound_at = plat_ms() + 40u;
+        if (!ui.resound_at)
+            ui.resound_at = 1;
+    }
+}
 
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
 {
@@ -794,8 +826,8 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         }
         set.sound = (uint16_t)k;
         set_dirty = 1;
-        sound_apply();
-        app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_name());
+        sound_change_hold();
+        app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_label());
     }
 }
 
@@ -947,13 +979,18 @@ static void input(void)
             int32_t d = e > 0 ? (e > 4 ? 8 : 1) : (e < -4 ? -8 : -1);   /* a fast turn: eight at a time */
             set.sound = (uint16_t)(((int32_t)set.sound + d + 8 * (int32_t)ns) % (int32_t)ns);
             set_dirty = 1;
-            sound_apply();
-            app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_name());
+            sound_change_hold();
+            app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_label());
         } else if (k == EN_SELECT)
             select_turn(e);
         else
             knob_turn(k - EN_K1, e);
         ui.redraw = 1;
+    }
+    if (ui.resound_at && (int32_t)(now - ui.resound_at) >= 0) {   /* the held chord, on the new sound */
+        ui.resound_at = 0;
+        if (ui.chord_key >= 0 && !ui.chord_n)
+            chord_sound();
     }
     if (player.playing && !rec_play_poll(&player, now, play_emit, 0))
         ui.redraw = 1;
@@ -1093,19 +1130,25 @@ static void draw(void)
     t[0] = 0;                            /* the render's load and its missed deadlines */
     text_cat(t, "CPU ");
     int_text((int32_t)plat_cpu_pct(), t + 4);
-    text_cat(t, "%  XRUNS ");
+    text_cat(t, "%  XR ");
     {
         char x[12];
         int_text((int32_t)plat_xruns(), x);
         text_cat(t, x);
     }
     cv_text(10, 82, &FONT_XS, t, plat_xruns() ? C_HI : C_DIM);
+    if (set.sound) {                     /* the sound's measured cost (tools/clp_cost.c) */
+        static const char *const COST_N[3] = {"LIGHT", "MID", "HEAVY"};
+        uint32_t c = clp_sound_cost(set.sound - 1u);
+        cv_text(104, 82, &FONT_XS, COST_N[c], c == 2u ? C_HI : C_DIM);
+    }
     {
         static const char *const PLAY_S[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
-        cv_text(132, 82, &FONT_XS, PLAY_S[set.play], set.play ? C_HI : C_DIM);
+        const char *ps = sound_mono() && !(set.play & 1u) ? "MONO SOUND" : PLAY_S[set.play];
+        cv_text(230 - text_w(&FONT_XS, ps), 82, &FONT_XS, ps, set.play || sound_mono() ? C_HI : C_DIM);
     }
-    cv_text(188, 82, &FONT_XS, plat_usb_host_state() == USBH_CONNECTED ? "USB HOST" : plat_usb_host_state() ? "USB ..."
-                                : set.usb_full ? "USB FULL" : "USB MAS", plat_usb_host_state() ? C_HI : C_DIM);
+    if (plat_usb_host_state())
+        cv_text(150, 82, &FONT_XS, plat_usb_host_state() == USBH_CONNECTED ? "HOST" : "HOST..", C_HI);
     cv_blit(0, 140);
 }
 
@@ -1252,6 +1295,8 @@ int app_expect(const char *what, int *got)
         *got = set.slot;
     else if (!strcmp(what, "note_last"))   /* the last key's note (NOTES) */
         *got = ui.key_note[1];
+    else if (!strcmp(what, "chord_key"))
+        *got = ui.chord_key;
     else if (!strcmp(what, "layer"))
         *got = layer_now();
     else if (!strcmp(what, "page"))
@@ -1274,8 +1319,8 @@ int app_expect(const char *what, int *got)
         *got = ui.hold;
     else if (!strcmp(what, "chord_n"))
         *got = ui.chord_n;
-    else if (!strcmp(what, "voices"))
-        *got = (int)synth_voices();
+    else if (!strcmp(what, "voices"))   /* the engine's that plays */
+        *got = (int)(eng_now ? clp_voices() : synth_voices());
     else if (!strcmp(what, "hist"))
         *got = (int)rec_count(&hist);
     else if (!strcmp(what, "hist_ms"))

@@ -110,7 +110,11 @@ core.h global: renamed in 0.8, clp.o now exports clp_* only). Coral Flower's QUA
 3rd and 7th in the left hand, root and 5th in the right, two pairs of fifths (0.8: PAIRS). Hubs: Alex's USB-C hubs
 may not pass host to device apart from a computer; further investigation.
 **0.8** also runs Clipper on both cores (fm1-base's second core, as Clipper's own split of the voices).
-Open: the sounds that wait for a top-row key do not do it in the simulator (every sound plays from a bottom-row key
+Found by Alex: it was HOLD. A chord kept by HOLD across a change of sound (worst from a poly sound to a mono one)
+was faded out by Clipper while mvane yard went on thinking it sounded, so the next chord only sent the notes that
+differed. **0.9:** a change of sound releases what sounds first and plays a held chord again on the new sound; mono
+sounds are flagged; each sound's cost is measured and tagged; Clipper's effect buses skip once long silent.
+Earlier note: the sounds that wait for a top-row key do not do it in the simulator (every sound plays from a bottom-row key
 at velocity 60 straight after a change): to find on the FM-1 (which sounds, NOTES or CHORDS, how soft the press).
 
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up

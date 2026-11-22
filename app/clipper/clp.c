@@ -19,6 +19,24 @@ int memcmp(const void *a, const void *b, unsigned n);
 #define CLP_WAVE 0                              /* WAVE: off, for RAM (src/eng_wave_off.c) */
 #endif
 #define CLP_DLY_LEN 16384u                      /* the delay line: 0.74 s at its half rate (Clipper: 1.49 s) */
+#define CLP_FX_GATE 1                           /* the effect buses skipped once their sends are long silent (fx.c) */
+#include <stdint.h>
+#define CLP_FX_QUIET_BLOCKS (20u * 44100u / 32u)   /* 20 s of 32-sample blocks: past any reverb or delay tail */
+static uint32_t clp_fx_quiet;
+static int clp_fx_gate(const int32_t *c, const int32_t *d, const int32_t *r, uint32_t n)   /* 1: skip the buses */
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        if (c[i] | d[i] | r[i]) {
+            clp_fx_quiet = 0;
+            return 0;
+        }
+    if (clp_fx_quiet < CLP_FX_QUIET_BLOCKS) {
+        clp_fx_quiet++;
+        return 0;
+    }
+    return 1;
+}
 #ifdef PLAT_HOST
 #define CLP_POOL
 #define CLP_LOWRAM
@@ -245,16 +263,44 @@ const char *clp_sound_name(uint32_t i)
 }
 const char *clp_sound_engine(uint32_t i) { return i < clp_n ? ENGINES[clp_list[i] >> 8]->name : 0; }
 const char *clp_sound_kind(uint32_t i) { (void)i; return ""; }
+uint32_t clp_sound_key(uint32_t i) { return i < clp_n ? clp_list[i] : 0xFFFFu; }   /* engine << 8 | preset */
+#if __has_include("clp_cost.h")
+#include "clp_cost.h"                           /* tools/clp_cost.c: each sound's measured cost, 0 light .. 2 heavy */
+#else
+static const uint8_t CLP_COST[NENGINES][40];
+#endif
+uint32_t clp_sound_cost(uint32_t i)             /* 0 LIGHT, 1 MID, 2 HEAVY (measured: tools/clp_cost.c) */
+{
+    uint32_t e, p;
+    if (i >= clp_n)
+        return 0;
+    e = clp_list[i] >> 8, p = clp_list[i] & 0xFFu;
+    return e < NENGINES && p < 40u ? CLP_COST[e][p] : 0u;
+}
+int clp_sound_mono(uint32_t i)                  /* 1: a mono sound (legato), as Clipper's preset says */
+{
+    return i < clp_n && ENGINES[clp_list[i] >> 8]->presets[clp_list[i] & 0xFFu].mono;
+}
 void clp_select(uint32_t i)
 {
     if (i < clp_n)
         clp_req = (int32_t)i;
 }
 
+static void clp_pending(void)                   /* a sound asked for: loaded before what follows it */
+{
+    int32_t r = clp_req;
+    if (r >= 0) {
+        clp_req = -1;
+        clp_load(clp_list[r] >> 8, clp_list[r] & 0xFFu);
+    }
+}
+
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block: MIDI in, for part 1) */
 {
     uint32_t kind = st & 0xF0u, ch = st & 0x0Fu;
     track_t *t = &trk[0];
+    clp_pending();                               /* (the notes after a change are the new sound's) */
     d1 &= 0x7Fu, d2 &= 0x7Fu;
     if (mpe_mode && ch && (kind == 0xE0u || kind == 0xD0u || (kind == 0xB0u && d1 == 74u))) {
         if (kind == 0xE0u)                       /* an MPE member channel's own controls */
@@ -284,6 +330,13 @@ void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block
 }
 
 void clp_panic(void) { trk_all_off(&trk[0]); }
+uint32_t clp_voices(void)                       /* voices with their gate open */
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < NVOICE; i++)
+        n += trk[0].v[i].active && trk[0].v[i].gate;
+    return n;
+}
 
 /* a parameter as 0..127 over its range (as a CC sets it, seq.c midi_cc), and back */
 static uint32_t clp_q(uint32_t pi, int32_t v)
@@ -317,11 +370,7 @@ const char *clp_reverb_step(int32_t d)          /* the reverb's model (main loop
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     uint32_t b;
-    int32_t r = clp_req;
-    if (r >= 0) {                                /* a sound asked for: loaded here, between two blocks */
-        clp_req = -1;
-        clp_load(clp_list[r] >> 8, clp_list[r] & 0xFFu);
-    }
+    clp_pending();
     if (fm6_pend)                                /* (eng_fm6.c, main loop in Clipper) FM6: the new sound's patch */
         fm6_poll();
     song.master_q12 = (uint16_t)(master_q12 > 4096u ? 4096u : master_q12);

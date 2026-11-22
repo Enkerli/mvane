@@ -298,3 +298,29 @@ expect chord_n 5
 shot pairs.png
 key 0 up
 wait 50
+# a chord kept by HOLD, across a sound change from a poly sound to a mono one: it sounds again on the new sound, and
+# the next chord plays (before 0.9 it waited for HOLD to be pressed again)
+turn PRESET 1
+turn PRESET 1
+wait 200
+expect sound 2
+tapkey 25 90
+expect hold 1
+tapkey 0 90
+wait 100
+expect chord_n 5
+expect voices 5
+turn PRESET 1
+turn PRESET 1
+wait 200
+expect sound 4
+expect chord_n 5
+expect voices 1
+shot mono-sound.png
+tapkey 9 90
+wait 100
+expect chord_n 5
+expect voices 1
+tapkey 25 90
+expect hold 0
+expect chord_n 0

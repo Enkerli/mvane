@@ -1507,6 +1507,14 @@ static void mix_block(int32_t *out, uint32_t n)
     }
 #endif
     click_render(mix_l, mix_r, n);                      /* the metronome: its own voice (drums.c), any kit, any mute */
+#if CLP_FX_GATE                                          /* (mvane yard: clp.c) the buses skipped while every send has been
+                                                         * silent for longer than any tail (their cost is fixed: a third
+                                                         * of the chain's with nothing playing) */
+    if (clp_fx_gate(send_c, send_d, send_r, n)) {
+        for (i = 0; i < n; i++)
+            wet_l[i] = wet_r[i] = 0;
+    } else
+#endif
     fx_buses(send_c, send_d, send_r, wet_l, wet_r, n);
     for (i = 0; i < n; i++) {
         mix_l[i] += wet_l[i];
