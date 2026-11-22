@@ -1383,7 +1383,8 @@ static void draw(void)
             cv_text(r - w, 82, &FONT_XS, ps, set.play || sound_mono() ? C_HI : C_GRAY);
             r -= w + 8;
         }
-        if (set.sound) {                 /* the sound's measured cost (tools/clp_cost.c) */
+        {                                /* the sound's measured cost (tools/clp_cost.c); the saw: LIGHT (about 12%
+                                          * on the FM-1 with a chord, under any of Clipper's: Alex 2026-11-22) */
             w = text_w(&FONT_XS, COST_N[c]);
             if (r - w >= l) {
                 cv_text(r - w, 82, &FONT_XS, COST_N[c], c == 2u ? C_HI : C_GRAY);

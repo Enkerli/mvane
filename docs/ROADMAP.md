@@ -260,6 +260,16 @@ EDIT value keeps every voice on one core (found on the device, 2026-11-22; `make
 The amounts (half the range) are a first guess, to judge by ear; a batch edit in the web editor (M6) could set
 them per sound.
 
+### M2f: YARD, mvane yard's own synth, elaborated (Alex, 2026-11-22)
+
+The saw (`app/synth.c`: a band-limited saw, a key-tracked 18 dB lowpass at control rate, 12 voices, MPE, breath) plays
+a chord at about 12% of the FM-1, a third to a sixth of Clipper's sounds, and Alex finds it satisfying in context,
+if VA-plain on its own. Grow it while keeping it light: a second oscillator or a sub (pulse, PWM), detune, a noise
+for breath, the filter's resonance and modes, an envelope to the cutoff, expression mapped deliberately (pressure to
+level and brightness, slide to timbre), its voices on the second core (half each: about 6%), a few factory sounds
+(pads, keys, leads), and, later, the WindCore voice beside it (M8). Each addition measured (`make synth-cmp`'s
+renders, the FM-1's CPU) and heard.
+
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
   weights (`packages/proggen/src/curation.js` in music-suite). Phrases come out as chord events that

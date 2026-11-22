@@ -88,6 +88,23 @@ Alex, 2026-11-22, the baseline phrase played from a slot (build 5f48553, with th
 Q rose by 344 a run: the phrase's 600 pressure messages at one instant, less the queue's 256. Quick successions of
 notes or chords raise the load most (voices starting while others release).
 
+Alex, 2026-11-22, the same phrase on ae3d64e (the second core back for every sound that splits; SAMPLE and WHEEL
+splitting too):
+
+| Sound | CPU | Q (since power-on) |
+| --- | --- | --- |
+| HYBRID CLIPPER (init) | mostly 25%, dips to 17% | 155 |
+| HYBRID CLIP WIDE (two SUPERs) | mostly 71%, dips to 43% | 499 |
+| HYBRID DARK PAD | 50% | 587 |
+| JUNO 80S HITS | the hits 40%, 11% between, the arpeggios 25% | 707 |
+| STRINGS STR MACHINE | 47%, peaks 52% | 1051 |
+| TERRAIN (first sound, fresh start) | 41% | 344; maybe a glitch in the sound (the patch?) |
+| YARD (the saw) | 1% at rest, mostly 12%, dips to 5% | 688 |
+
+HYBRID CLIPPER went from 33% to 25%, 80S HITS from up to 54% to about 40%: the second core at work. The saw is the
+lightest sound by far (one core, no effect chain), a base to build on (roadmap). Q counts the phrase's 600 messages at
+one instant less what the render drained meanwhile (88 to 344 a run).
+
 **The regression, found and fixed.** Clipper splits a sound's voices between the cores only for voices whose EDIT
 values the matrix leaves alone (voice.c: such a voice writes the part's values for its call, so it renders on this
 core after the other's). The expression slots of 5f48553 pointed HYBRID's pressure at its CUT (E1) and JUNO's slide
