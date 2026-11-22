@@ -1,0 +1,74 @@
+# The scale as a pitch-class set's number (0.12): SEL's SCALE layer, K1..K4 its digits (thousands .. units), SELECT
+# the named scales; MIDI in snapped to the scale on QUANT FULL, its offs following its ons.
+# app/build/host/mvane-yard_host app/tests/scale.txt app/build/host
+wait 600
+expect pcs 2741
+expect quant 1
+# SEL held: the units down, then the thousands up past 4: at most 4095
+press SEL
+spin K4 -1
+expect pcs 2740
+spin K1 1
+expect pcs 3740
+spin K1 1
+expect pcs 4095
+spin K1 5
+expect pcs 4095
+wait 50
+shot scale.png
+release SEL
+wait 50
+expect layer -1
+# SEL tapped: the layer stays; SELECT, the next named scale (MINOR, 1453); again: DORIAN; back: MINOR
+tap SEL
+wait 50
+expect layer 1
+spin SELECT 1
+expect pcs 1453
+spin SELECT 1
+expect pcs 1709
+spin SELECT -1
+expect pcs 1453
+spin K2 -4
+expect pcs 1053
+spin K2 4
+expect pcs 1453
+tap SEL
+wait 50
+expect layer -1
+# the PLAY page's SCALE: from MINOR to DORIAN
+spin K3 1
+expect pcs 1709
+spin K3 -1
+expect pcs 1453
+# MIDI in, QUANT BASIC: as played
+midi 90 3D 64
+wait 20
+expect in_last 61
+midi 80 3D 00
+wait 20
+expect in_held 0
+# QUANT FULL: C# to C (C minor, down on a tie), E to Eb... (E: Eb and F both a semitone: down), B to Bb
+spin K1 1
+expect quant 2
+midi 91 3D 64
+wait 20
+expect in_last 60
+midi 92 40 64
+wait 20
+expect in_last 63
+midi 93 47 64
+wait 20
+expect in_last 70
+expect in_held 3
+# QUANT back to BASIC while they sound: their offs still find them (a note on with velocity 0 too)
+spin K1 -1
+midi 81 3D 00
+midi 92 40 00
+midi 83 47 00
+wait 20
+expect in_held 0
+midi 90 47 64
+wait 20
+expect in_last 71
+midi 80 47 00

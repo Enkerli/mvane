@@ -34,7 +34,7 @@ The four knobs' names are on the screen above them, and the one you turn lights 
 
 | Page | K1 | K2 | K3 | K4 |
 | --- | --- | --- | --- | --- |
-| **PLAY** (as Coral Flower's) | QUANT (off, basic, full) | KEY | SCALE | GLIDE |
+| **PLAY** (as Coral Flower's) | QUANT (off, basic, full: MIDI in snapped to the scale too) | KEY | SCALE (the named scales; SEL: any) | GLIDE |
 | **SOUND**, Clipper's sounds | BRITE | TIMBR | MOTN | SPACE (Clipper's four macros) |
 | **SOUND**, YARD's sounds | TONE | ATTACK | DECAY (PLUCK's fall) | RELEASE |
 
@@ -51,6 +51,14 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
 | **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
+| **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the named scales (MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC) |
+
+**The scale is a pitch-class set's number**, 0 to 4095, as in the Music Suite: each of the twelve semitones above
+the key is a bit (the key 1, a semitone up 2, a whole tone up 4 ... the major seventh 2048), and the scale is their
+sum. C major is 2741 (1 + 4 + 16 + 32 + 128 + 512 + 2048), the minor 1453, the whole-tone scale 1365, the chromatic
+4095. The key is always in: an even number plays as the next odd one. The SCALE layer shows the number, its name when
+it has one, and the twelve semitones from the key (the key lit). The PLAY page's SCALE steps through the named
+scales; a number of your own shows as PCS and its number. It is saved with the settings.
 
 ### Encoders and buttons
 
@@ -64,6 +72,8 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history |
 | **PLAY** | Play / stop the take |
 | **SAVE** | Save the settings, and the take into its slot |
+
+**QUANT** as Coral Flower's: OFF, the chords' roots a semitone a white key; BASIC, the roots the scale's degrees; FULL, the chords' tones too, and the notes coming in over MIDI (USB, TRS, a hosted device), each to the nearest tone of the scale (down on a tie: C# to C in C major). A note's release finds the note it became, even after the scale or QUANT has changed.
 
 Moving to another slot with a take not saved: the first turn warns, a second within 3 s moves on and drops it.
 

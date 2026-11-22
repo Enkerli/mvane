@@ -31,11 +31,12 @@ tools (https://enkerli.github.io/mvane-yard/).
 | Both flash chips (`0x856014`, the newer `0xB36014`) | fm1-base's `fm1_flash_ok.h` (Alex's unit is a newer one) |
 | `fmhub.json` in the root (what, kinds, image, sounds ...) | written: `chords`, `docs/media/card.png` (240 x 240), the page as its editor, the manual as its cheat sheet |
 | Sounds: what ships | `none – all synthesised`: Clipper's synthesized sets only; Felucca's recorded sets (never compiled here) taken out of the vendored copy |
-| Tested on a real FM-1: installed from V15 and from another firmware, and left again | Alex, 0.11-beta and 0.11.1 with M-Flasher 0.10.0: to and from M-VAVE's stock FM-1 016, the official V15 and Coral Flower 0.7.1, saving checked at every step; the release with the new identity: to check before the form |
+| Tested on a real FM-1: installed from V15 and from another firmware, and left again | Alex, 0.11-beta and 0.11.1 with M-Flasher 0.10.0: to and from M-VAVE's stock FM-1 016, the official V15 and Coral Flower 0.7.1, saving checked at every step; 0.12-beta (`FM-1_53001200`), 2026-11-22: V15 to it and back twice, then to Coral Flower, all clean |
 | The form: name, your name, an address (never shown), one line, how it was tested | **Alex** |
 
-To do: a release with `fmhub.json` in it (0.11), Alex's test of it (from V15, from another firmware, and back), then
-the form. VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
+**Submitted 2026-11-22** with v0.12-beta. The hub's check passed everything (source, licence, `fmhub.json`, sounds,
+the release and its `.fwsc`, identity `FM-1_53001200`): "waiting for Sven", who reviews every firmware himself.
+VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
 
 ## After the submission (proposed, 2026-11-22)
 

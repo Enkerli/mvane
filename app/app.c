@@ -9,7 +9,8 @@
  *              chord type and stay latched (9, 7, TRIAD, ADD9, SUS, 6/9, QUARTAL, 11, FIFTHS, V/); the last black
  *              key (F#5) is HOLD. A separate bass, smooth voice leading, common tones held, moving voices glide
  *   ALGO       NOTES / CHORDS    PRESETS the sound (mvane yard's saw, then Clipper's 407)
- *   SELECT     the key (C .. B); SEL held + SELECT: the scale (pitch-class set); SEL tapped: POLY / MONO / +BREATH
+ *   SELECT     the next family's sound      SEL  SCALE: K1..K4 the pitch-class set's number's digits, SELECT the named
+ *              scales (PLAY page: QUANT KEY SCALE GLIDE). QUANT FULL: MIDI in's notes snapped to the scale too
  *   FX         voicing: CLOSE / OPEN / WIDE        LFO   upper voices: 3 .. 6      EDIT  bass on / off
  *   ENV        black keys: types from the scale (STACK 7 TRIAD ADD9 SUS 6/9 QUARTAL 11 FIFTHS V/) or fixed
  *              qualities, as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m)
@@ -64,8 +65,12 @@ typedef struct {
     uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
     uint8_t phones;                      /* PHONES MAX: MASTER's top, 2..20 in 5% (20: 100%, as MASTER was) */
     uint8_t spread;                      /* MPE glide's SPREAD, 0..127 (0: the engines' own glide, as before) */
-    uint8_t room[14];                    /* (for settings to come: 0 their default, so no new record is needed) */
+    uint16_t pcs;                        /* the scale: 0x8000 | its pitch-class set's number (0..4095, bit 0 the tonic,
+                                          * always counted in: C major 2741); 0, a record from before 0.12: the named
+                                          * scale's (set.scale) */
+    uint8_t room[12];                    /* (for settings to come: 0 their default, so no new record is needed) */
 } settings_t;
+typedef char settings_same_size[sizeof(settings_t) == 52u ? 1 : -1];   /* (MVA: as 0.11 wrote it: pcs took room) */
 typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX) */
     uint32_t magic;
     uint8_t mode, tonic, scale;
@@ -130,6 +135,7 @@ static void settings_defaults(void)
     set.page = 0;
     set.phones = 20;
     set.spread = 0;
+    set.pcs = 0;
     mvane_zero(set.room, sizeof set.room);
 }
 
@@ -149,7 +155,7 @@ static void settings_load(void)
     else if (n == (int)sizeof r.v11b && r.v11b.magic == SET_MAGIC_11B) {   /* 0.11-beta's: SPREAD 0 */
         settings_defaults();
         mvane_copy(&set, &r.v11b, sizeof r.v11b);
-        set.magic = SET_MAGIC, set.spread = 0;
+        set.magic = SET_MAGIC, set.spread = 0, set.pcs = 0;
         mvane_zero(set.room, sizeof set.room);
     } else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
         settings_defaults();
@@ -182,8 +188,46 @@ static void settings_load(void)
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
-        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u)
+        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u
+        || (set.pcs && (set.pcs & 0x7000u) != 0u))
         settings_defaults();
+    if (!(set.pcs & 0x8000u))            /* (before 0.12: the named scale's set) */
+        set.pcs = (uint16_t)(0x8000u | CHORD_SCALES[set.scale].mask);
+}
+
+static void text_cat(char *d, const char *s);
+static void int_text(int32_t v, char *b);
+/* the scale: its pitch-class set, the tonic always in; its number as set (an even one: the tonic added) */
+static uint16_t scale_mask(void) { return (uint16_t)((set.pcs & 0xFFFu) | 1u); }
+static uint32_t scale_num(void) { return set.pcs & 0xFFFu; }
+/* the named scale with this set, or -1 */
+static int32_t scale_named(void)
+{
+    uint32_t i;
+    for (i = 0; i < CHORD_NSCALES; i++)
+        if ((CHORD_SCALES[i].mask | 1u) == scale_mask())
+            return (int32_t)i;
+    return -1;
+}
+/* its name, or its number: "MAJOR", "PCS 1365" */
+static void scale_text(char *out)
+{
+    int32_t n = scale_named();
+    out[0] = 0;
+    if (n >= 0)
+        text_cat(out, CHORD_SCALES[n].name);
+    else {
+        text_cat(out, "PCS ");
+        int_text((int32_t)scale_num(), out + 4);
+    }
+}
+static void scale_set(uint32_t num)      /* a new number: the named one it is, if any, for SCALE's steps */
+{
+    int32_t n;
+    set.pcs = (uint16_t)(0x8000u | (num > 4095u ? 4095u : num));
+    n = scale_named();
+    if (n >= 0)
+        set.scale = (uint8_t)n;
 }
 
 /* YARD's sounds on PRESETS: its nine (synth.c SYNTH_SOUNDS), then the user's (0.10): a bank of YB_N in the store
@@ -950,7 +994,7 @@ static void chord_release(void)
 /* a pitch class (or a note) to the nearest tone of the scale, down on a tie (Coral Flower's: C# to C in C major) */
 static uint32_t scale_snap(uint32_t note)
 {
-    uint16_t mask = CHORD_SCALES[set.scale].mask | 1u;
+    uint16_t mask = scale_mask();
     uint32_t d;
     for (d = 0; d < 12u; d++) {
         if (note >= d && mask >> ((note - d + 12u - set.tonic) % 12u) & 1u)
@@ -1041,7 +1085,7 @@ static void chord_sound(void)
     uint8_t notes[CHORD_MAX + 1u], chs[CHORD_MAX + 1u];
     /* QUANT (as Coral Flower's): OFF, the roots chromatic from the tonic (a semitone a key); BASIC, the roots the
      * scale's degrees; FULL, the chord's tones too, each to the nearest tone of the scale (the qualities diatonic) */
-    uint16_t mask = CHORD_SCALES[set.scale].mask, eff = qual_eff();
+    uint16_t mask = scale_mask(), eff = qual_eff();
     uint8_t q[CHORD_BANK];
     uint32_t nq = qual_order(eff, q);
     chord_pcs c = set.bank && nq ? chord_build_qualities(set.quant ? mask : 0xFFFu, set.tonic, ui.chord_degree, q, nq,
@@ -1167,7 +1211,7 @@ static void chord_sound(void)
 static void chord_key_down(uint32_t k, uint32_t vel)
 {
     static const uint8_t WK[16] = PLAT_WHITE_KEYS, BK[11] = PLAT_BLACK_KEYS;
-    uint32_t i, n = chord_scale_size(CHORD_SCALES[set.scale].mask);
+    uint32_t i, n = chord_scale_size(scale_mask());
     if (k == HOLD_KEY) {                 /* HOLD: chords keep sounding after their key; again, they stop */
         ui.hold ^= 1u;
         if (!ui.hold && ui.chord_key >= 0 && !(ui.keys >> ui.chord_key & 1u))
@@ -1457,7 +1501,7 @@ static const char *layer_name(int32_t l)
 {
     return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX"
            : l == B_GLO ? (set.page ? "MORE" : "SETTINGS")
-           : l == B_SEQ ? "TAKES" : 0;
+           : l == B_SEQ ? "TAKES" : l == B_SEL ? "SCALE" : 0;
 }
 
 static void knob_info(uint32_t i, const char **label, char *val)
@@ -1529,6 +1573,11 @@ static void knob_info(uint32_t i, const char **label, char *val)
             text_cat(val, set.mpe_out ? "ON" : "OFF");
         else
             int_text(BEND_RANGES[set.bend & 3u], val);
+    } else if (l == B_SEL) {             /* SCALE: the set's number, a digit a knob (K1 thousands .. K4 units) */
+        static const char *const N[4] = {"x1000", "x100", "x10", "x1"};
+        static const uint16_t P[4] = {1000, 100, 10, 1};
+        *label = N[i];
+        int_text((int32_t)(scale_num() / P[i] % 10u), val);
     } else if (l == B_SEQ) {
         if (i == 0) {
             *label = "SLOT";
@@ -1542,7 +1591,7 @@ static void knob_info(uint32_t i, const char **label, char *val)
         else if (i == 1)
             text_cat(val, NOTE_N[set.tonic]);
         else if (i == 2)
-            text_cat(val, CHORD_SCALES[set.scale].name);
+            scale_text(val);
         else
             int_text(knob[SP_GLIDE], val);
     } else if (clp_on()) {               /* SOUND: Clipper's four macros */
@@ -1649,6 +1698,21 @@ static void knob_turn(uint32_t i, int32_t e)
             mpe_config();
         }
         set_dirty = 1;
+    } else if (l == B_SEL) {             /* SCALE: a digit up or down (K1: 0 .. 4), the number at most 4095 */
+        static const uint16_t P[4] = {1000, 100, 10, 1};
+        uint32_t num = scale_num(), dg = num / P[i] % 10u;
+        int32_t nd = clamp((int32_t)dg + e, 0, i == 0 ? 4 : 9);
+        char t[20];
+        scale_set(num - dg * P[i] + (uint32_t)nd * P[i]);
+        set_dirty = 1;
+        harmony_changed();
+        int_text((int32_t)scale_num(), t);
+        if (scale_named() >= 0) {
+            text_cat(t, " ");
+            text_cat(t, CHORD_SCALES[scale_named()].name);
+        }
+        app_say("SCALE", t);
+        return;
     } else if (l == B_SEQ) {
         if (i == 0)
             slot_step(d);
@@ -1661,6 +1725,7 @@ static void knob_turn(uint32_t i, int32_t e)
             harmony_changed();
         } else if (i == 2) {
             set.scale = (uint8_t)((set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
+            scale_set(CHORD_SCALES[set.scale].mask);
             harmony_changed();
         } else {
             char t[8];                   /* GLIDE: the engines' own, or MPE glide's time (glide_engines) */
@@ -1717,9 +1782,40 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
     } else if (l == B_SEQ)
         slot_step(d);
-    else {                               /* the play pages: the next / previous family's first sound */
+    else if (l == B_SEL) {               /* SCALE: the named scales */
+        char t[16];
+        int32_t n = scale_named();
+        set.scale = (uint8_t)(n < 0 && d < 0 ? set.scale : (set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
+        scale_set(CHORD_SCALES[set.scale].mask);
+        set_dirty = 1;
+        harmony_changed();
+        scale_text(t);
+        app_say("SCALE", t);
+    } else {                             /* the play pages: the next / previous family's first sound */
         sound_pick(d > 0 ? 5 : -5);
     }
+}
+
+/* MIDI in's notes: on QUANT FULL each to the nearest tone of the scale (scale_snap); a note's off and its
+ * pressure follow its on, wherever the scale or QUANT has gone since */
+static uint8_t in_map[16][128];          /* 1 + the note sounding for this channel's note; 0: none */
+static uint8_t in_last;                  /* (the last note on, as played: the host's checks) */
+static uint32_t midi_in_note(uint32_t st, uint32_t note, uint32_t vel)
+{
+    uint32_t ch = st & 15u, kind = st & 0xF0u, m;
+    if (kind == 0x90u && vel) {
+        m = set.quant == 2u ? scale_snap(note) : note;
+        m = m > 127u ? 127u : m;
+        in_map[ch][note] = (uint8_t)(m + 1u);
+        in_last = (uint8_t)m;
+        return m;
+    }
+    if (kind != 0x80u && kind != 0x90u && kind != 0xA0u)
+        return note;                     /* (not a note: its first data byte as it came) */
+    m = in_map[ch][note] ? in_map[ch][note] - 1u : note;
+    if (kind != 0xA0u)
+        in_map[ch][note] = 0;
+    return m;
 }
 
 static void input(void)
@@ -1745,7 +1841,7 @@ static void input(void)
     while (plat_midi_in(&pkt, &port)) {  /* MIDI in plays the synth and goes into the history (not echoed) */
         uint32_t st = (pkt >> 8) & 0xFFu;
         if (st >= 0x80u && st < 0xF0u)
-            bus(st, (pkt >> 16) & 0x7Fu, pkt >> 24, TO_SYNTH | TO_HIST);
+            bus(st, midi_in_note(st, (pkt >> 16) & 0x7Fu, pkt >> 24), pkt >> 24, TO_SYNTH | TO_HIST);
     }
     touch_poll();
     keys = touch_keys();
@@ -1813,7 +1909,7 @@ static void input(void)
                     app_say("OCTAVE", t);
                 }
             }
-        } else if (k == B_EDIT || k == B_FX || k == B_GLO || k == B_SEQ) {   /* a layer: held, or a tap opens it */
+        } else if (k == B_EDIT || k == B_FX || k == B_GLO || k == B_SEQ || k == B_SEL) {   /* a layer: held, or a tap opens it */
             ui.held = (int8_t)k;
             ui.held_used = 0;
         } else if (k == B_HOME) {        /* the knobs' page: PLAY / SOUND */
@@ -1952,6 +2048,20 @@ static void draw(void)
             cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
         cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   REC, PLAY, SAVE AS EVER", C_GRAY);
+    } else if (lay == B_SEL) {           /* SCALE: the number, its name, its twelve pitch classes from the key */
+        uint32_t m = scale_mask();
+        char nb[16];
+        int_text((int32_t)scale_num(), nb);
+        cv_text(10, 2, &FONT_L, nb, C_WHITE);
+        if (scale_named() >= 0)
+            cv_text(120, 4, &FONT_S, CHORD_SCALES[scale_named()].name, C_HI);
+        for (i = 0; i < 12u; i++) {
+            int32_t x = 120 + (int32_t)i * 9, on = m >> i & 1u;
+            cv_rect(x, 24, 7, 7, on ? (i ? C_WHITE : C_HI) : C_LINE);
+            if (!on)
+                cv_rect(x + 1, 25, 5, 5, C_BLACK);
+        }
+        cv_text(10, 44, &FONT_XS, "K1-K4: ITS DIGITS   SELECT: NAMED SCALES", C_GRAY);
     } else if (lay == B_EDIT && sound_edit() && clp_on()) {   /* SOUND: a Clipper sound's three pages */
         static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
         int32_t x = 10;
@@ -1979,7 +2089,8 @@ static void draw(void)
         t[0] = 0;
         text_cat(t, NOTE_N[set.tonic]);
         text_cat(t, " ");
-        text_cat(t, CHORD_SCALES[set.scale].name);
+        if (scale_named() >= 0)
+            text_cat(t, CHORD_SCALES[scale_named()].name);
         text_cat(t, "  ");
         {
             char ql[24];
@@ -1995,7 +2106,7 @@ static void draw(void)
         text_cat(t, set.bass ? "+BASS" : "");
         {
             char pcs[8] = " ";
-            int_text((int32_t)CHORD_SCALES[set.scale].mask, pcs + 2);   /* the set's number (music-suite: C major 2741) */
+            int_text((int32_t)scale_num(), pcs + 2);   /* the set's number (music-suite: C major 2741) */
             text_cat(t, pcs);
         }
         cv_text(10, 44, &FONT_XS, t, C_GRAY);
@@ -2138,7 +2249,11 @@ static void speak(void)
         text_cat(t, set.mode ? "CHORDS. " : "NOTES. ");
         text_cat(t, NOTE_N[set.tonic]);
         text_cat(t, " ");
-        text_cat(t, CHORD_SCALES[set.scale].name);
+        {
+            char sc[16];
+            scale_text(sc);
+            text_cat(t, sc);
+        }
         ann_say(t, 0, ANN_NOW);
     }
     ann_tick(plat_ms());
@@ -2381,6 +2496,17 @@ int app_expect(const char *what, int *got)
         *got = set.tonic;
     else if (!strcmp(what, "scale"))
         *got = set.scale;
+    else if (!strcmp(what, "pcs"))       /* the scale's number */
+        *got = (int)scale_num();
+    else if (!strcmp(what, "in_last"))   /* MIDI in: the last note on, as it plays */
+        *got = in_last;
+    else if (!strcmp(what, "in_held")) { /* MIDI in: the notes on, not yet off */
+        int c = 0, a, b;
+        for (a = 0; a < 16; a++)
+            for (b = 0; b < 128; b++)
+                c += in_map[a][b] != 0;
+        *got = c;
+    }
     else if (!strcmp(what, "type"))
         *got = set.type;
     else if (!strcmp(what, "style"))
