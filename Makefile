@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost
+.PHONY: check host fwsc clean clp-cost synth-cmp
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -33,3 +33,11 @@ fwsc:   # the FM-1 package (JieLi toolchain: Linux x86-64, a container, or CI)
 
 clean:
 	rm -rf build app/build
+
+synth-cmp:   # the saw's filter tables against the exact coefficients: the output's difference and the CPU
+	@mkdir -p $(B)
+	$(CC) -O2 -std=c99 -Wall -Wextra -Werror -Ibase/include tools/synth_cmp.c -o $(B)/synth_cmp_tab -lm
+	$(CC) -O2 -std=c99 -Wall -Wextra -Werror -Ibase/include -DSYNTH_EXACT tools/synth_cmp.c -o $(B)/synth_cmp_exact -lm
+	$(B)/synth_cmp_tab $(B)/saw_tab.raw
+	$(B)/synth_cmp_exact $(B)/saw_exact.raw
+	python3 tools/synth_cmp.py $(B)/saw_tab.raw $(B)/saw_exact.raw 35

@@ -5,6 +5,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 make check
+make synth-cmp
 ./build.sh --host
 app/build/host/mvane-yard_host app/tests/basic.txt app/build/host > build/host.log
 app/build/host/mvane-yard_host app/tests/migrate.txt app/build/host >> build/host.log

@@ -10,6 +10,7 @@ typedef struct {
     float vel, level, phase, base, target, poly;
     float ic1, ic2, lp;                  /* the filter's state */
     float sp, ss, sb, sp1, ss1, sb1;     /* pressure, slide and bend, smoothed twice (no zipper) */
+    float lb, lb_of, mul, mul_of;        /* caches: log2 of the pitch in Hz (for base lb_of), the bend's ratio (for sb) */
     uint32_t age;
 } voice_t;
 
@@ -25,6 +26,24 @@ static float breath_in, bsm1, bsm;       /* breath (CC2 / CC11), 0..1, and smoot
 static struct { uint8_t ch, note, vel; } stk[NSTACK];   /* mono: the notes held, the latest last */
 static uint32_t nstk;
 
+/* the filter's coefficient by the cutoff in octaves: g = tan(pi fc / SR) and the one-pole's c1 = min(1, 2 pi fc / SR),
+ * 16 points an octave from 20 Hz to 16 kHz, interpolated (g within 0.03% below 4 kHz, 0.2% at 16 kHz: a few cents of
+ * cutoff). -DSYNTH_EXACT computes them each time instead (for comparison: tools/synth_cmp.c) */
+#define FT_LO 4.32192809f                /* log2(20) */
+#define FT_HI 13.96578428f               /* log2(16000) */
+#define FT_PER 16.0f
+#define FT_N 157u                        /* (FT_HI - FT_LO) * FT_PER = 154.3 intervals, and guards */
+static float ft_g[FT_N + 1u], ft_c1[FT_N + 1u];
+static void ft_init(void)
+{
+    uint32_t i;
+    for (i = 0; i <= FT_N; i++) {
+        float fc = fm_exp2f(FT_LO + (float)i * (1.0f / FT_PER));
+        ft_g[i] = fm_tanf(3.14159265f * fm_minf(fc, 16000.0f) * (1.0f / SR));
+        ft_c1[i] = fm_minf(1.0f, 6.2831853f * fc * (1.0f / SR));
+    }
+}
+
 static float note_inc(float note) { return 440.0f * fm_exp2f((note - 69.0f) * (1.0f / 12.0f)) * (1.0f / SR); }
 
 void synth_init(const uint8_t p[SP_N])
@@ -32,6 +51,9 @@ void synth_init(const uint8_t p[SP_N])
     uint32_t i;
     for (i = 0; i < SP_N; i++)
         prm[i] = p[i];
+    ft_init();
+    for (i = 0; i < NVOICE; i++)
+        vc[i].lb_of = vc[i].mul_of = -1.0f;
     for (i = 0; i < 16u; i++) {
         bend_range[i] = i ? 48u : 2u;    /* MPE's defaults: members 48, the master 2 */
         slide[i] = 0.5f;                 /* CC74 at rest: 64 (bipolar controllers rest there) */
@@ -242,14 +264,28 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             v->sp1 += (p - v->sp1) * 0.04f, v->sp += (v->sp1 - v->sp) * 0.04f;   /* two stages, ~9 ms each */
             v->ss1 += (slide[v->ch] - v->ss1) * 0.04f, v->ss += (v->ss1 - v->ss) * 0.04f;
             v->sb1 += (b - v->sb1) * 0.04f, v->sb += (v->sb1 - v->sb) * 0.04f;
-            mul = fm_exp2f(v->sb * (1.0f / 12.0f));
+            if (v->sb != v->mul_of)      /* (a bend at rest costs nothing) */
+                v->mul = fm_exp2f(v->sb * (1.0f / 12.0f)), v->mul_of = v->sb;
+            mul = v->mul;
             /* the cutoff follows the note: tone 0 under the fundamental (a sine), 127 eight octaves above; pressure
              * up to three more; slide four octaves either way of 64 */
             oct = shape + 3.0f * v->sp + 8.0f * (v->ss - 0.5f) + (breath_on ? 4.0f * br - 1.5f : 0.0f);
+#ifdef SYNTH_EXACT
             fc = fm_clampf(v->base * mul * SR * fm_exp2f(oct), 20.0f, 16000.0f);
             g = fm_tanf(3.14159265f * fc * (1.0f / SR));
-            a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
             c1 = fm_minf(1.0f, 6.2831853f * fc * (1.0f / SR));
+#else
+            if (v->base != v->lb_of)     /* (the pitch's log again only while it glides) */
+                v->lb = fm_log2f(v->base * SR), v->lb_of = v->base;
+            fc = (fm_clampf(v->lb + v->sb * (1.0f / 12.0f) + oct, FT_LO, FT_HI) - FT_LO) * FT_PER;
+            {
+                uint32_t ix = (uint32_t)fc;
+                float fr = fc - (float)ix;
+                g = ft_g[ix] + (ft_g[ix + 1u] - ft_g[ix]) * fr;
+                c1 = ft_c1[ix] + (ft_c1[ix + 1u] - ft_c1[ix]) * fr;
+            }
+#endif
+            a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
             for (i = i0; i < end; i++) {
                 float s, t, inc, v1, v2, v3;
                 v->base += (v->target - v->base) * glide;

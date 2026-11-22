@@ -17,7 +17,7 @@ desktop, so each change needs a measurement on the device (CPU and XR on the scr
 | Priority | Where | Change | For |
 | --- | --- | --- | --- |
 | High | `app/clipper/src/fx.c` | Map the effect buffers' lifetimes; share what never runs at once | Pool RAM |
-| High | `app/synth.c` | Table or interpolation for `tan(pi fc / SR)` and the cutoff's `exp2` | CPU |
+| Done | `app/synth.c` | Table or interpolation for `tan(pi fc / SR)` and the cutoff's `exp2` | CPU |
 | Done | `app/app.c` | Count overflows of the render's event queue; recover (all notes off, state resent) | Reliability |
 | Medium | `app/clipper/clp.c` | A finer effect gate (per bus, a shorter quiet time once tails are measured) | Idle CPU |
 | Medium | `app/clipper/src/fx.c`, `voice.c` | Profile the split between the cores, the worst block not the mean | Latency |
@@ -35,6 +35,15 @@ desktop, so each change needs a measurement on the device (CPU and XR on the scr
 - **The saw's control loop.** Per voice every 16 samples: `fm_exp2f` for the bend, `fm_exp2f` for the cutoff,
   `fm_tanf` for the filter's coefficient; at 12 voices about 99,000 a second (counted, not measured). A table for the
   coefficient is the safest; the bend wants pitch accuracy, to test with slow MPE bends on held notes.
+  **Done (0.10-dev):** the cutoff is worked out in octaves (the pitch's `log2`, cached and computed again only while a
+  note glides, plus the bend, the tone, pressure, slide and breath), and `g` and the one-pole's `c1` are read from a
+  table of 16 points an octave from 20 Hz to 16 kHz, interpolated (1.25 KB of RAM). The bend's `exp2` stays exact,
+  skipped while the bend is still. Per voice every 16 samples: one `exp2` while bending, one `log2` while gliding,
+  otherwise neither, and no `tan`. `make synth-cmp` renders a scenario (a TONE sweep, slow out-of-phase bends with
+  slide and pressure, high bright notes) with the tables and with `-DSYNTH_EXACT`: the difference is 55 dB under the
+  signal, 42 dB at the cutoff's top (a few cents of cutoff near 16 kHz), and on a Mac the saw takes 12% less CPU.
+  The FM-1's gain is to measure with the baseline phrase; a 32-point table gains only 5 dB more, so the remaining
+  difference is not the table's.
 - **The event queue.** `synth_send` drops an event when the 256-entry ring is full (`app.c`, `if (w - sq_r >= 256u)
   return;`). A lost note-off leaves a note on, a lost bend or pressure leaves stale expression. Add a counter (on
   screen beside XR), then recovery. **Done (0.10-dev):** each lost event is counted (Q on the screen's bottom line);
