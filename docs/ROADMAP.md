@@ -72,6 +72,24 @@ In order, each to judge by ear on the FM-1:
       (multitimbral).
     - **The take's own scale** stored with it (the take file's header), so a take saved in C major plays in C minor
       from its first note when the scale has changed since.
+12. **The ARP** (Alex, 2026-11-22). **A basic one done in 0.12.4**: ARP tapped OFF / ON / LATCH (not a key), held
+    its layer; UP, DOWN, UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD; 1/4 to 1/32 with triplets; GATE;
+    OCTAVES; a tempo of its own; each note on its source's MPE channel (its pressure and bend follow). Next:
+    - **Its degrees from the expression**: pressure or slide choosing how far up the run goes, or which degree.
+    - **Rhythms that are not isorhythmic**: notes of different lengths, rests, accents; Serpe-like rhythm notation
+      (a pattern as a short text) for its patterns.
+    - **Simultaneous notes**: steps of two or three voices, the full chord on chosen steps: a comping engine; and the
+      same with the bass alone: a bassline engine (with multitimbral, item 2).
+    - **In the scale**: steps through the scale's degrees above the held notes (not only the notes themselves).
+    - **Clock**: MIDI clock in and out, tap tempo, the loop's length as the bar (item 11).
+13. **ENV and LFO, the two buttons left** (Alex, 2026-11-22: not as an envelope and an LFO, "Not in my house"):
+    drawn **qurves** (as in DrawnQurve) shaping a parameter over a note or a bar; waveshapes; later wavetables for YARD.
+14. **EDIT's chord qualities editable** (Alex, 2026-11-22: EDIT on PLAY shows the black keys' qualities and SELECT
+    steps through the type, but the qualities themselves are fixed): each black key's intervals set on the panel and
+    on the page, kept as a quality set with the bank, as the scales are.
+15. **Discoverability** (Alex, 2026-11-22): done in 0.12.4, USB HOST in the title while hosting (Alex could not
+    reach the FM-1 from the computer in host mode) and GLO's screen pointing to its other half (PHONES MAX); next, a
+    pass over every layer's screen for what is hidden.
 
 ## Alex's first session (0.1 on the FM-1, 2026-11-21)
 

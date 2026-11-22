@@ -9,7 +9,7 @@ design is in [PANEL.md](PANEL.md).
 
 ## Install
 
-Install `mvane-yard-X.Y.fwsc` with M-Patcher (or fm1-base's installer). Back up your current firmware first. Settings
+Install `mvane-yard-X.Y.fwsc` with M-Flasher (or M-Patcher, or fm1-base's installer). Back up your current firmware first (M-Flasher does it before it installs). Settings
 start from their defaults after an update that changes their layout (0.6 and 0.7 do).
 
 ## The screen
@@ -51,6 +51,7 @@ Every knob move on these pages is kept in the recording (as CC 5, 16 to 19, 72 t
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
 | **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
 | **SEQ**: RECORDINGS | SLOT | LOOP (off, on) | | | the recording slot (1 to 8); the screen shows the eight slots |
+| **ARP** held: ARP (either page) | MODE (UP, DOWN, UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD) | RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32) | GATE (5% to 100%: legato) | OCTAVES (1 to 4) | the tempo (40 to 240 BPM) |
 | **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the list (below), yours after it; SAVE: keep the number in your list |
 
 **The scale is a pitch-class set's number**, 0 to 4095, as in the Music Suite: each of the twelve semitones above
@@ -79,6 +80,7 @@ shows as its number.
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub (from the next pass; again, stop at its end); hold, undo the last layer |
 | **PLAY** | Play / stop the recording |
 | **SAVE** | Save the settings, and the recording into its slot |
+| **ARP** | Tap: ARP OFF, ON, LATCH. Hold: its layer |
 
 **QUANT** as Coral Flower's: OFF, the chords' roots a semitone a white key; BASIC, the roots the scale's degrees; FULL, the chords' tones too, and the notes coming in over MIDI (USB, TRS, a hosted device), each to the nearest tone of the scale (down on a tie: C# to C in C major). A note's release finds the note it became, even after the scale or QUANT has changed.
 
@@ -133,6 +135,19 @@ pressure apart).
 
 MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (1723), NOODLING (1267), OCTATONIC
 (2925). The number is music-suite's: bit 0 is the root, so C major is `101011010101` = 2741.
+
+### ARP
+
+**Tap ARP**: OFF, ON, LATCH (the screen says ARP or ARP LATCH beside NOTES or CHORDS; the button lights). **Hold
+ARP** and turn: its layer (above). It plays what would sound, a step at a time: in NOTES the keys you hold, in CHORDS
+the chord's voices (the bass too), and the notes coming in over MIDI. Each step is one of them by the MODE
+(UP-DOWN and DOWN-UP turn at the ends without repeating them, UP+DOWN repeats them; RANDOM never the same twice in a
+row; CHORD plays them all together, a comping rhythm), held for GATE of the step, over OCTAVES octaves. Each note
+goes out on the channel of the key it comes from, at its velocity, so that key's pressure, slide and bend shape it
+(MPE). **LATCH** keeps the notes after you let go; a new press after you let go of everything starts a new set, and
+keys added while others are held join it. Keys pressed together (within 12 ms) start together. A recording keeps
+what the ARP played; playing a recording back is not arpeggiated again. Its settings are kept with SAVE; ON and
+LATCH are not (it starts OFF).
 
 ### MPE, wind controllers
 

@@ -89,7 +89,7 @@ footer button { font-size: 13px; padding: 3px 9px; }
       <a class="btn" href="https://github.com/Enkerli/mvane-yard">Source on GitHub</a>
       <a class="btn" href="#usb">Your FM-1 over USB</a>
     </div>
-    <p class="small" id="dlnote">Install it with M-Patcher (below). Back up your FM-1 first.</p>
+    <p class="small" id="dlnote">Install it with M-Flasher (below), after its backup of your FM-1.</p>
   </header>
 
   <section class="card">
@@ -119,13 +119,18 @@ footer button { font-size: 13px; padding: 3px 9px; }
 
   <section class="card">
     <h2>Install</h2>
-    <p>Download the <code>.fwsc</code> (above) and install it with M-Patcher. Back up your FM-1's current firmware first.</p>
+    <p>Download the <code>.fwsc</code> (above) and install it with <b>M-Flasher</b>, the tool M-VAVE itself pointed
+      to on its forum: let it back up your FM-1's current firmware first, then install. This page does not install
+      firmware from the browser, on purpose: a desktop flasher with a backup is the safe way back if anything goes
+      wrong. M-Patcher works too.</p>
     <details><summary>Learn more</summary>
       <ul>
         <li>Releases are built from source on GitHub and signed with their provenance; each has the package (<code>.fwsc</code>),
           its checksum and a <code>firmware.json</code>.</li>
-        <li>Between releases, every change is built too (Actions, <code>mvane-yard-0.11.N+commit</code>), for trying what is
+        <li>Between releases, every change is built too (Actions, <code>mvane-yard-0.12.N+commit</code>), for trying what is
           new.</li>
+        <li>mvane yard is on <a href="https://thefirmwarehub.com/">The Firmware Hub</a>'s review list (submitted
+          2026-11-22).</li>
         <li>In a DAW: the VIBE FM plugin's converter (TheFirmwareHub) offers an older version for now; a newer one is being
           worked out. On TheFirmwareHub itself: soon.</li>
       </ul>
@@ -270,7 +275,7 @@ fetch("https://api.github.com/repos/Enkerli/mvane-yard/releases?per_page=10").th
     $("dl").href = a.browser_download_url;
     $("dl").textContent = `Download ${r.name || r.tag_name}`;
     $("dlnote").innerHTML = `<code>${a.name}</code>${r.prerelease ? " · a pre-release" : ""} · ` +
-      `<a href="${r.html_url}">its notes</a> · install with M-Patcher, after backing up your FM-1.`;
+      `<a href="${r.html_url}">its notes</a> · install with M-Flasher, after its backup of your FM-1.`;
   }).catch(() => { /* (the button stays on the releases page) */ });
 $("theme").onclick = () => {
   const dark = document.documentElement.dataset.theme !== "dark";

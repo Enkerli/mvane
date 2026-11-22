@@ -59,7 +59,7 @@ The JieLi toolchain only runs on Linux x86-64. Three ways to get the `.fwsc`:
 3. **This Mac, in a container:** install Docker or Podman; `base/tools/build.py` runs the toolchain in the pinned
    image by itself.
 
-Install with M-Patcher, or `python3 base/tools/fm1_install.py app/build/mvane-yard.fwsc`. Back up the current firmware
+Install with M-Flasher (it backs up first) or M-Patcher, or `python3 base/tools/fm1_install.py app/build/mvane-yard.fwsc`. Back up the current firmware
 first.
 
 ## Releases
