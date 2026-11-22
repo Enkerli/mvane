@@ -15,6 +15,7 @@ app/build/host/mvane-yard_host app/tests/migrate.txt app/build/host >> build/hos
 app/build/host/mvane-yard_host app/tests/queue.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/combos.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/yard.txt app/build/host >> build/host.log
+app/build/host/mvane-yard_host app/tests/glide.txt app/build/host >> build/host.log
 if grep -q '^FAIL' build/host.log; then grep '^FAIL' build/host.log; exit 1; fi
 python3 tools/yard_test.py
 node web/take_test.mjs

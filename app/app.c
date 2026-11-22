@@ -35,8 +35,10 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564139u            /* "MVA9" (0.11: PHONES MAX); MVA8 (YARD's thirteen, a 0.11 build), 0.10's MVA7
-                                          * and 0.9's MVA6 are read and moved on */
+#define SET_MAGIC 0x4D56413Au            /* "MVA:" (0.11: SPREAD, and room for more); MVA9 (PHONES MAX, 0.11-beta), MVA8
+                                          * (YARD's thirteen, a 0.11 build), 0.10's MVA7 and 0.9's MVA6 are read and
+                                          * moved on */
+#define SET_MAGIC_11B 0x4D564139u
 #define SET_MAGIC_11 0x4D564138u
 #define SET_MAGIC_10 0x4D564137u
 #define SET_MAGIC_09 0x4D564136u
@@ -61,7 +63,18 @@ typedef struct {
     uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
     uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
     uint8_t phones;                      /* PHONES MAX: MASTER's top, 2..20 in 5% (20: 100%, as MASTER was) */
+    uint8_t spread;                      /* MPE glide's SPREAD, 0..127 (0: the engines' own glide, as before) */
+    uint8_t room[14];                    /* (for settings to come: 0 their default, so no new record is needed) */
 } settings_t;
+typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX) */
+    uint32_t magic;
+    uint8_t mode, tonic, scale;
+    int8_t octave;
+    uint8_t p[SP_N];
+    uint8_t type, style, bass, usb_full, voices, bank, play, slot;
+    uint16_t sound;
+    uint8_t quant, mpe_out, bend, page, phones;
+} settings_11b_t;
 typedef struct {                         /* (MVA8, a 0.11 build's: the same without PHONES MAX) */
     uint32_t magic;
     uint8_t mode, tonic, scale;
@@ -116,6 +129,8 @@ static void settings_defaults(void)
     set.bend = 2;                        /* 48 */
     set.page = 0;
     set.phones = 20;
+    set.spread = 0;
+    mvane_zero(set.room, sizeof set.room);
 }
 
 static void settings_load(void)
@@ -123,6 +138,7 @@ static void settings_load(void)
     uint32_t i, bad = 0;
     union {
         settings_t now;
+        settings_11b_t v11b;
         settings_11_t v11;
         settings_10_t v10;
         settings_09_t old;
@@ -130,7 +146,12 @@ static void settings_load(void)
     int n = plat_store_load(OBJ_SETTINGS, &r, sizeof r);
     if (n == (int)sizeof r.now && r.now.magic == SET_MAGIC)
         set = r.now;
-    else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
+    else if (n == (int)sizeof r.v11b && r.v11b.magic == SET_MAGIC_11B) {   /* 0.11-beta's: SPREAD 0 */
+        settings_defaults();
+        mvane_copy(&set, &r.v11b, sizeof r.v11b);
+        set.magic = SET_MAGIC, set.spread = 0;
+        mvane_zero(set.room, sizeof set.room);
+    } else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
         settings_defaults();
         mvane_copy(&set, &r.v11, sizeof r.v11);
         set.magic = SET_MAGIC, set.phones = 20;
@@ -161,7 +182,7 @@ static void settings_load(void)
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
-        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u)
+        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u)
         settings_defaults();
 }
 
@@ -545,6 +566,8 @@ static void sound_apply(void)            /* the sound setting to the engines (ma
 }
 static int sound_mono(void) { return clp_on() ? clp_sound_mono(clp_at()) : YARD_NOW.mono; }
 static void sound_change_hold(void);     /* (below: what sounds lets go, a held chord comes back on the new sound) */
+static void glide_engines_to(uint32_t to);   /* (below: the engines' own glide, or none under MPE glide) */
+#define glide_engines() glide_engines_to(LIVE)
 
 /* --------------------------------------------------------------------- bus --- */
 #define TO_SYNTH 1u
@@ -744,6 +767,7 @@ void app_init(void)
         clp_cores(1u);
     clp_mode(set.play & 1u, set.play >> 1);
     sound_apply();
+    glide_engines_to(TO_SYNTH);          /* (the start: nothing in the history) */
 }
 
 /* ---------------------------------------------------------------- helpers --- */
@@ -850,11 +874,73 @@ void app_say(const char *a, const char *b)
 
 static int32_t out_note(int32_t n) { return clamp(n + 12 * set.octave, 0, 127); }
 
+/* MPE glide (0.11, Alex 2026-11-22): with SPREAD up (and MPE OUT on), a chord's moving voices glide each in its own
+ * time: a new note starts on its own channel bent to the pitch of the note it takes over (the nearest left), and the
+ * bend comes back to 0 over its voice's time, the lowest voice fastest, the highest slowest (GLIDE the lowest's time,
+ * SPREAD how much longer the highest's: up to four times). The bend is MIDI: YARD, Clipper and an MPE synth on MPE
+ * OUT glide alike, and a take keeps the gesture. The engines' own glide stays off meanwhile (a uniform glide under
+ * it would blur it). A chord let go is glided from for 2 s */
+#define GL_N (CHORD_MAX + 1u)
+static struct {
+    uint8_t ch, on;
+    int16_t off;                         /* the bend's start, in 1/64 semitone (0 at the end) */
+    uint32_t t0, dur, last;
+} gl[GL_N];
+static uint8_t gl_from[GL_N], gl_nfrom, gl_src[GL_N];
+static uint32_t gl_from_ms;
+static int mpe_glide_on(void) { return set.spread && set.mpe_out && set.mode; }
+static uint32_t glide_ms(void)           /* GLIDE's time, as the synths have it: 5 ms .. 2 s (0: none) */
+{
+    uint32_t g = knob[SP_GLIDE];
+    return g ? (uint32_t)(5.0f * fm_exp2f((float)g * (8.6f / 127.0f))) : 0u;
+}
+static void gl_bend(uint32_t ch, int32_t off64)   /* a channel's bend, off64 / 64 semitones: the synths (48 a full
+                                                   * bend, as theirs) and MPE OUT (its range) apart */
+{
+    int32_t in = 8192 + off64 * 8192 / (48 * 64), out = 8192 + off64 * 8192 / ((int32_t)BEND_RANGES[set.bend & 3u] * 64);
+    in = clamp(in, 0, 16383), out = clamp(out, 0, 16383);
+    bus(0xE0u | ch, (uint32_t)in & 0x7Fu, (uint32_t)in >> 7, TO_SYNTH | TO_HIST);
+    bus(0xE0u | ch, (uint32_t)out & 0x7Fu, (uint32_t)out >> 7, TO_OUT);
+}
+static void glide_engines_to(uint32_t to)   /* the engines' own glide: GLIDE, or none under MPE glide (CC5: recorded,
+                                             * but at the start) */
+{
+    uint32_t g = mpe_glide_on() ? 0u : knob[SP_GLIDE];
+    synth_set(SP_GLIDE, g);
+    bus(0xB0u, SYNTH_CC_GLIDE, g, to);
+}
+static void glide_tick(void)             /* main loop: each gliding voice's bend, every 8 ms, eased back to 0 */
+{
+    uint32_t k, now = plat_ms();
+    for (k = 0; k < GL_N; k++) {
+        uint32_t t;
+        float x;
+        if (!gl[k].on)
+            continue;
+        t = now - gl[k].t0;
+        if (t >= gl[k].dur) {
+            gl[k].on = 0;
+            gl_bend(gl[k].ch, 0);
+            continue;
+        }
+        if (now - gl[k].last < 8u)
+            continue;
+        gl[k].last = now;
+        x = (float)t / (float)gl[k].dur;
+        x = 1.0f - x * x * (3.0f - 2.0f * x);   /* (smoothstep: leaves gently, arrives gently) */
+        gl_bend(gl[k].ch, (int32_t)((float)gl[k].off * x));
+    }
+}
+
 static void chord_release(void)
 {
     uint32_t i;
     for (i = 0; i < ui.chord_n; i++)
         bus(0x80u | ui.chord_ch[i], ui.chord_note[i], 0, LIVE);
+    for (i = 0; i < ui.chord_n && i < CHORD_MAX + 1u; i++)   /* (MPE glide: the next chord glides from it) */
+        gl_from[i] = ui.chord_note[i];
+    if (ui.chord_n)
+        gl_nfrom = ui.chord_n, gl_from_ms = plat_ms();
     ui.chord_n = 0;
     ui.chord_key = -1;
     bus(0xD0u, 0, 0, LIVE);
@@ -979,6 +1065,26 @@ static void chord_sound(void)
         for (i = 0; i < v.n; i++)
             notes[nn++] = (uint8_t)out_note(v.upper[i]);
     }
+    if (mpe_glide_on()) {                /* MPE glide: what the new notes glide from (what sounds, or what was let go
+                                          * less than 2 s ago), not kept */
+        uint32_t k;
+        if (ui.chord_n) {
+            gl_nfrom = 0;
+            for (i = 0; i < ui.chord_n; i++) {
+                int keep = 0;
+                for (j = 0; j < nn; j++)
+                    keep |= notes[j] == ui.chord_note[i];
+                if (!keep)
+                    gl_from[gl_nfrom++] = ui.chord_note[i];
+            }
+        } else if (plat_ms() - gl_from_ms > 2000u)
+            gl_nfrom = 0;
+        for (k = 0; k < GL_N; k++)       /* (a voice still gliding: its channel let go below, at its new note) */
+            if (gl[k].on) {
+                gl[k].on = 0;
+                gl_bend(gl[k].ch, 0);
+            }
+    }
     /* common tones hold; the voices that leave are released first, so the new ones glide from them */
     for (i = 0; i < ui.chord_n; i++) {
         int keep = 0;
@@ -986,6 +1092,32 @@ static void chord_sound(void)
             keep |= notes[j] == ui.chord_note[i];
         if (!keep)
             bus(0x80u | ui.chord_ch[i], ui.chord_note[i], 0, LIVE);
+    }
+    {                                    /* MPE glide: which left note each new one comes from, the closest pairs
+                                          * first across the whole chord (gl_src: its index in gl_from, or GL_N) */
+        uint32_t k, a, b;
+        uint8_t used[GL_N] = {0};
+        for (j = 0; j < GL_N; j++)
+            gl_src[j] = GL_N;
+        for (k = 0; k < nn && mpe_glide_on(); k++) {
+            int32_t bd = 999;
+            uint32_t bj = GL_N, bk = GL_N;
+            for (a = 0; a < nn; a++) {
+                int held = 0;
+                for (i = 0; i < ui.chord_n; i++)
+                    held |= ui.chord_note[i] == notes[a];
+                if (held || gl_src[a] < GL_N)
+                    continue;
+                for (b = 0; b < gl_nfrom; b++) {
+                    int32_t x = mvane_abs((int32_t)gl_from[b] - (int32_t)notes[a]);
+                    if (!used[b] && gl_from[b] && x < bd && x <= (int32_t)BEND_RANGES[set.bend & 3u])
+                        bd = x, bj = a, bk = b;
+                }
+            }
+            if (bj == GL_N)
+                break;
+            gl_src[bj] = (uint8_t)bk, used[bk] = 1;
+        }
     }
     for (j = 0; j < nn; j++) {
         int held = -1;
@@ -996,6 +1128,26 @@ static void chord_sound(void)
             chs[j] = ui.chord_ch[held];
         else {
             chs[j] = (uint8_t)mpe_channel();
+            if (mpe_glide_on()) {        /* bent to the note it comes from (gl_src), before it sounds */
+                uint32_t k, best = gl_src[j], rank = 0, lo = 0;
+                int32_t d = best < GL_N ? (int32_t)gl_from[best] - (int32_t)notes[j] : 0;
+                if (best < GL_N) {
+                    for (k = 0; k < nn; k++)  /* its place among the chord's notes, low to high: its time */
+                        rank += notes[k] < notes[j], lo += 1u;
+                    for (k = 0; k < GL_N && gl[k].on; k++)
+                        ;
+                    if (k < GL_N && glide_ms()) {
+                        uint32_t span = nn > 1u ? nn - 1u : 1u;
+                        gl[k].ch = chs[j], gl[k].on = 1, gl[k].off = (int16_t)(d * 64);
+                        gl[k].t0 = gl[k].last = plat_ms();
+                        gl[k].dur = glide_ms() + glide_ms() * 3u * set.spread * rank / (127u * span);
+                        gl_bend(chs[j], d * 64);
+                    } else
+                        gl_bend(chs[j], 0);
+                } else
+                    gl_bend(chs[j], 0);  /* (no note to come from: from its own pitch, the channel's bend at 0) */
+                (void)lo;
+            }
             bus(0x90u | chs[j], notes[j], ui.chord_vel, LIVE);
         }
     }
@@ -1304,7 +1456,7 @@ static int32_t layer_knobs(void)
 static const char *layer_name(int32_t l)
 {
     return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX"
-           : l == B_GLO ? (set.page ? "OUTPUT" : "SETTINGS")
+           : l == B_GLO ? (set.page ? "MORE" : "SETTINGS")
            : l == B_SEQ ? "TAKES" : 0;
 }
 
@@ -1332,6 +1484,16 @@ static void knob_info(uint32_t i, const char **label, char *val)
             int_text((int32_t)set.phones * 5, val);
             text_cat(val, "% ");
             text_cat(val, DB[set.phones % 21u]);
+        } else if (i == 1) {             /* MPE glide: how much longer the highest voice's glide than the lowest's */
+            *label = "SPREAD";
+            if (!set.spread)
+                text_cat(val, "OFF");
+            else if (!set.mpe_out)
+                text_cat(val, "MPE OUT OFF");
+            else {
+                int_text(100 + 300 * (int32_t)set.spread / 127, val);
+                text_cat(val, "%");
+            }
         } else
             *label = "-";
     } else if (l == B_EDIT) {
@@ -1421,6 +1583,10 @@ static void knob_turn(uint32_t i, int32_t e)
             set.phones = (uint8_t)clamp(set.phones + d, 2, 20);
             phones_apply();
             set_dirty = 1;
+        } else if (i == 1) {
+            set.spread = (uint8_t)clamp((int32_t)set.spread + e * 4, 0, 127);
+            set_dirty = 1;
+            glide_engines();
         }
         knob_info(i, &label, val);
         app_say(label, val);
@@ -1477,6 +1643,7 @@ static void knob_turn(uint32_t i, int32_t e)
             all_off();
             set.mpe_out = (uint8_t)(e > 0);
             mpe_config();
+            glide_engines();             /* (MPE glide needs MPE OUT: the engines' own glide back without) */
         } else {
             set.bend = (uint8_t)clamp(set.bend + d, 0, 3);
             mpe_config();
@@ -1496,7 +1663,12 @@ static void knob_turn(uint32_t i, int32_t e)
             set.scale = (uint8_t)((set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
             harmony_changed();
         } else {
-            turn_knob(SP_GLIDE, SYNTH_CC_GLIDE, e, "GLIDE");
+            char t[8];                   /* GLIDE: the engines' own, or MPE glide's time (glide_engines) */
+            knob[SP_GLIDE] = (uint8_t)clamp((int32_t)knob[SP_GLIDE] + e * 2, 0, 127);
+            set_dirty = 1;
+            glide_engines();
+            int_text(knob[SP_GLIDE], t);
+            app_say("GLIDE", t);
             return;
         }
         set_dirty = 1;
@@ -1557,6 +1729,7 @@ static void input(void)
     int32_t e;
     sq_recover();                        /* a lost event: the engine set right, once the render has caught up */
     xr_watch();
+    glide_tick();
     if (plat_midi_out_link() != ui.link) {   /* a new USB connection: tell it this is MPE */
         ui.link = plat_midi_out_link();
         mpe_config();
@@ -1712,6 +1885,7 @@ static void input(void)
             all_off();
             set.mode = (uint8_t)(e > 0);
             set_dirty = 1;
+            glide_engines();             /* (MPE glide: in CHORDS only) */
             app_say("MODE", set.mode ? "CHORDS" : "NOTES");
         } else if (k == EN_PRESET) {     /* PRESETS: the sound (0 mvane yard's saw, then Clipper's by family) */
             sound_pick(e);
@@ -2316,6 +2490,15 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_param_get(118);
     else if (!strcmp(what, "clp_atk"))
         *got = (int)clp_param_get(1);
+    else if (!strcmp(what, "spread"))    /* MPE glide's SPREAD; how many voices glide now */
+        *got = set.spread;
+    else if (!strcmp(what, "gliding")) {
+        uint32_t k;
+        *got = 0;
+        for (k = 0; k < GL_N; k++)
+            *got += gl[k].on;
+    } else if (!strcmp(what, "engine_glide"))   /* the engines' own glide now */
+        *got = (int)synth_param(SP_GLIDE);
     else if (!strcmp(what, "phones"))    /* PHONES MAX, 2..20 (5% each) */
         *got = set.phones;
     else if (!strcmp(what, "gain"))      /* the render's gain at MASTER's top (4096 MASTER all the way) */

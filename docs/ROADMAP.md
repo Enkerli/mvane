@@ -31,7 +31,7 @@ tools (https://enkerli.github.io/mvane-yard/).
 | Both flash chips (`0x856014`, the newer `0xB36014`) | fm1-base's `fm1_flash_ok.h` (Alex's unit is a newer one) |
 | `fmhub.json` in the root (what, kinds, image, sounds ...) | written: `chords`, `docs/media/card.png` (240 x 240), the page as its editor, the manual as its cheat sheet |
 | Sounds: what ships | `none – all synthesised`: Clipper's synthesized sets only; Felucca's recorded sets (never compiled here) taken out of the vendored copy |
-| Tested on a real FM-1: installed from V15 and from another firmware, and left again | **Alex**: with the release to submit |
+| Tested on a real FM-1: installed from V15 and from another firmware, and left again | Alex, 0.11-beta with M-Flasher 0.10.0: from M-VAVE's stock firmware (FM-1 016, its stock loader) and back, a sound saved; from another custom firmware: to do |
 | The form: name, your name, an address (never shown), one line, how it was tested | **Alex** |
 
 To do: a release with `fmhub.json` in it (0.11), Alex's test of it (from V15, from another firmware, and back), then
@@ -47,8 +47,9 @@ In order, each to judge by ear on the FM-1:
    takes as the FM-1, without VIBE FM.
 4. **The demo take** in the firmware: MPE chords and a wind-controller part, 1980s-demo cheesy; and takes that show
    off MPE pitch bend (each note bent its own way), possibly as simplified MIDI files (Alex, 2026-11-22).
-   **MPE glide**: a different glide rate across a chord's voices (each voice its own time to its next note, so a
-   chord change blooms rather than moves as a block).
+   **MPE glide. Done in 0.11-dev:** each moving voice's own glide, through its note's pitch bend (SPREAD: the
+   highest voice up to four times the lowest's GLIDE); next, by ear: the order (low to high, or the widest leap
+   longest), the curve.
 5. **Progressions on the device** (M3, ProgGenie) and music-suite's voice leading in C.
 6. **Chord memory and pads** (M2b), **parameter locks and gestures** (M4), **a compact take** (thinned controllers).
 7. **The sound list curated**: engines dropped or folded (Alex: variety over count), which frees flash and RAM.

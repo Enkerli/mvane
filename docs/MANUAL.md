@@ -49,7 +49,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **EDIT** on the SOUND page, a YARD sound (FX shows the same) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
 | **GLO** on the PLAY page: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
-| **GLO** on the SOUND page: OUTPUT | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | | | | |
+| **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
 ### Encoders and buttons
@@ -94,7 +94,12 @@ pressure apart).
   it; HOLD again stops it. A held chord follows a change of sound (it sounds again on the new one).
 - Every chord has a separate bass (EDIT turns it off) and 3 to 6 upper voices (LFO).
 - Voice leading: each chord is voiced from the one before, so the voices move as little as they can; notes the two
-  chords share are held, and the moving voices glide (K3 sets how long).
+  chords share are held, and the moving voices glide (GLIDE sets how long).
+- **MPE glide** (SPREAD up, GLO on the SOUND page; MPE OUT on): each moving voice glides in its own time, the lowest
+  in GLIDE's, the highest up to four times longer, so a change of chord blooms rather than moving as a block. A new
+  note starts bent to the pitch of the note it takes over (the closest pairs first) and the bend eases back to 0:
+  plain MPE, so YARD, Clipper and an MPE synth on MPE OUT glide alike, and a take keeps the gesture. The engines' own
+  glide is off meanwhile; a chord let go is glided from for 2 s. SPREAD OFF: the engines' glide as before.
 - Voicings: CLOSE (within about an octave), OPEN (drop-2-like), WIDE (broad, every gap a fourth or more), PAIRS (the
   3rd and 7th in the left hand, the root and 5th above them in the right: two pairs of fifths moving around; more
   voices go on top; with three voices, OPEN).

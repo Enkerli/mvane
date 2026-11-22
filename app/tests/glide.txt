@@ -1,0 +1,74 @@
+# MPE glide (0.11): with SPREAD up and MPE OUT on, a chord's moving voices glide each in its own time, through each
+# note's own pitch bend; the engines' own glide is off meanwhile. app/build/host/mvane-yard_host app/tests/glide.txt app/build/host
+wait 600
+expect spread 0
+expect engine_glide 30
+# SPREAD up (GLO on the SOUND page, K2)
+tap HOME
+wait 50
+press GLO
+turn K2 20
+release GLO
+wait 50
+tap HOME
+wait 50
+expect spread 80
+expect engine_glide 0
+# a chord, then another held over it: its moving voices glide (GLIDE 30: the lowest about 20 ms, the highest about 70)
+key 0 down 100
+wait 100
+expect gliding 0
+key 7 down 100
+wait 10
+expect gliding >1
+shot glide.png
+wait 200
+expect gliding 0
+key 0 up
+key 7 up
+wait 50
+# a chord let go: the next still glides from it (within 2 s)
+key 4 down 100
+wait 10
+expect gliding >1
+wait 300
+key 4 up
+wait 50
+# MPE OUT off: no glide (one channel: no note's own bend); the engines' glide back
+press GLO
+turn K3 -1
+release GLO
+wait 50
+expect mpe_out 0
+expect engine_glide 30
+key 0 down 100
+wait 100
+key 7 down 100
+wait 10
+expect gliding 0
+key 0 up
+key 7 up
+wait 50
+press GLO
+turn K3 1
+release GLO
+wait 50
+# SPREAD back to 0: the engines' own glide, as before
+tap HOME
+wait 50
+press GLO
+turn K2 -20
+release GLO
+wait 50
+tap HOME
+wait 50
+expect spread 0
+expect engine_glide 30
+key 0 down 100
+wait 100
+key 7 down 100
+wait 10
+expect gliding 0
+key 0 up
+key 7 up
+wait 50
