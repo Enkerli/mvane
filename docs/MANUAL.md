@@ -23,7 +23,7 @@ start from their defaults after an update that changes their layout (0.6 and 0.7
 | Knob row | K1 to K4: tone, release, glide, attack |
 | HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a take not yet saved |
 | TAKE n/8 | The take in the current slot, its length, PLAYING or NOT SAVED |
-| Bottom | CPU load (then x2 while the second core renders half the voices, x1 lit when it does not run) and XR (with how many came within a second of a change of sound: n AT SW), PK and SW (the worst single block since the latest change of sound, and in the second after it, in % of a block's time: 100 misses it) (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (larger, on the left; the play mode, the sound's cost and HOST on the right, each where it fits) (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (EZ, HRD), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
+| Bottom | CPU load (then x2 while the second core renders half the voices, x1 lit when it does not run) and XR (with how many came within a second of a change of sound, n SW, or of a flash write, n FL: SAVE, a file from the computer, where the FM-1's audio stops for each sector erased), PK and SW (the worst single block since the latest change of sound, and in the second after it, in % of a block's time: 100 misses it) (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (larger, on the left; the play mode, the sound's cost and HOST on the right, each where it fits) (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (EZ, HRD), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
 
 ## Controls
 
@@ -46,7 +46,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | --- | --- | --- | --- | --- | --- |
 | **EDIT**: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
-| **FX** (YARD's sounds: no effects, its second page) | DETUNE (a second saw) | SUB (a square an octave down) | RES (resonance) | PLUCK (from a pad to a pluck) | |
+| **FX** (YARD's sounds: no effects, its second page) | DETUNE (a second saw) | SUB (a square two octaves down) | RES (resonance) | PLUCK (from a pad to a pluck) | |
 | **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
@@ -126,7 +126,7 @@ PRESETS steps through **YARD**, mvane yard's own synth, then Clipper's factory s
 behaves (the full list: [SOUNDS.md](SOUNDS.md)).
 
 **YARD** (9 sounds: SAW, PAD, ENSEMBLE, KEYS, PLUCK, BRASS; LEAD, BASS, WIND mono): a band-limited saw, a second one
-detuned (DETUNE), a square an octave down (SUB), through a lowpass that follows the note (TONE: dark to bright; RES its
+detuned (DETUNE), a square two octaves down (SUB), through a lowpass that follows the note (TONE: dark to bright; RES its
 resonance), 18 dB/oct; PLUCK lowers the sustain and opens the filter from five octaves up at each note, falling at
 DECAY: one knob from a pad to a pluck. Pressure brightens, slide (CC74) moves the cutoff, breath (POLY+BR, MONO+BR)
 is the level. The lightest sounds here (SAW about 12% of the FM-1 with a chord; BRASS, the heaviest, about half as
@@ -134,7 +134,9 @@ much again), its voices over both cores. A YARD sound brings its parameters; GLI
 and WIND play one voice whatever PLAY says. Every knob is recorded in the history as a CC on channel 1 (TONE 74,
 ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
 
-**Your own YARD sounds**: FX held (or opened), SAVE keeps the YARD sound playing, as its knobs have it, as USER n
+**Your own YARD sounds** (for now, YARD's only: an edited Clipper sound, its macros and sends, is not kept; and the
+nine values are all there is to a YARD sound, its oscillators the same for every one): FX held (or opened), SAVE
+keeps the YARD sound playing, as its knobs have it, as USER n
 (over itself if it is already one of yours); up to 32, listed after YARD's nine on PRESETS, kept across a restart.
 On the computer they are a file, `yard.ysb`: the page's **YARD sounds** card lists them to edit (name, mono, the
 nine values), add or remove, send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and

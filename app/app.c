@@ -345,13 +345,20 @@ static volatile uint8_t eng_want, eng_now;
  * first second (rt_sw), in % of the budget. The main loop marks the change (rt_mark) */
 static volatile uint32_t rt_pk, rt_sw, rt_blocks, rt_mark_at;
 static volatile uint8_t rt_marked;
-static uint32_t rt_sw_ms, xr_prev, xr_sw;        /* (main loop) the latest change of sound; xruns within its second */
+static uint32_t rt_sw_ms, rt_fl_ms, xr_prev, xr_sw, xr_fl;   /* (main loop) the latest change of sound, the latest
+                                                               * flash write; the xruns within a second of each */
+static uint8_t rt_fl_seen;
 static void rt_mark(void) { rt_marked = 1, rt_sw_ms = plat_ms(); }
-static void xr_watch(void)               /* main loop: the xruns that came within a second of a change of sound */
+static void rt_flash(void) { rt_fl_ms = plat_ms(), rt_fl_seen = 1; }   /* a flash write: the audio stops for each
+                                                                         * sector erased (fm1-base) */
+static void xr_watch(void)               /* main loop: the xruns that came within a second of a change of sound, or of a
+                                          * flash write (SAVE, a file from the computer) */
 {
-    uint32_t x = plat_xruns();
+    uint32_t x = plat_xruns(), now = plat_ms();
     if (x != xr_prev) {
-        if (plat_ms() - rt_sw_ms < 1000u)
+        if (rt_fl_seen && now - rt_fl_ms < 1000u)
+            xr_fl += x - xr_prev;
+        else if (now - rt_sw_ms < 1000u)
             xr_sw += x - xr_prev;
         xr_prev = x;
     }
@@ -1032,6 +1039,7 @@ static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the 
  * into the first free slot (USER n, mono as its source); the bank saved, the new one playing */
 static void yard_store(void)
 {
+    rt_flash();
     uint32_t i, slot = YB_N, k;
     char t[16];
     const synth_sound_t *src = ycur();
@@ -1404,6 +1412,7 @@ static void input(void)
             yard_store();
         } else if (k == B_SAVE) {
             int bad;
+            rt_flash();
             uint32_t i;
             for (i = 0; i < SP_N; i++)
                 set.p[i] = knob[i];      /* the knobs as set, not as a take left them */
@@ -1622,10 +1631,19 @@ static void draw(void)
         int_text((int32_t)plat_xruns(), x);
         text_cat(t, x);
         l = cv_text(l, 81, &FONT_S, t, plat_xruns() ? C_HI : C_GRAY) + 4;
-        if (xr_sw) {                     /* of them, within a second of a change of sound */
+        if (xr_sw || xr_fl) {            /* of them, within a second of a change of sound (SW), of a flash write (FL) */
             t[0] = 0;
-            int_text((int32_t)xr_sw, t);
-            text_cat(t, " AT SW");
+            if (xr_sw) {
+                int_text((int32_t)xr_sw, t);
+                text_cat(t, " SW");
+            }
+            if (xr_fl) {
+                char y[12];
+                int_text((int32_t)xr_fl, y);
+                text_cat(t, xr_sw ? " " : "");
+                text_cat(t, y);
+                text_cat(t, " FL");
+            }
             l = cv_text(l, 82, &FONT_XS, t, C_HI) + 4;
         }
         l += 6;
@@ -1752,6 +1770,7 @@ int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n)
 }
 int app_file_begin(uint32_t i, uint32_t size)
 {
+    rt_flash();
     if (size > 4u * (REC_HEAD_WORDS + TAKE_MAX))
         return -1;
     write_slot = (int)i;
@@ -1796,6 +1815,7 @@ int app_file_delete(uint32_t i)
 int app_file_busy(void) { return player.playing; }
 void app_file_changed(uint32_t obj)
 {
+    rt_flash();
     uint32_t i;
     if (obj == OBJ_YARD) {               /* the user's YARD sounds from the computer: the sound playing stays the same
                                           * one (a user sound gone: SAW) */

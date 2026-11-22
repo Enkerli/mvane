@@ -5,11 +5,12 @@
 #include "plat.h"
 
 #define APP_NAME "MVANE YARD"
-#if __has_include("build_id.h")         /* (CI writes it: 0.10-dev+ its commit, so each download says which it is) */
+#if __has_include("build_id.h")         /* (CI writes it: 0.11-dev+ its commit, so each download says which it is; a release: 0.11 .. 0.99, two digits a
+                                          * part: fm1-base's identity, tools/build.py) */
 #include "build_id.h"
 #endif
 #ifndef APP_VERSION                      /* (a release build gives its own: tools/build.py --release) */
-#define APP_VERSION "0.10-dev"
+#define APP_VERSION "0.11-dev"
 #endif
 #define APP_SPLASH_RGB RGB(120, 200, 170)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */

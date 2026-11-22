@@ -11,7 +11,7 @@ typedef struct {
     float ic1, ic2, lp;                  /* the filter's state */
     float sp, ss, sb, sp1, ss1, sb1;     /* pressure, slide and bend, smoothed twice (no zipper) */
     float lb, lb_of, mul, mul_of;        /* caches: log2 of the pitch in Hz (for base lb_of), the bend's ratio (for sb) */
-    float phase2, phsub, cont;           /* DETUNE's second saw, SUB's square (an octave down), PLUCK's contour (1 at
+    float phase2, phsub, cont;           /* DETUNE's second saw, SUB's square (two octaves down), PLUCK's contour (1 at
                                           * the note's start, falling at DECAY) */
     uint32_t age;
 } voice_t;
@@ -350,8 +350,9 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
                     }
                     s = (s + bk.g2 * s2) * (1.0f / (1.0f + 0.5f * bk.g2));
                 }
-                if (bk.sub > 0.0f) {     /* SUB: a square an octave down, its two steps smoothed */
-                    float is = inc * 0.5f, q, ts;
+                if (bk.sub > 0.0f) {     /* SUB: a square two octaves down (0.11, Alex: -24 rather than -12), its two
+                                          * steps smoothed */
+                    float is = inc * 0.25f, q, ts;
                     v->phsub += is;
                     if (v->phsub >= 1.0f)
                         v->phsub -= 1.0f;

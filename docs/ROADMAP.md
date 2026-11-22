@@ -307,6 +307,19 @@ default. YARD's sounds have no effects of their own: their character is differen
   LEADS HRD, HITS HRD, OTHER, YARD's sounds among them.
 - **The page**: every action says what it did, in view wherever the page is scrolled.
 
+Alex on 0.10-beta (2026-11-22):
+- **VIBE FM still gets 0.4.** The converter is not in the public SDK (github.com/Vibe-FM-SDK/vibe-fm-sdk: its
+  `vibe-check` rejects forbidden imports, blocks over budget while loading, crashes under random events). Ask the hub
+  (zven@thefirmwarehub.com, or an issue on the SDK) for the converter's log of 0.10-beta.
+- **Patch files only for YARD's sounds**: flagged as such in the manual until Clipper's come (below).
+- **Clipping, even on SAW.** YARD's output peaks at -10 dBFS played hard (velocity 127, full pressure, six voices):
+  nothing reaches its soft clipper (from -6 dBFS). Alex hears the same on other firmwares: the FM-1's analog stage,
+  or something intermittent. Next: a USB recording of it (the digital signal: clean there means after the DAC).
+- **SUB** two octaves down (0.11).
+- **Xruns**: not at a change of sound (PK 0, SW 10); one while a file came from the computer (flash writes stop the
+  audio for each sector erased). The bottom line now tells them apart (n SW, n FL).
+- **Versions**: 0.11, 0.12 ... 0.99 (fm1-base's identity takes two digits a part: no 0.100; then 1.0, or 0.99.1).
+
 Then, from Alex's list:
 - **YARD's sound itself editable**: its oscillators (today one saw for every sound, a second detuned, a sub square:
   BRASS and WIND differ only by the nine values), so a waveform (saw, pulse with PWM, triangle), noise for breath, a
@@ -314,7 +327,13 @@ Then, from Alex's list:
 - **Clipper's sounds as patch files**: a sound as edited (engine, preset, the parameters changed, the matrix, macros,
   sends), saved on the device and moved as files like YARD's.
 - **A demo take in the firmware**: a short MIDI phrase showing it off (MPE chords, glide, combined qualities, a lead),
-  1980s-demo cheesy is fine; in a slot at the first start.
+  1980s-demo cheesy is fine, and a short wind-controller take (breath, a mono lead), maybe in the same file; in a
+  slot at the first start.
+- **Multitimbral: bass, chords, lead** (Alex: not a groovebox). Coral Flower had its own sound for the bass; a third
+  for a lead. The bass could follow generative basslines, the chords get comping, the lead come from playing. A
+  sound per part, a MIDI channel per part; the second core and the light (EZ) sounds make room for it.
+- **mvane yard as its own plugin and app**: a plugin (VST3, AU, CLAP), a standalone app, and an AUv3 on iPad, with
+  the same sounds, takes and files as the FM-1, without VIBE FM (beside M7).
 - **Review the roadmap**, then submit to the hub.
 
 ### M3: ProgGenie on the device

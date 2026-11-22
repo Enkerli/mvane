@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 /* the master channel's CC74, CC72, CC5, CC73; then (0.10) CC75, CC71, CC20, CC21, CC22: DECAY (PLUCK's fall), RES
- * (the filter's resonance), DETUNE (a second saw), SUB (a square an octave down), PLUCK (the level falls to a lower
+ * (the filter's resonance), DETUNE (a second saw), SUB (a square two octaves down), PLUCK (the level falls to a lower
  * sustain and the cutoff from five octaves up, at DECAY) */
 enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB, SP_PLUCK, SP_N };
 #define SP_N_09 4u                       /* (0.9's settings had the first four) */
