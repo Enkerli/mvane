@@ -46,6 +46,45 @@ wait 100
 expect sound 0
 expect res 0
 expect mono 0
+# the user's sounds: FX held and SAVE keeps this one (SAW, RES turned) as USER 1, after YARD's nine; SAVE and a
+# restart keep it, and it is the sound
+expect nyuser 0
+press FX
+turn K3 10
+press SAVE
+release SAVE
+release FX
+wait 50
+expect nyuser 1
+expect sound 9
+expect res 20
+shot yard_user.png
+tap SAVE
+wait 50
+reboot
+wait 600
+expect nyuser 1
+expect sound 9
+expect res 20
+# the next on PRESETS after it: Clipper's first
+turn PRESET 1
+wait 100
+expect family 0
+turn PRESET -1
+wait 100
+expect sound 9
+# FX and SAVE again on a user sound: over itself
+press FX
+turn K3 5
+press SAVE
+release SAVE
+release FX
+wait 50
+expect nyuser 1
+expect res 30
+turn PRESET -9
+wait 100
+expect sound 0
 # a 0.9 settings record: moved on (tone, release, glide, attack kept; the sound, Clipper's first as 0.9 had it)
 settings_09
 reboot

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """tools/yard.py against the host simulator: play a phrase, REC and SAVE, fetch the take as MIDI, send a MIDI file
 back, and check that PLAY plays what was sent. ./build.sh --host first."""
+import json
 import os
 import struct
 import sys
@@ -9,7 +10,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import yard  # noqa: E402
+import yard
+import ysb  # noqa: E402
 
 HOST = os.path.join(HERE, "..", "app", "build", "host", "mvane-yard_host")
 REC, SAVE, PLAY = 11, 7, 10   # plat.h B_* bits
@@ -73,7 +75,23 @@ def main():
         assert sorted(os.listdir(os.path.join(d, "all"))) == ["take1.mid", "take5.mid"]
         assert yard.main(["settings", os.path.join(d, "settings.bin")], link) == 0
         assert os.path.getsize(os.path.join(d, "settings.bin")) > 0
-        print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out)")
+        # the user's YARD sounds: none yet; two sent as JSON (one without a slot: the first free); back the same
+        assert yard.main(["sounds", os.path.join(d, "none.json")], link) == 0
+        assert json.load(open(os.path.join(d, "none.json")))["sounds"] == []
+        mine = {"format": "mvane-yard-sounds", "version": 1, "sounds": [
+            {"slot": 3, "name": "Glass Keys", "mono": False, "tone": 80, "release": 70, "glide": 30, "attack": 2,
+             "decay": 50, "res": 30, "detune": 40, "sub": 0, "pluck": 90},
+            {"name": "REED", "mono": True, "tone": 45, "res": 10}]}
+        json.dump(mine, open(os.path.join(d, "mine.json"), "w"))
+        assert yard.main(["sounds", "--put", os.path.join(d, "mine.json")], link) == 0
+        link.run(50)
+        r = link.cmd("expect nyuser 2"); assert r[-1].strip().startswith("ok"), r
+        assert yard.main(["sounds", os.path.join(d, "back.json")], link) == 0
+        back = json.load(open(os.path.join(d, "back.json")))["sounds"]
+        assert [(x["slot"], x["name"], x["mono"], x["pluck"]) for x in back] == [(1, "REED", True, 0),
+                                                                                 (3, "GLASS KEYS", False, 90)], back
+        assert back[0]["release"] == ysb.DEFAULT["release"]
+        print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out, YARD sounds in and out)")
     finally:
         link.close()
 

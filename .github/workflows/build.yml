@@ -57,6 +57,7 @@ jobs:
         run: |
           python3 tools/yard_test.py
           node web/take_test.mjs
+          node web/ysb_test.mjs
 
       - name: The FM-1 package (its version 0.10-dev+ the commit, on its screen, the page and the file's name)
         run: |

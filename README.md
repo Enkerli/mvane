@@ -24,7 +24,7 @@ The take SAVE keeps is a file over USB (fm1-base's companion services). Two ways
   instead: `python3 -m http.server 8737 --directory web`, then http://localhost:8737 (Web MIDI needs HTTPS or localhost).
 - **The command line**: `python3 tools/yard.py take` writes slot 1's take as `take1.mid` (`--slot N`, or `takes` for
   all eight); `tools/yard.py put song.mid --slot 3` sends a MIDI file
-  (notes, controllers, pressure, bend; tracks merged; tempo honoured); `tools/yard.py settings` saves the settings.
+  (notes, controllers, pressure, bend; tracks merged; tempo honoured); `tools/yard.py settings` saves the settings; `tools/yard.py sounds` your own YARD sounds as JSON (`--put` sends them).
   Needs `pip install mido python-rtmidi`.
 
 Stop PLAY first: the FM-1 refuses files while a take plays. Download as MIDI puts everything on one channel, so a DAW makes one clip of it

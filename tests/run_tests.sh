@@ -18,4 +18,5 @@ app/build/host/mvane-yard_host app/tests/yard.txt app/build/host >> build/host.l
 if grep -q '^FAIL' build/host.log; then grep '^FAIL' build/host.log; exit 1; fi
 python3 tools/yard_test.py
 node web/take_test.mjs
+node web/ysb_test.mjs
 echo "run_tests: all checks passed"

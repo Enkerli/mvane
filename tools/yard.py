@@ -9,6 +9,9 @@
     tools/yard.py put FILE                a take into slot 1 (--slot N): a .mvt, or a MIDI file (its notes, controllers, pressure
                                           and bend, all tracks merged; at most 30,000 events)
     tools/yard.py settings [OUT]          the settings as a file (default settings.bin); --put FILE sends one back
+    tools/yard.py sounds [OUT.json]       the user's YARD sounds (FX and SAVE keep them on the FM-1) as JSON (default
+                                          yard-sounds.json; .ysb: the bank as it is); --put FILE (.json or .ysb) sends
+                                          them, replacing the FM-1's
     tools/yard.py ls                      what the FM-1 has
 
 Options: --port NAME (part of the FM-1's MIDI port name), --serve-cmd CMD (a host simulator instead of an FM-1:
@@ -25,9 +28,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "base", "tools"))
 sys.path.insert(0, HERE)
 import fm1_companion as fc  # noqa: E402
+import json  # noqa: E402
 import mvt2mid  # noqa: E402
+import ysb  # noqa: E402
 
-SETTINGS, SLOTS = "settings", 8
+SETTINGS, SLOTS, SOUNDS = "settings", 8, "yard.ysb"
 
 
 def take_name(slot):
@@ -147,12 +152,12 @@ def main(argv=None, link=None):
     own = link is None
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                 epilog=__doc__.split("\n", 2)[2])
-    p.add_argument("cmd", choices=["take", "takes", "put", "settings", "ls"])
+    p.add_argument("cmd", choices=["take", "takes", "put", "settings", "sounds", "ls"])
     p.add_argument("--slot", type=int, default=1, choices=range(1, 9), metavar="1..8")
     p.add_argument("file", nargs="?")
     p.add_argument("--mvt", action="store_true", help="take: keep the .mvt beside the MIDI file")
     p.add_argument("--mpe", action="store_true", help="take: the MPE channels kept (a DAW may split them into clips)")
-    p.add_argument("--put", metavar="FILE", help="settings: send this file to the FM-1")
+    p.add_argument("--put", metavar="FILE", help="settings, sounds: send this file to the FM-1")
     p.add_argument("--port")
     p.add_argument("--serve-cmd")
     a = p.parse_args(argv)
@@ -212,6 +217,25 @@ def main(argv=None, link=None):
                 out = a.file or "settings.bin"
                 open(out, "wb").write(bytes(c.read(i)))
                 print(f"settings -> {out}")
+        elif a.cmd == "sounds":
+            i = c.index_of(SOUNDS)["index"]
+            if a.put:
+                data = open(a.put, "rb").read()
+                try:
+                    raw = data if a.put.endswith(".ysb") else ysb.from_json(json.loads(data))
+                except ValueError as e:
+                    raise SystemExit(f"{a.put}: {e}")
+                c.write(i, raw)
+                n = len(ysb.to_json(raw)["sounds"])
+                print(f"{a.put} -> the FM-1's YARD sounds ({n}: after YARD's nine on PRESETS)")
+            else:
+                out = a.file or "yard-sounds.json"
+                raw = bytes(c.read(i))
+                if out.endswith(".ysb"):
+                    open(out, "wb").write(raw)
+                else:
+                    open(out, "w").write(json.dumps(ysb.to_json(raw), indent=2) + "\n")
+                print(f"{len(ysb.to_json(raw)['sounds'])} YARD sounds -> {out}")
     except fc.CompanionError as e:
         print(f"yard: {e}", file=sys.stderr)
         return fc.EXIT.get(e.code, 1)

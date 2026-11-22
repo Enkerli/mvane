@@ -17,11 +17,13 @@
 #define APP_USB_HOST_NAME                /* the USB host's device by name (plat_usb_host_name): the Diosynth */
 
 /* the store: the settings and the panel calibration (the platform's), A/B sector pairs */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u}
+/* (0.10) OBJ_YARD, the user's YARD sounds, in the data area's last two sectors (after the takes and the panel's) */
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_YARD, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u}
 
 /* files over USB (fm1.toml companion = true): the settings (a store object), then the take (the data area) */
-#define APP_FILE_OBJS {{OBJ_SETTINGS, PLAT_FK_SETTINGS, PLAT_FF_READ | PLAT_FF_WRITE, "settings"}}
+#define APP_FILE_OBJS {{OBJ_SETTINGS, PLAT_FK_SETTINGS, PLAT_FF_READ | PLAT_FF_WRITE, "settings"}, \
+                       {OBJ_YARD, PLAT_FK_BANK, PLAT_FF_READ | PLAT_FF_WRITE, "yard.ysb"}}
 #define APP_FILES
 int app_file(uint32_t i, plat_file_info_t *f);
 int app_file_read(uint32_t i, uint32_t off, uint8_t *dst, uint32_t n);

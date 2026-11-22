@@ -47,13 +47,20 @@ canvas { width: 100%; height: 180px; display: block; background: var(--roll); bo
 .slots button small { color: var(--dim); font-size: 12px; }
 .slots button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .slots button.empty small { opacity: 0.6; }
+.ytab { overflow-x: auto; margin: 6px 0 8px; }
+.ytab table { border-collapse: collapse; font-size: 13px; }
+.ytab th { color: var(--dim); font-weight: 500; text-align: left; padding: 2px 4px; white-space: nowrap; }
+.ytab td { padding: 2px 3px; }
+.ytab input[type=number] { width: 3.6em; font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; }
+.ytab input[type=text] { width: 9em; font: inherit; text-transform: uppercase; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.ytab button { padding: 2px 8px; }
 [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
   <h1>mvane <span>yard</span></h1>
-  <p class="lede">Your FM-1's take and settings, over USB. Chrome or Edge on a computer; the FM-1 plugged in with a data
+  <p class="lede">Your FM-1's takes, YARD sounds and settings, over USB. Chrome or Edge on a computer; the FM-1 plugged in with a data
     cable, and PLAY stopped.</p>
 
   <section class="card">
@@ -85,6 +92,24 @@ canvas { width: 100%; height: 180px; display: block; background: var(--roll); bo
       a clip a channel.</p>
   </section>
 
+  <section class="card" id="yardCard" hidden>
+    <h2>YARD sounds</h2>
+    <p class="meta" id="yardMeta">Your own YARD sounds: on the FM-1, FX held and SAVE keeps the one playing. They come
+      after YARD's nine on PRESETS.</p>
+    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th>Mono</th><th>Tone</th><th>Release</th><th>Glide</th>
+      <th>Attack</th><th>Decay</th><th>Res</th><th>Detune</th><th>Sub</th><th>Pluck</th><th></th></tr></thead>
+      <tbody id="ysounds"></tbody></table></div>
+    <div class="row">
+      <button id="yAdd" type="button">Add a sound</button>
+      <button id="ySend" class="go" type="button">Send to the FM-1</button>
+      <button id="yRead" type="button">Read again</button>
+      <button id="yGet" type="button">Download (JSON)</button>
+      <label class="btn">Load a file<input id="yPut" type="file" accept=".json,.ysb"></label>
+    </div>
+    <p class="note">Sending replaces the FM-1's YARD sounds with these. Values 0 to 127; GLIDE is kept with the sound,
+      the FM-1 plays its own (the PLAY page's).</p>
+  </section>
+
   <section class="card" id="setCard" hidden>
     <h2>Settings</h2>
     <div class="row">
@@ -97,6 +122,7 @@ canvas { width: 100%; height: 180px; display: block; background: var(--roll); bo
 <script type="module">
 import { Companion, findCompanions } from "./lib/companion.js";
 import { readTake, writeTake, writeMid, readMid, notesOf, flatten } from "./take.js";
+import { toJson as ysbToJson, fromJson as ysbFromJson, PARAMS as YP, DEFAULT as YDEF, N as YN } from "./ysb.js";
 
 const $ = (id) => document.getElementById(id);
 const say = (msg, err = false) => { $("status").textContent = msg; $("status").classList.toggle("err", err); };
@@ -144,6 +170,7 @@ async function use(f) {
   $("takeCard").hidden = $("setCard").hidden = false;
   say(`Connected to ${h.name} on ${f.name}.`);
   await readTakeFromDevice();
+  await readSounds();
 }
 
 const fileIndex = (name) => { const f = files.find((x) => x.name === name); if (!f) throw new Error(`the FM-1 has no ${name}`); return f.index; };
@@ -220,6 +247,68 @@ $("put").onchange = async (e) => {
     await readTakeFromDevice();
     say(`${f.name} is now slot ${slot}'s take: PLAY plays it there.`);
   } catch (err) { say(`Couldn't send ${f.name}: ${err.message}`, true); }
+};
+
+// ---- the user's YARD sounds (yard.ysb) ----
+let ysounds = [];
+async function readSounds() {
+  try {
+    files = await dev.files();
+    if (!files.find((x) => x.name === "yard.ysb")) { $("yardCard").hidden = true; return; }   // (a firmware before them)
+    ysounds = ysbToJson(await dev.read(fileIndex("yard.ysb"))).sounds;
+    $("yardCard").hidden = false;
+    showSounds();
+  } catch (e) { say(`Couldn't read the YARD sounds: ${e.message}`, true); }
+}
+function showSounds() {
+  $("yardMeta").textContent = ysounds.length
+    ? `${ysounds.length} of ${YN}: after YARD's nine on PRESETS.`
+    : "None yet: on the FM-1, FX held and SAVE keeps the YARD sound playing; or Add one here.";
+  $("ysounds").replaceChildren(...ysounds.map((s, i) => {
+    const tr = document.createElement("tr"), cell = (el) => { const td = document.createElement("td"); td.append(el); tr.append(td); };
+    const num = document.createElement("span"); num.textContent = s.slot ?? "·"; cell(num);
+    const name = Object.assign(document.createElement("input"), { type: "text", maxLength: 12, value: s.name });
+    name.oninput = () => { s.name = name.value.toUpperCase(); };
+    name.setAttribute("aria-label", "name"); cell(name);
+    const mono = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!s.mono });
+    mono.onchange = () => { s.mono = mono.checked; };
+    mono.setAttribute("aria-label", "mono"); cell(mono);
+    for (const k of YP) {
+      const x = Object.assign(document.createElement("input"), { type: "number", min: 0, max: 127, step: 1, value: s[k] ?? YDEF[k] });
+      x.onchange = () => { s[k] = Math.max(0, Math.min(127, Math.round(Number(x.value) || 0))); x.value = s[k]; };
+      x.setAttribute("aria-label", k); cell(x);
+    }
+    const del = Object.assign(document.createElement("button"), { type: "button", textContent: "Remove" });
+    del.onclick = () => { ysounds.splice(i, 1); showSounds(); };
+    cell(del);
+    return tr;
+  }));
+  $("yAdd").disabled = ysounds.length >= YN;
+}
+$("yAdd").onclick = () => { ysounds.push({ name: `USER ${ysounds.length + 1}`, mono: false, ...YDEF }); showSounds(); };
+$("yRead").onclick = readSounds;
+$("ySend").onclick = async () => {
+  try {
+    const raw = ysbFromJson({ sounds: ysounds });
+    await dev.write(fileIndex("yard.ysb"), raw, (n, t) => say(`Sending… ${Math.round((100 * n) / t)}%`));
+    await readSounds();
+    say(`${ysounds.length} YARD sound${ysounds.length === 1 ? "" : "s"} on the FM-1: after YARD's nine on PRESETS.`);
+  } catch (e) { say(`Couldn't send the YARD sounds: ${e.message}`, true); }
+};
+$("yGet").onclick = () => {
+  try { download(JSON.stringify({ format: "mvane-yard-sounds", version: 1, sounds: ysounds }, null, 2) + "\n", `yard-sounds-${stamp()}.json`, "application/json"); }
+  catch (e) { say(`Couldn't make the file: ${e.message}`, true); }
+};
+$("yPut").onchange = async (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const raw = new Uint8Array(await f.arrayBuffer());
+    ysounds = /\.ysb$/i.test(f.name) ? ysbToJson(raw).sounds : ysbToJson(ysbFromJson(JSON.parse(new TextDecoder().decode(raw)))).sounds;
+    showSounds();
+    say(`${f.name}: ${ysounds.length} sound${ysounds.length === 1 ? "" : "s"}. Send to the FM-1 to keep them there.`);
+  } catch (err) { say(`Couldn't read ${f.name}: ${err.message}`, true); }
 };
 
 $("getSet").onclick = async () => {

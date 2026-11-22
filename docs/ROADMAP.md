@@ -321,9 +321,10 @@ default. YARD's sounds have no effects of their own: their character is differen
   the device.
 - A web editor on WebMIDI and fm1-base's companion services: patches, takes (with MIDI export in the page), settings,
   backup. fm1-base's `web/companion` page is the starting point; Clipper's editor is the model for the UI.
-- **Patch files** (Alex, 2026-11-22: "now that we have a bunch of patches"): YARD's sounds first (nine parameters and
-  a name: a small file each, over the companion service as the takes go, edited on the page, shared with the
-  plugin), then a Clipper sound as edited (its engine and preset, the parameters changed from it, the matrix, the
+- **Patch files** (Alex, 2026-11-22: "now that we have a bunch of patches"). **YARD's, done in 0.10-dev:** a bank of
+  32 user sounds in the store (OBJ_YARD, `yard.ysb`), FX and SAVE on the panel, the page's card, `yard.py sounds`,
+  JSON to share (`tools/ysb.py`, `web/ysb.js`, tested against each other). Next: the plugin's side, then a Clipper
+  sound as edited (its engine and preset, the parameters changed from it, the matrix, the
   macros and sends).
 - **A compact take ("efficiency mode")** (Alex, 2026-11-22): the baseline phrase is 24,164 events for 123 notes.
   Dense controller streams (bend, pressure, slide every few ms) could be thinned where a straight line between kept

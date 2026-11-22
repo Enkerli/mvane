@@ -134,6 +134,13 @@ much again), its voices over both cores. A YARD sound brings its parameters; GLI
 and WIND play one voice whatever PLAY says. Every knob is recorded in the history as a CC on channel 1 (TONE 74,
 ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
 
+**Your own YARD sounds**: FX held (or opened), SAVE keeps the YARD sound playing, as its knobs have it, as USER n
+(over itself if it is already one of yours); up to 32, listed after YARD's nine on PRESETS, kept across a restart.
+On the computer they are a file, `yard.ysb`: the page's **YARD sounds** card lists them to edit (name, mono, the
+nine values), add or remove, send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and
+`tools/yard.py sounds --put mine.json` sends them (replacing the FM-1's). The JSON is plain: one entry a sound,
+`{"slot", "name", "mono", "tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"}`.
+
 | Family | What | For |
 | --- | --- | --- |
 | **CHORDS LIGHT** (14) | Sustained, polyphonic, light on the CPU: SAMPLE's pads, the WHEEL organs, PHASE's organ and keys | Chords, with CPU to spare |

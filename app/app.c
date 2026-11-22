@@ -124,13 +124,68 @@ static void settings_load(void)
         settings_defaults();
 }
 
-#define YARD SYNTH_SOUNDS                  /* YARD's own sounds, first on PRESETS (synth.c) */
-#define NYARD ((uint32_t)SYNTH_NSOUNDS)
+/* YARD's sounds on PRESETS: its nine (synth.c SYNTH_SOUNDS), then the user's (0.10): a bank of YB_N in the store
+ * (OBJ_YARD), a file for the computer (yard.ysb: tools/yard.py sounds, the page), each saved on the panel with FX held
+ * and SAVE. The bank: "MVYB", version 1, its size; then YB_N sounds of 32 bytes: a name (12, NUL-padded), flags (bit 0
+ * used, bit 1 mono), the nine parameters (TONE REL GLIDE ATTACK DECAY RES DETUNE SUB PLUCK, 0..127), zeros */
+#define YB_MAGIC 0x4259564Du             /* "MVYB" */
+#define YB_N 32u
+typedef struct {
+    char name[12];
+    uint8_t flags;                       /* 1 used, 2 mono */
+    uint8_t p[SP_N];
+    uint8_t pad[32 - 12 - 1 - SP_N];
+} yb_sound_t;
+typedef struct {
+    uint32_t magic;
+    uint8_t version, n, pad[2];
+    yb_sound_t s[YB_N];
+} yard_bank_t;
+typedef char yb_sound_is_32[sizeof(yb_sound_t) == 32u ? 1 : -1];
+static yard_bank_t ybank;
+static synth_sound_t yuser[YB_N];        /* the used ones, in slot order, as PRESETS lists them */
+static char yuser_name[YB_N][13];
+static uint8_t yuser_slot[YB_N], nyuser;
+static void yard_bank_index(void)
+{
+    uint32_t i, k;
+    nyuser = 0;
+    for (i = 0; i < YB_N; i++) {
+        yb_sound_t *b = &ybank.s[i];
+        if (!(b->flags & 1u))
+            continue;
+        for (k = 0; k < 12u; k++)
+            yuser_name[nyuser][k] = b->name[k] >= ' ' && b->name[k] <= '~' ? b->name[k] : (b->name[k] ? '?' : 0);
+        yuser_name[nyuser][12] = 0;
+        if (!yuser_name[nyuser][0])
+            yuser_name[nyuser][0] = 'U', yuser_name[nyuser][1] = (char)('1' + i % 9u), yuser_name[nyuser][2] = 0;
+        yuser[nyuser].name = yuser_name[nyuser];
+        yuser[nyuser].mono = (uint8_t)((b->flags >> 1) & 1u);
+        for (k = 0; k < SP_N; k++)
+            yuser[nyuser].p[k] = b->p[k] > 127u ? 127u : b->p[k];
+        yuser_slot[nyuser++] = (uint8_t)i;
+    }
+}
+static void yard_bank_load(void)
+{
+    if (plat_store_load(OBJ_YARD, &ybank, sizeof ybank) != (int)sizeof ybank || ybank.magic != YB_MAGIC ||
+        ybank.version != 1u)
+        mvane_zero(&ybank, sizeof ybank);
+    ybank.magic = YB_MAGIC, ybank.version = 1, ybank.n = YB_N;
+    yard_bank_index();
+}
+#define NYARD ((uint32_t)SYNTH_NSOUNDS + nyuser)
 static int clp_on(void) { return set.sound >= NYARD; }             /* a Clipper sound plays */
 static uint32_t clp_at(void) { return set.sound - NYARD; }         /* .. its index in clp's list */
 static uint32_t yard_at(void) { return set.sound < NYARD ? set.sound : 0u; }
+static const synth_sound_t *ysound(uint32_t i)                     /* YARD's i-th: its own, then the user's */
+{
+    return i < SYNTH_NSOUNDS ? &SYNTH_SOUNDS[i] : &yuser[(i - SYNTH_NSOUNDS) % YB_N];
+}
+#define YARD_NOW (*ysound(yard_at()))
 
-/* the sound as stored to its place in the list (after clp_init), and back (to store) */
+/* the sound as stored to its place in the list (after clp_init), and back (to store): 0x8000 | Clipper's key;
+ * 0x4000 | YARD's own; 0x4100 | a user sound's slot */
 static void sound_from_store(void)
 {
     uint32_t key, i, v = set.sound;
@@ -138,8 +193,13 @@ static void sound_from_store(void)
         key = clp_sound_old_key(v - 1u);
     else if (v & 0x8000u)                /* 0.10: 0x8000 | its key */
         key = v & 0x7FFFu;
-    else {                               /* 0 (the saw), or 0x4000 | a YARD sound */
-        set.sound = (uint16_t)((v & 0x3FFFu) < NYARD ? v & 0x3FFFu : 0u);
+    else if ((v & 0xFF00u) == 0x4100u) { /* a user sound, by its slot (gone: SAW) */
+        for (i = 0; i < nyuser && yuser_slot[i] != (v & 0xFFu); i++)
+            ;
+        set.sound = (uint16_t)(i < nyuser ? SYNTH_NSOUNDS + i : 0u);
+        return;
+    } else {                             /* 0 (the saw), or 0x4000 | a YARD sound */
+        set.sound = (uint16_t)((v & 0x3FFFu) < SYNTH_NSOUNDS ? v & 0x3FFFu : 0u);
         return;
     }
     i = clp_sound_of_key(key);
@@ -147,7 +207,10 @@ static void sound_from_store(void)
 }
 static uint16_t sound_to_store(void)
 {
-    return (uint16_t)(clp_on() ? 0x8000u | (clp_sound_key(clp_at()) & 0x7FFFu) : 0x4000u | set.sound);
+    if (clp_on())
+        return (uint16_t)(0x8000u | (clp_sound_key(clp_at()) & 0x7FFFu));
+    return (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound
+                                                : 0x4100u | yuser_slot[(set.sound - SYNTH_NSOUNDS) % YB_N]);
 }
 
 /* ------------------------------------------------------------- the render --- */
@@ -264,7 +327,7 @@ void app_panic(void) { synth_panic(); clp_panic(); }
 
 static void yard_mode(void)              /* YARD's mono: PLAY's MONO, or the sound's own */
 {
-    synth_mode((set.play & 1u) | YARD[yard_at()].mono, set.play >> 1);
+    synth_mode((set.play & 1u) | YARD_NOW.mono, set.play >> 1);
 }
 static void sound_apply(void)            /* the sound setting to the engines (main loop) */
 {
@@ -279,7 +342,7 @@ static void sound_apply(void)            /* the sound setting to the engines (ma
                                           * loads its own, so it gets the knob's again (its CC5, after the load) */
         synth_send(0xB0u, SYNTH_CC_GLIDE, synth_param(SP_GLIDE));
 }
-static int sound_mono(void) { return clp_on() ? clp_sound_mono(clp_at()) : YARD[yard_at()].mono; }
+static int sound_mono(void) { return clp_on() ? clp_sound_mono(clp_at()) : YARD_NOW.mono; }
 static void sound_change_hold(void);     /* (below: what sounds lets go, a held chord comes back on the new sound) */
 
 /* --------------------------------------------------------------------- bus --- */
@@ -451,6 +514,7 @@ void app_init(void)
     plat_usb_audio_full(set.usb_full);
     synth_mode(set.play & 1u, set.play >> 1);
     clp_init();
+    yard_bank_load();
     sound_from_store();
     if (plat_cpu2_set(1) == 0) {         /* the second core renders half the voices, Clipper's or YARD's */
         clp_cores(2u);
@@ -806,7 +870,7 @@ static void capture(uint32_t gap)
     app_say(gap ? "PHRASE" : "ALL", t);
 }
 
-static const char *sound_name(void) { return clp_on() ? clp_sound_name(clp_at()) : YARD[yard_at()].name; }
+static const char *sound_name(void) { return clp_on() ? clp_sound_name(clp_at()) : YARD_NOW.name; }
 
 /* a new sound: what sounds lets go first (the engine fades it out and the notes would be lost to it); a chord kept
  * by HOLD, or held under a finger, sounds again on the new sound once its switch is done (Clipper fades for 6 ms, and
@@ -860,10 +924,53 @@ static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the 
     if (!clp_on())
         for (i = 0; i < SP_N; i++)
             if (i != SP_GLIDE)
-                synth_set(i, YARD[set.sound].p[i]), knob[i] = YARD[set.sound].p[i];
+                synth_set(i, ysound(set.sound)->p[i]), knob[i] = ysound(set.sound)->p[i];
     set_dirty = 1;
     sound_change_hold();
     app_say(clp_on() ? clp_family_name(clp_sound_family(clp_at())) : "YARD", sound_name());
+}
+
+/* FX held, SAVE: the YARD sound as the knobs have it into the user's bank: over itself if it is a user sound, else
+ * into the first free slot (USER n, mono as its source); the bank saved, the new one playing */
+static void yard_store(void)
+{
+    uint32_t i, slot = YB_N, k;
+    char t[16];
+    const synth_sound_t *src = ysound(yard_at());
+    if (set.sound >= SYNTH_NSOUNDS && set.sound < NYARD)
+        slot = yuser_slot[set.sound - SYNTH_NSOUNDS];
+    else
+        for (i = 0; i < YB_N && slot == YB_N; i++)
+            if (!(ybank.s[i].flags & 1u))
+                slot = i;
+    if (slot >= YB_N) {
+        app_say("YARD", "32 SOUNDS: FULL");
+        return;
+    }
+    if (!(ybank.s[slot].flags & 1u)) {   /* a new one: USER n */
+        mvane_zero(&ybank.s[slot], sizeof ybank.s[slot]);
+        t[0] = 0;
+        text_cat(t, "USER ");
+        int_text((int32_t)slot + 1, t + 5);
+        for (k = 0; k < 12u && t[k]; k++)
+            ybank.s[slot].name[k] = t[k];
+        ybank.s[slot].flags = (uint8_t)(1u | (src->mono ? 2u : 0u));
+    }
+    for (k = 0; k < SP_N; k++)
+        ybank.s[slot].p[k] = (uint8_t)synth_param(k);
+    if (plat_store_save(OBJ_YARD, &ybank, sizeof ybank)) {
+        app_say("YARD", "NOT SAVED");
+        return;
+    }
+    yard_bank_index();
+    for (i = 0; i < nyuser && yuser_slot[i] != slot; i++)
+        ;
+    set.sound = (uint16_t)(SYNTH_NSOUNDS + i);
+    set_dirty = 1;
+    for (k = 0; k < 12u && ybank.s[slot].name[k]; k++)
+        t[k] = ybank.s[slot].name[k];
+    t[k] = 0;
+    app_say("SAVED", t);
 }
 
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
@@ -1191,6 +1298,10 @@ static void input(void)
                 app_say("TAKE", "PLAYING");
             } else
                 app_say("TAKE", "EMPTY");
+        } else if (k == B_SAVE && layer_now() == B_FX && !clp_on()) {   /* FX and SAVE: this YARD sound kept */
+            if (ui.held >= 0)
+                ui.held_used = 1;
+            yard_store();
         } else if (k == B_SAVE) {
             int bad;
             uint32_t i;
@@ -1568,6 +1679,15 @@ int app_file_busy(void) { return player.playing; }
 void app_file_changed(uint32_t obj)
 {
     uint32_t i;
+    if (obj == OBJ_YARD) {               /* the user's YARD sounds from the computer: the sound playing stays the same
+                                          * one (a user sound gone: SAW) */
+        set.sound = sound_to_store();
+        yard_bank_load();
+        sound_from_store();
+        sound_change_hold();
+        ui.redraw = 1;
+        return;
+    }
     if (obj != OBJ_SETTINGS)
         return;
     settings_load();
@@ -1677,7 +1797,9 @@ int app_expect(const char *what, int *got)
         *got = 0;
         for (i = 0; i < ui.chord_n; i++)
             *got += ui.chord_note[i];
-    } else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
+    } else if (!strcmp(what, "nyuser"))   /* the user's YARD sounds */
+        *got = nyuser;
+    else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
         *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */
         *got = (int)sq_lost;
