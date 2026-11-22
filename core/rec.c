@@ -133,10 +133,13 @@ uint32_t rec_word(const rec_take *k, uint32_t i)
     return i ? w : (W_ST(w) == REC_TIME ? 0u : w & 0x00FFFFFFu);   /* the capture starts on its first event */
 }
 
+/* the take from the history's word start to its head: what sounds at start as its prefix; t, the time of its
+ * end; last_t, of its last event; the count of notes still held at its end */
+static uint32_t rec__build(rec_ring *r, uint32_t start, rec_take *take, uint32_t *t_end, uint32_t *last_end);
+
 uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take)
 {
-    uint32_t n = rec_count(r), oldest = r->head - n, start = oldest, i, out, t, last_t;
-    rec__held_set pre_n, pre_c, end_n;
+    uint32_t n = rec_count(r), oldest = r->head - n, start = oldest, i, t, last_t, held;
     rec_unlock(r);
     if (!n)
         return 0;
@@ -154,6 +157,52 @@ uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *ta
             }
         }
     }
+    held = rec__build(r, start, take, &t, &last_t);
+    /* notes still held at the press last until the press; otherwise the take ends on its last event */
+    {
+        uint32_t tail = now_ms - r->last_ms;
+        if (r->sleep_ms && tail > r->sleep_ms)
+            tail = r->sleep_ms;
+        take->duration_ms = held ? t + tail : last_t;
+    }
+    r->lock = start;
+    r->locked = 1;
+    return take->count;
+}
+
+uint32_t rec_mark(rec_ring *r, uint32_t now_ms)
+{
+    uint32_t gap = r->started && (int32_t)(now_ms - r->last_ms) > 0 ? now_ms - r->last_ms : 0;
+    if (rec__room(r) < 2u) {
+        r->full = 1;
+        return r->head;
+    }
+    if (gap > 0xFFFFFFu)
+        gap = 0xFFFFFFu;
+    if (!r->started || gap)              /* (an event already after now_ms: the mark goes with it) */
+        r->last_ms = now_ms;
+    r->started = 1;
+    rec__push(r, (gap >> 16) << 24 | (gap & 0xFFFFu));   /* a time word, even a short gap */
+    return r->head - 1u;
+}
+
+uint32_t rec_capture_from(rec_ring *r, uint32_t start, uint32_t duration_ms, rec_take *take)
+{
+    uint32_t n = rec_count(r), t, last_t;
+    if (!n || r->head - start > n || r->head == start)
+        return 0;
+    rec_unlock(r);
+    rec__build(r, start, take, &t, &last_t);
+    take->duration_ms = duration_ms;
+    r->lock = start;
+    r->locked = 1;
+    return take->count;
+}
+
+static uint32_t rec__build(rec_ring *r, uint32_t start, rec_take *take, uint32_t *t_end, uint32_t *last_end)
+{
+    uint32_t n = rec_count(r), oldest = r->head - n, i, out, t, last_t;
+    rec__held_set pre_n, pre_c, end_n;
     mvane_zero(&pre_n, sizeof pre_n);    /* what sounds at the start */
     mvane_zero(&pre_c, sizeof pre_c);
     for (i = oldest; i != start; i++)
@@ -181,16 +230,8 @@ uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *ta
             rec__track(&end_n, &pre_c, w);
         }
     }
-    /* notes still held at the press last until the press; otherwise the take ends on its last event */
-    {
-        uint32_t tail = now_ms - r->last_ms;
-        if (r->sleep_ms && tail > r->sleep_ms)
-            tail = r->sleep_ms;
-        take->duration_ms = end_n.n ? t + tail : last_t;
-    }
-    r->lock = start;
-    r->locked = 1;
-    return take->count;
+    *t_end = t, *last_end = last_t;
+    return end_n.n;
 }
 
 /* ------------------------------------------------------------- files --- */

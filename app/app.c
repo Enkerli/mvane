@@ -651,6 +651,15 @@ static void bus(uint32_t st, uint32_t d1, uint32_t d2, uint32_t to)
  * pl_tonic); after a change each goes to the same degree of the new scale (a scale of another size: the degree in
  * proportion), the same octave, a note outside the scale kept as far from the degree below it, the key's move the
  * shortest (-5 .. +6). A note's off and pressure follow its on (pl_map) */
+/* Overdub: REC while a take loops. From the top of the next pass the take's own playing goes into the history with
+ * what is played over it, and at the pass's end that pass (rec_capture_from, from its mark: the loop's length) is
+ * the take: a layer. Again each pass, until REC again (at the end of that pass) or PLAY. REC held: the last layer
+ * undone (one). The history keeps the take before as the undo (locked with the new) */
+static struct {
+    uint8_t armed, on, ending, has_undo, layers;
+    uint32_t mark;                       /* the pass's start in the history (a time word) */
+    rec_take undo;
+} ov;
 static uint16_t pl_mask;
 static uint8_t pl_tonic, pl_map[16][128];   /* 1 + the note sounding for the take's note; 0: none */
 static uint8_t pl_last;                  /* (the take's last note on, as it plays: the host's checks) */
@@ -694,7 +703,7 @@ static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)
         if (kind != 0xA0u)
             pl_map[ch][d1] = 0;
     }
-    bus(st, m, d2, TO_SYNTH | TO_OUT);
+    bus(st, m, d2, TO_SYNTH | TO_OUT | (ov.on ? TO_HIST : 0u));
 }
 static void take_play(uint32_t at)       /* from its start, in the scale and key now set */
 {
@@ -785,6 +794,7 @@ static void take_load(void)              /* the current slot's take into RAM (no
     const uint8_t *p = takes_data(set.slot);
     rec_unlock(&hist);                   /* a capture not saved is let go */
     mvane_zero(&take, sizeof take);
+    ov.has_undo = 0, ov.layers = 0;
     if (n > 0 && p && rec_load(&take, p, (uint32_t)n) != 0)
         take.count = 0;
     take_dirty = 0;
@@ -1336,6 +1346,7 @@ static void capture(uint32_t gap)
     char t[16];
     if (player.playing)
         rec_play_stop(&player, play_emit, 0);
+    ov.has_undo = 0, ov.layers = 0;
     if (!rec_capture(&hist, plat_ms(), gap, &take)) {
         app_say("HISTORY", "EMPTY");
         return;
@@ -1343,6 +1354,79 @@ static void capture(uint32_t gap)
     take_dirty = 1;
     time_text(take.duration_ms, t);
     app_say(gap ? "PHRASE" : "ALL", t);
+}
+
+static void ov_off(void)                 /* overdub over: the history sleeps again */
+{
+    ov.armed = ov.on = ov.ending = 0;
+    hist.sleep_ms = SLEEP_MS;
+}
+static void ov_lock(void)                /* the undo's words kept too, if they are in the history and older */
+{
+    if (ov.has_undo && ov.undo.ring && take.ring && ov.undo.start - (hist.head - rec_count(&hist)) <
+        take.start - (hist.head - rec_count(&hist)))
+        hist.lock = ov.undo.start, hist.locked = 1;
+}
+static void ov_rec_tap(void)             /* REC tapped while a take loops */
+{
+    if (ov.on) {
+        ov.ending ^= 1u;
+        app_say("OVERDUB", ov.ending ? "ENDS AT THE TOP" : "GOES ON");
+    } else {
+        ov.armed ^= 1u;
+        app_say("OVERDUB", ov.armed ? "AT THE TOP" : "OFF");
+    }
+    ui.redraw = 1;
+}
+static void take_play(uint32_t at);
+static void ov_undo(void)                /* REC held while a take loops: the take before the last layer */
+{
+    if (!ov.has_undo) {
+        app_say("UNDO", "NOTHING");
+        return;
+    }
+    rec_play_stop(&player, play_emit, 0);
+    ov_off();
+    take = ov.undo;
+    ov.has_undo = 0;
+    if (ov.layers)
+        ov.layers--;
+    if (take.ring)
+        hist.lock = take.start, hist.locked = 1;
+    take_dirty = 1;
+    take_play(plat_ms());
+    app_say("UNDO", "LAYER GONE");
+}
+/* a looping take at its end (the pass's, at b): the pass becomes the take if overdubbing; 1 if it did */
+static int ov_pass_end(uint32_t b)
+{
+    int got = 0;
+    if (ov.on) {
+        rec_take nt;
+        if (hist.full || !rec_capture_from(&hist, ov.mark, take.duration_ms, &nt)) {
+            ov_off();
+            app_say("OVERDUB", "HISTORY FULL: SAVE");
+            if (take.ring)
+                hist.lock = take.start, hist.locked = 1;
+        } else {
+            char t[8];
+            ov.undo = take, ov.has_undo = 1;
+            take = nt;
+            ov_lock();
+            take_dirty = 1, got = 1;
+            if (ov.layers < 99u)
+                ov.layers++;
+            int_text(ov.layers, t);
+            app_say("LAYER", t);
+        }
+    }
+    if (ov.ending)
+        ov_off();
+    if (ov.armed)
+        ov.armed = 0, ov.on = 1, hist.sleep_ms = 0;   /* (the loop's time kept as it is: no sleep) */
+    if (ov.on)
+        ov.mark = rec_mark(&hist, b);
+    return got;
 }
 
 static const char *sound_name(void)
@@ -2011,7 +2095,7 @@ static void input(void)
                 set_dirty = 0;
             if (take_dirty && !player.playing)
                 bad |= take_save() != 0;
-            app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : "");
+            app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : take_dirty && player.playing ? "TAKE: STOP IT FIRST" : "");
         }
     }
     if (ui.held >= 0 && !(btn >> ui.held & 1u)) {   /* a layer button let go: a tap opens or closes its page */
@@ -2024,11 +2108,17 @@ static void input(void)
         if (btn >> B_REC & 1u) {
             if (now - ui.rec_t >= 700u) {
                 ui.rec_t = 0;
-                capture(0);
+                if (player.playing && set.loop)
+                    ov_undo();
+                else
+                    capture(0);
             }
         } else {
             ui.rec_t = 0;
-            capture(PHRASE_GAP_MS);
+            if (player.playing && set.loop)
+                ov_rec_tap();
+            else
+                capture(PHRASE_GAP_MS);
         }
     }
     for (k = 0; k < NE; k++) {
@@ -2057,15 +2147,21 @@ static void input(void)
             chord_sound();
     }
     if (player.playing && !rec_play_poll(&player, now, play_emit, 0)) {
-        if (set.loop && take.duration_ms) {   /* LOOP: again, on the beat it ended (the scale it plays in kept) */
+        if (set.loop && take.duration_ms) {   /* LOOP: again, on the beat it ended (the scale it plays in kept;
+                                               * a new layer: it is in the scale now set) */
             uint16_t m = pl_mask;
             uint8_t t = pl_tonic;
-            take_play(player.start_ms + take.duration_ms);
-            pl_mask = m, pl_tonic = t;
+            uint32_t b = player.start_ms + take.duration_ms;
+            int layer = ov_pass_end(b);
+            take_play(b);
+            if (!layer)
+                pl_mask = m, pl_tonic = t;
             rec_play_poll(&player, now, play_emit, 0);
         }
         ui.redraw = 1;
     }
+    if (!player.playing && (ov.on || ov.armed))   /* stopped (PLAY, another slot, a capture): no overdub */
+        ov_off(), ui.redraw = 1;
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
@@ -2223,7 +2319,18 @@ static void draw(void)
     if (player.playing) {
         time_text(now - player.start_ms, t);
         cv_text(80, 56, &FONT_S, t, C_WHITE);
-        cv_text(130, 58, &FONT_XS, set.loop ? "LOOPING" : "PLAYING", C_HI);
+        if (ov.on || ov.armed) {
+            char o[20] = "OVERDUB ";
+            if (ov.armed)
+                text_cat(o, "AT TOP");
+            else {
+                int_text(ov.layers + 1, o + 8);
+                if (ov.ending)
+                    text_cat(o, " END");
+            }
+            cv_text(130, 58, &FONT_XS, o, C_HI);
+        } else
+            cv_text(130, 58, &FONT_XS, set.loop ? "LOOPING" : "PLAYING", C_HI);
     } else if (old_take)
         cv_text(80, 58, &FONT_XS, "0.4'S TAKE: SAVE KEEPS IT", C_HI);
     else if (take_dirty)
@@ -2570,6 +2677,10 @@ int app_expect(const char *what, int *got)
         *got = player.playing;
     else if (!strcmp(what, "loop"))
         *got = set.loop;
+    else if (!strcmp(what, "overdub"))   /* 0 off, 1 at the top, 2 on, 3 ending */
+        *got = ov.on ? 2 + ov.ending : ov.armed;
+    else if (!strcmp(what, "layers"))
+        *got = ov.layers;
     else if (!strcmp(what, "pcs"))       /* the scale's number */
         *got = (int)scale_num();
     else if (!strcmp(what, "in_last"))   /* MIDI in: the last note on, as it plays */

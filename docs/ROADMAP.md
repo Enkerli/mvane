@@ -65,10 +65,11 @@ In order, each to judge by ear on the FM-1:
     at its end; and a take follows the KEY and SCALE while it plays (each note to the same degree). Next:
     - **Loop length**: to the beat, not to where REC was tapped (trim the tail to the last note's end, or snap it to
       the bar the first notes suggest; a tap tempo).
-    - **Overdub**: while a take loops, what is played goes in as well. The history already records it with the time:
-      REC during a loop would merge the live events of the last pass (or passes) into the take, folded to its length,
-      a second layer on top (the RAM: the take's words and the new ones, at most the history's). UNDO the last layer;
-      layers each on their own channel set for MIDI out.
+    - **Overdub. Done in 0.12.3:** REC during a loop; from the top of the next pass the take's own playing goes into
+      the history with what is played over it, and each pass becomes the take (`rec_mark`, `rec_capture_from`), one
+      undo (REC held). Next, by ear: starting at once (the pass under way, its first part rebuilt from the take);
+      more than one undo; layers each on their own channel set for MIDI out; a layer's sound of its own
+      (multitimbral).
     - **The take's own scale** stored with it (the take file's header), so a take saved in C major plays in C minor
       from its first note when the scale has changed since.
 

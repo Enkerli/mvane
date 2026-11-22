@@ -62,6 +62,10 @@ int rec_sleeping(const rec_ring *r, uint32_t now_ms);       /* 1: idle past slee
  * first, at time 0, from the history before it. The ring is locked from the take's start (the history goes on until
  * it would write over it: full). Returns the words captured (0: nothing). */
 uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *take);
+/* Overdub: a time word at now_ms (its index: where a pass starts), and the take from that word to the head, its
+ * length as given (a loop's), locked as a capture is */
+uint32_t rec_mark(rec_ring *r, uint32_t now_ms);
+uint32_t rec_capture_from(rec_ring *r, uint32_t start, uint32_t duration_ms, rec_take *take);
 void rec_unlock(rec_ring *r);            /* the capture is saved, or let go: the history may write over it again */
 
 /* take <-> file bytes (little-endian words, REC_HEAD_WORDS of header). rec_load returns 0 on a good file and reads

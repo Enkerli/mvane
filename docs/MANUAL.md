@@ -69,7 +69,7 @@ scales; a number of your own shows as PCS and its number. It is saved with the s
 | **SELECT** | On the pages: the next or previous family's first sound. In a layer: as above |
 | **HOME** | PLAY page / SOUND page |
 | **OCT- / OCT+** | Octave; both together: panic (everything off) |
-| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history |
+| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a take loops: tap, overdub (from the next pass; again, stop at its end); hold, undo the last layer |
 | **PLAY** | Play / stop the take |
 | **SAVE** | Save the settings, and the take into its slot |
 
@@ -222,6 +222,13 @@ of a light sound is Clipper's effect buses, which stop only once every send has 
   distance from the degree below it. The scale in force when you pressed PLAY is the take's own.
 - **LOOP** (SEQ, K2): the take plays again from its start when it ends, on time, still in the scale you moved it to
   (the screen: LOOPING). The loop is the take's length: from its first note to where you tapped REC.
+- **Overdub**: while a take loops, tap **REC**. From the top of the next pass (the screen: OVERDUB AT TOP, then
+  OVERDUB 1, 2 ...) what you play goes in with the take, and at the end of each pass that pass becomes the take: a
+  layer. Play over it again on the next pass, and the next. Tap REC again to stop at the end of the pass (OVERDUB
+  n END); PLAY stops at once (the pass under way is not kept). **Hold REC** while it loops: the last layer undone
+  (one step). What a layer keeps is what you heard: the take as it played (in the scale it was moved to) and what
+  you played over it, knob moves included. Stop the take, then SAVE, to keep the layers in the slot. Each layer is a
+  copy in the history, so a long, busy loop fills it sooner (FULL: SAVE).
 - **SAVE** writes the take into the current slot (the sound stops for a moment while the flash is written). Saved takes
   play from the flash.
 - **SEQ** (held or tapped) and SELECT pick one of eight slots. A take sent from the computer (the page, `yard.py put`)
