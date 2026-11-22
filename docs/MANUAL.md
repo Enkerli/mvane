@@ -145,7 +145,9 @@ The FM-1 is a USB audio interface (duplex: it records itself into the computer, 
 USB MIDI device. GLO, K2 sets the recording's level.
 
 **USB host**: GLO held, SELECT right: the FM-1 hosts a USB MIDI device plugged into its USB-C port, such as the
-Diosynth (on its own battery: the FM-1 gives the port no power; or behind a powered hub). The screen names the device.
+Diosynth. The FM-1 gives the port no power, and most devices, battery-powered ones too, wait for the host's 5 V
+before they connect: put a hub with its own power supply between them (a single-chip one: four ports, typically), or
+an OTG adapter that brings 5 V to the device. The screen names the device.
 Meanwhile there is no computer: no USB audio, no files. GLO held, SELECT left: back to the computer.
 
 ## Known limits (0.7)

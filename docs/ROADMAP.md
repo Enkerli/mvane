@@ -79,7 +79,13 @@ order:
 - **Streamline Clipper's engines and sounds**: fewer models, similar ones merged (below).
 - **Display a chord's structure as a piano roll** (the voices on a small roll: what moved, what held).
 - **Standalone / plugin build, file-compatible** with the device (beside VIBE FM: M7).
-- **USB MIDI host**: the Diosynth straight into the FM-1's USB-C. In 0.7: GLO held, SELECT (the Diosynth has a battery). fm1-base has it (`usb_host = true`,
+- **USB MIDI host**: the Diosynth straight into the FM-1's USB-C. In 0.7: GLO held, SELECT (the Diosynth has a battery).
+  First try (2026-11-21): stuck on LOOKING, no device. The Diosynth WS-1 (AshunSoundMachines, 0a67:7025) is fine for
+  felucca-bsp's parser: a 285-byte configuration (the limit is 320), audio control and two audio streaming interfaces,
+  then USB-MIDI on interface 3 with bulk endpoints of 512 (high speed), which the parser treats as 64 at full speed;
+  self-powered, 20 mA. So the likely cause is power: a device waits for the host's 5 V before it connects, and the
+  FM-1 gives none. Next: through a hub with its own power supply (one chip: fm1-base takes one hub, not a hub inside a
+  hub as Melodee 1.6 does), or an OTG adapter that brings 5 V to the device. fm1-base has it (`usb_host = true`,
   `plat_usb_host`): the FM-1 hosts a USB-MIDI device or one behind a powered hub. The FM-1 gives no power, so the
   Diosynth needs its own battery or a powered hub; while hosting, the computer's USB (audio, MIDI, files) is off.
 - **Document everything** (now: [MANUAL.md](MANUAL.md)).
