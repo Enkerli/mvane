@@ -16,7 +16,9 @@ typedef struct {
     uint16_t mask; /* bit k: the tonic + k semitones is in the scale */
 } chord_scale;
 
-enum { CHORD_CLOSE, CHORD_OPEN, CHORD_WIDE, CHORD_STYLES };
+/* PAIRS (Alex's): the 3rd and 7th in the left hand, the root and 5th above them in the right, two pairs moving
+ * around; more voices go on top */
+enum { CHORD_CLOSE, CHORD_OPEN, CHORD_WIDE, CHORD_PAIRS, CHORD_STYLES };
 
 extern const chord_scale CHORD_SCALES[];
 extern const unsigned CHORD_NSCALES;

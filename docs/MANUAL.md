@@ -34,7 +34,7 @@ The four knobs' names are on the screen above them, and the one you turn lights 
 
 | Page | K1 | K2 | K3 | K4 |
 | --- | --- | --- | --- | --- |
-| **PLAY** (as Coral Flower's) | QUANT (off, basic, full: not acting yet) | KEY | SCALE | GLIDE |
+| **PLAY** (as Coral Flower's) | QUANT (off, basic, full) | KEY | SCALE | GLIDE |
 | **SOUND**, Clipper's sounds | BRITE | TIMBR | MOTN | SPACE (Clipper's four macros) |
 | **SOUND**, mvane yard's saw | TONE | ATTACK | RELEASE | GLIDE |
 
@@ -44,7 +44,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 
 | Layer | K1 | K2 | K3 | K4 | SELECT |
 | --- | --- | --- | --- | --- | --- |
-| **EDIT**: CHORD | VOICING (close, open, wide) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
+| **EDIT**: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
 | **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
@@ -84,7 +84,17 @@ pressure apart).
 - Every chord has a separate bass (EDIT turns it off) and 3 to 6 upper voices (LFO).
 - Voice leading: each chord is voiced from the one before, so the voices move as little as they can; notes the two
   chords share are held, and the moving voices glide (K3 sets how long).
-- Voicings: CLOSE (within about an octave), OPEN (drop-2-like), WIDE (broad, every gap a fourth or more).
+- Voicings: CLOSE (within about an octave), OPEN (drop-2-like), WIDE (broad, every gap a fourth or more), PAIRS (the
+  3rd and 7th in the left hand, the root and 5th above them in the right: two pairs of fifths moving around; more
+  voices go on top; with three voices, OPEN).
+
+### QUANT (as Coral Flower's: to the scale, not in time)
+
+- **OFF**: CHORDS: the white keys are roots a semitone apart, the tonic on the fifth key. NOTES: as printed.
+- **BASIC** (the default): CHORDS: the white keys are the scale's degrees. NOTES: each key snaps to the nearest tone
+  of the scale (down on a tie: C# to C in C major).
+- **FULL**: as BASIC, and each tone of a fixed quality (the qualities bank) snaps to the scale too: the chords become
+  diatonic.
 
 ### Scales (pitch-class sets)
 
@@ -105,8 +115,8 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 
 PRESETS steps through mvane yard's saw (a band-limited saw through a key-tracked lowpass, dark to bright), then
 Clipper's factory sounds, engines in an order for chords: HYBRID, JUNO, STRINGS, ANALOG, FM6, FMX, DIGITAL, WHEEL,
-PHASE, VOICE, MACRO, PHYS, TRIO, VPS, TERRAIN, WSEQ, VECTOR, GRAIN, SAMPLE, LOFI, ACID, NOISE. WAVE is left out for
-now (RAM). Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
+PHASE, VOICE, MACRO, PHYS, TRIO, VPS, TERRAIN, WSEQ, VECTOR, GRAIN, SAMPLE. WAVE is left out for now (RAM); ACID,
+NOISE and LOFI are out of the list. Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
 aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (71 resonance, 72 release, 73 attack,
 74 cutoff, 75 decay, 5 glide, 16 to 19 the macros).
 
@@ -156,5 +166,6 @@ Meanwhile there is no computer: no USB audio, no files. GLO held, SELECT left: b
   and crash (felucca-bsp's docs/CPU.md). It is Clipper's code as Clipper ships it. If mvane yard crashes or glitches on
   Clipper's sounds, say so: the fix is known (those multiplies out of line).
 - Headphones at full volume may distort a little (the FM-1's output stage).
-- One processor core for the sound (Clipper uses two).
-- QUANT is on the PLAY page but does not act yet; no arpeggiator, no sequencer yet.
+- Clipper's sounds use both processor cores (half the voices each, as in Clipper); mvane yard's saw one. Watch CPU on
+  the screen: some sounds cost far more than others.
+- No arpeggiator, no sequencer yet.

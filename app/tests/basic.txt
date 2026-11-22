@@ -266,3 +266,35 @@ wait 100
 turn PRESET -1
 wait 100
 expect sound 0
+# QUANT (the PLAY page's K1): BASIC by default; NOTES: a black key snaps to the scale (C# to C); OFF: as printed
+turn ALGO -1
+wait 30
+expect quant 1
+out
+key 1 down 100
+wait 30
+expect note_last 41
+key 1 up
+wait 30
+turn K1 -1
+expect quant 0
+out
+key 1 down 100
+wait 30
+expect note_last 42
+key 1 up
+turn K1 1
+turn ALGO 1
+wait 30
+# PAIRS (EDIT K1 to the end): a chord sounds, five notes (bass and two pairs)
+press EDIT
+turn K1 1
+turn K2 -1
+release EDIT
+expect style 3
+key 0 down 100
+wait 50
+expect chord_n 5
+shot pairs.png
+key 0 up
+wait 50

@@ -75,7 +75,7 @@ static void settings_defaults(void)
     set.bank = 1;
     set.type = CHORD_BANK + 1u;          /* M7 */
     set.sound = 0;
-    set.quant = 0;
+    set.quant = 1;                       /* BASIC: the roots the scale's degrees */
     set.mpe_out = 1;
     set.bend = 2;                        /* 48 */
     set.page = 0;
@@ -310,6 +310,7 @@ void app_init(void)
     plat_usb_audio_full(set.usb_full);
     synth_mode(set.play & 1u, set.play >> 1);
     clp_init();
+    clp_cores(plat_cpu2_set(1) == 0 ? 2u : 1u);   /* the second core renders half of Clipper's voices */
     clp_mode(set.play & 1u, set.play >> 1);
     sound_apply();
 }
@@ -420,13 +421,33 @@ static void chord_release(void)
     ui.redraw = 1;
 }
 
+/* a pitch class (or a note) to the nearest tone of the scale, down on a tie (Coral Flower's: C# to C in C major) */
+static uint32_t scale_snap(uint32_t note)
+{
+    uint16_t mask = CHORD_SCALES[set.scale].mask | 1u;
+    uint32_t d;
+    for (d = 0; d < 12u; d++) {
+        if (note >= d && mask >> ((note - d + 12u - set.tonic) % 12u) & 1u)
+            return note - d;
+        if (mask >> ((note + d + 12u - set.tonic) % 12u) & 1u)
+            return note + d;
+    }
+    return note;
+}
+
 /* the chord on ui.chord_degree with the current type, scale and voicing, from what sounds now */
 static void chord_sound(void)
 {
     uint32_t i, j, nn = 0;
     uint8_t notes[CHORD_MAX + 1u], chs[CHORD_MAX + 1u];
-    chord_pcs c = chord_build(CHORD_SCALES[set.scale].mask, set.tonic, ui.chord_degree, set.type, set.voices);
+    /* QUANT (as Coral Flower's): OFF, the roots chromatic from the tonic (a semitone a key); BASIC, the roots the
+     * scale's degrees; FULL, the chord's tones too, each to the nearest tone of the scale (the qualities diatonic) */
+    uint16_t mask = CHORD_SCALES[set.scale].mask;
+    chord_pcs c = chord_build(set.quant ? mask : 0xFFFu, set.tonic, ui.chord_degree, set.type, set.voices);
     chord_voicing v;
+    if (set.quant == 2u)
+        for (i = 0; i < c.n; i++)
+            c.pc[i] = (uint8_t)scale_snap(c.pc[i]);
     if (!chord_voice(c, set.style, ui.chord_lift, ui.have_prev ? &ui.prev : 0, &v))
         return;
     ui.prev = v;
@@ -482,11 +503,18 @@ static void chord_key_down(uint32_t k, uint32_t vel)
             app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
             return;
         }
-    for (i = 0; i < 16u; i++)            /* a white key: a degree, higher up the keyboard */
+    for (i = 0; i < 16u; i++)            /* a white key: a degree (QUANT OFF: a semitone), higher up the keyboard */
         if (WK[i] == k) {
-            uint32_t lift = i / (n ? n : 7u);
-            ui.chord_degree = (uint8_t)(i % (n ? n : 7u));
-            ui.chord_lift = (int8_t)(12 * (lift > 2u ? 2u : lift));
+            uint32_t lift;
+            if (!set.quant) {            /* chromatic: the tonic on the fifth key (Coral Flower's layout) */
+                int32_t st = (int32_t)i - 4;
+                ui.chord_degree = (uint8_t)((st + 24) % 12);
+                ui.chord_lift = (int8_t)(st < 0 ? -12 : st >= 12 ? 12 : 0);
+            } else {
+                lift = i / (n ? n : 7u);
+                ui.chord_degree = (uint8_t)(i % (n ? n : 7u));
+                ui.chord_lift = (int8_t)(12 * (lift > 2u ? 2u : lift));
+            }
             ui.chord_vel = (uint8_t)vel;
             ui.chord_key = (int32_t)k;
             chord_sound();
@@ -811,7 +839,7 @@ static void input(void)
                 chord_key_down(k, ui.vel[k]);
             else {
                 ui.key_ch[k] = (uint8_t)mpe_channel();
-                ui.key_note[k] = (uint8_t)out_note(53 + (int32_t)k);
+                ui.key_note[k] = (uint8_t)out_note((int32_t)(set.quant ? scale_snap(53u + k) : 53u + k));
                 bus(0x90u | ui.key_ch[k], ui.key_note[k], ui.vel[k], LIVE);
             }
         } else if (releasing) {
@@ -1222,6 +1250,8 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_sounds();
     else if (!strcmp(what, "slot"))
         *got = set.slot;
+    else if (!strcmp(what, "note_last"))   /* the last key's note (NOTES) */
+        *got = ui.key_note[1];
     else if (!strcmp(what, "layer"))
         *got = layer_now();
     else if (!strcmp(what, "page"))

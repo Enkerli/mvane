@@ -100,6 +100,19 @@ order:
 - **Submit to the FM-1 Firmware Hub**, eventually: <https://thefirmwarehub.com/submit/> (fm1.toml's install, repo and
   screenshot fields, a release build, firmware.json).
 
+**Seventh session (0.7).** Clipper's sounds: some don't play at once (a top-row key first, then the bottom rows sound);
+xruns on some; many near 50% CPU, mono ones too, where Coral Flower's VA stayed under 20% with ten voices. Drop ACID,
+NOISE, LOFI for now (done in 0.8); several of the other proposed drops Alex likes; tired of most subtractive sound,
+some analog-style engines repetitive: HYBRID may cover JUNO and ANALOG; STRINGS good here. Be clearer about each
+sound's cost. VIBE FM saves the plugin's state; the converter failed on 0.7 (`duplicate symbol: bootguard`, Clipper's
+core.h global: renamed in 0.8, clp.o now exports clp_* only). Coral Flower's QUANT is to the scale, not in time
+(0.8, as its spec: OFF chromatic roots, BASIC degrees, FULL diatonic tones). Alex's voicing, especially for sevenths:
+3rd and 7th in the left hand, root and 5th in the right, two pairs of fifths (0.8: PAIRS). Hubs: Alex's USB-C hubs
+may not pass host to device apart from a computer; further investigation.
+**0.8** also runs Clipper on both cores (fm1-base's second core, as Clipper's own split of the voices).
+Open: the sounds that wait for a top-row key do not do it in the simulator (every sound plays from a bottom-row key
+at velocity 60 straight after a change): to find on the FM-1 (which sounds, NOTES or CHORDS, how soft the press).
+
 **How Alex plays Coral Flower** (the model for CHORDS): arbitrary keys for a succession of arbitrary chords that end up
 going well together; full quantization; some glide; chord types on the black keys ("top lock"), latched; HOLD on the
 top row's last key (F#5). Then a simple recorded sequence is replayed with different presets, preferably ones
@@ -201,7 +214,7 @@ keep the ones that suit chords, keys and leads, merge or drop the rest.
 | VPS, TERRAIN, PHASE | experimental timbres; a few sounds could join a "TEXTURES" list |
 | WSEQ, VECTOR | wave sequencing, vector: interesting, heavier to drive without their editor |
 
-A curated list of sounds by kind (pads, keys, strings, bells, leads, organs, choirs, basses) on PRESETS, the rest in
+Each sound's cost on screen (its CPU, measured, as a bar or a word) would make performance clear. A curated list of sounds by kind (pads, keys, strings, bells, leads, organs, choirs, basses) on PRESETS, the rest in
 an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (WAVE could come back).
 
 ### M3: ProgGenie on the device

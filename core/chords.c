@@ -48,7 +48,7 @@ static const uint8_t QUALITY[][CHORD_MAX] = {
 const char *const CHORD_TYPE_NAMES[] = {"STACK", "7", "TRIAD", "ADD9", "SUS", "6/9", "QUARTAL", "11", "FIFTHS", "V/",
                                         "M6", "M7", "M9", "S2", "S4", "m6", "m7", "m9", "M", "m"};
 const unsigned CHORD_NTYPES = NSCALE_TYPES + sizeof QUALITY / sizeof QUALITY[0];
-const char *const CHORD_STYLE_NAMES[CHORD_STYLES] = {"CLOSE", "OPEN", "WIDE"};
+const char *const CHORD_STYLE_NAMES[CHORD_STYLES] = {"CLOSE", "OPEN", "WIDE", "PAIRS"};
 
 unsigned chord_scale_size(uint16_t mask)
 {
@@ -95,7 +95,7 @@ typedef struct {
     int lo, hi, span_min, span_max, gap_min, center;
 } chord_style_t;
 /* spans for four voices; more voices widen them (a sixth voice needs room) */
-static const chord_style_t STYLE[CHORD_STYLES] = {
+static const chord_style_t STYLE[CHORD_PAIRS] = {
     {52, 81, 0, 14, 1, 64},  /* close: within about an octave */
     {48, 86, 12, 26, 3, 65}, /* open: drop-2-like spreads */
     {45, 98, 20, 42, 5, 67}, /* wide: broad, every gap a fourth or more */
@@ -197,11 +197,84 @@ static void ch__walk(ch__search *q, unsigned j, int lo, int hi, int cost)
     }
 }
 
+/* the bass: the root between A1 and G#2, the octave nearer the previous bass, always under the chord */
+static void ch__bass(uint8_t root, const chord_voicing *prev, chord_voicing *v)
+{
+    int b = 33 + (int)((root + 12u - 9u) % 12u);
+    if (prev && mvane_abs(b + 12 - (int)prev->bass) < mvane_abs(b - (int)prev->bass) && b + 12 <= 47
+        && b + 12 < (int)v->upper[0])
+        b += 12;
+    while (b >= (int)v->upper[0] && b >= 36)
+        b -= 12;
+    v->bass = (uint8_t)b;
+}
+
+/* PAIRS: two hands of two. The left the 3rd and 7th (pc[0], pc[2]) within a sixth of each other, in the low middle
+ * register; the right the root and 5th (root, pc[1]) above it, within a sixth too; the rest (pc[3] ..) above those,
+ * each its nearest tone over the right hand. Of the placements, the least motion from the previous chord (each new
+ * note to its nearest old one) and the nearest to the middle */
+static int ch__pairs(chord_pcs c, int lift, const chord_voicing *prev, chord_voicing *out)
+{
+    int role[4], best = MVANE_INT_MAX, a, b, x, y;
+    chord_voicing v, found;
+    unsigned n = c.n > CHORD_MAX ? CHORD_MAX : c.n, k;
+    if (n < 4u)                                       /* three voices: no two pairs (OPEN then) */
+        return 0;
+    role[0] = c.pc[0] % 12u, role[1] = c.pc[2 < c.n ? 2 : 0] % 12u, role[2] = c.root % 12u, role[3] = c.pc[1] % 12u;
+    for (a = 40 + lift; a < 60 + lift; a++) {          /* the left hand's lower note */
+        int la = a % 12 == role[0] ? 0 : a % 12 == role[1] ? 1 : -1, lb_pc, top;
+        if (la < 0)
+            continue;
+        lb_pc = role[1 - la];
+        for (b = a + 1; b <= a + 9; b++) {             /* its upper note: a sixth at most above */
+            if (b % 12 != lb_pc)
+                continue;
+            for (x = b + 1; x <= b + 10; x++) {        /* the right hand's lower note, over the left */
+                int rx = x % 12 == role[2] ? 2 : x % 12 == role[3] ? 3 : -1, ry_pc;
+                if (rx < 0)
+                    continue;
+                ry_pc = role[rx == 2 ? 3 : 2];
+                for (y = x + 1; y <= x + 9; y++) {
+                    int note[CHORD_MAX], cost;
+                    if (y % 12 != ry_pc)
+                        continue;
+                    note[0] = a, note[1] = b, note[2] = x, note[3] = y, top = y;
+                    for (k = 4; k < n; k++) {          /* the extensions over the right hand */
+                        int t = top + 1;
+                        while (t % 12 != (int)(c.pc[k] % 12u))
+                            t++;
+                        note[k] = top = t;
+                    }
+                    if (top > 100)
+                        continue;
+                    cost = 2 * mvane_abs((a + y) / 2 - (62 + lift));
+                    if (prev && prev->n)
+                        cost += ch__motion(prev, note, n);
+                    if (cost < best) {
+                        best = cost;
+                        found.n = (uint8_t)n;
+                        for (k = 0; k < n; k++)
+                            found.upper[k] = (uint8_t)note[k];
+                    }
+                }
+            }
+        }
+    }
+    if (best == MVANE_INT_MAX)
+        return 0;
+    v = found;
+    ch__bass(c.root, prev && prev->n ? prev : 0, &v);
+    *out = v;
+    return 1;
+}
+
 int chord_voice(chord_pcs c, unsigned style, int lift, const chord_voicing *prev, chord_voicing *out)
 {
     ch__search q;
     unsigned j;
-    q.s = &STYLE[style < CHORD_STYLES ? style : 0];
+    if (style == CHORD_PAIRS)
+        return ch__pairs(c, lift, prev, out) || chord_voice(c, CHORD_OPEN, lift, prev, out);
+    q.s = &STYLE[style < CHORD_PAIRS ? style : 0];
     q.n = c.n < 3u ? 3u : c.n > CHORD_MAX ? CHORD_MAX : c.n;
     q.span_extra = ((int)q.n - 4) * (style == CHORD_WIDE ? 8 : style == CHORD_OPEN ? 6 : 4);
     q.lo = q.s->lo + lift, q.hi = q.s->hi + lift + (q.span_extra > 0 ? q.span_extra / 2 : 0);
@@ -227,15 +300,7 @@ int chord_voice(chord_pcs c, unsigned style, int lift, const chord_voicing *prev
         ch__walk(&q, 0, 1000, -1000, 0);
     if (q.best == MVANE_INT_MAX)
         return 0;
-    { /* the bass: the root between A1 and G#2, the octave nearer the previous bass, always under the chord */
-        int b = 33 + (int)((c.root + 12u - 9u) % 12u);
-        if (q.prev && mvane_abs(b + 12 - (int)q.prev->bass) < mvane_abs(b - (int)q.prev->bass) && b + 12 <= 47
-            && b + 12 < (int)q.found.upper[0])
-            b += 12;
-        while (b >= (int)q.found.upper[0] && b >= 36)
-            b -= 12;
-        q.found.bass = (uint8_t)b;
-    }
+    ch__bass(c.root, q.prev, &q.found);
     *out = q.found;
     return 1;
 }

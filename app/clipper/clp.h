@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 void clp_init(void);
+void clp_cores(uint32_t n);                   /* 2: the second core runs (plat_cpu2_set): half the voices there */
 uint32_t clp_sounds(void);                    /* the factory sounds, by kind (bass, keys, organ, pad, lead, ...) */
 const char *clp_sound_name(uint32_t i);       /* its name, 0 past the last */
 const char *clp_sound_engine(uint32_t i);     /* its engine's name */

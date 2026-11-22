@@ -107,11 +107,18 @@ static const uint8_t clp_no_slot[64] = {0xFF, 0xFF, 0xFF, 0xFF};
 
 /* ----------------------------------------------------------- the synth --- */
 #include "felucca_tables.h"
+#define bootguard clp_bootguard                 /* (core.h's global, unused by the synth: its own name, so a platform's
+                                                 * bootguard never clashes: VIBE FM's converter) */
 #include "core.h"
 #include "cpu1.h"
-static int cpu1_run(cpu1_job_t fn, uint32_t arg) { (void)fn, (void)arg; return 0; }   /* one core: nothing handed */
-static int cpu1_wait(void) { return 0; }
-static int cpu1_on(void) { return 0; }
+/* the second core: fm1-base's (plat.h plat_cpu2_*, the same lineage as Clipper's cpu1.c: X0X, Melodee). voice.c hands it
+ * half of a part's voices each block when cpu1_units and cpu1_on() say so (clp_cores) */
+int plat_cpu2_on(void);
+int plat_cpu2_run(void (*fn)(uint32_t), uint32_t arg);
+int plat_cpu2_wait(void);
+static int cpu1_run(cpu1_job_t fn, uint32_t arg) { return plat_cpu2_run(fn, arg); }
+static int cpu1_wait(void) { return plat_cpu2_wait(); }
+static int cpu1_on(void) { return plat_cpu2_on(); }
 static uint32_t cpu1_ticks(void) { return 0; }
 #include "engines.c"
 #include "drums.c"
@@ -198,6 +205,8 @@ void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (C
         trk[0].p[P_VOICE] = V_LEGATO;
 }
 
+void clp_cores(uint32_t n) { cpu1_units = n > 1u ? 1 : 0; }   /* the app started the second core (app_init) */
+
 void clp_init(void)
 {
     uint32_t i, e, p;
@@ -215,7 +224,8 @@ void clp_init(void)
         static const uint8_t ORDER[] = {ENGI_HYBRID, ENGI_JUNO, ENGI_STRINGS, 0 /* ANALOG */, ENGI_FM6, ENGI_FMX,
                                         1 /* DIGITAL */, 7 /* WHEEL */, 2 /* PHASE */, 5 /* VOICE */, ENGI_MACRO,
                                         ENGI_PHYS, 6 /* TRIO */, ENGI_VPS, ENGI_TERRAIN, ENGI_WAVE, ENGI_WSEQ,
-                                        ENGI_VECTOR, ENGI_GRAIN, 4 /* SAMPLE */, 3 /* LOFI */, ENGI_ACID, ENGI_NOISE};
+                                        ENGI_VECTOR, ENGI_GRAIN, 4 /* SAMPLE */};
+        /* (left out, Alex 2026-11-21: ACID, NOISE, LOFI; their code stays, out of the list) */
         uint32_t k;
         for (k = 0; k < sizeof ORDER; k++) {
             e = ORDER[k];

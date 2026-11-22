@@ -29,6 +29,7 @@ int main(void)
                             unsigned j, ok = 0;
                             for (j = 0; j < c.n; j++)
                                 ok |= v.upper[i] % 12u == c.pc[j];
+                        ok |= st == CHORD_PAIRS && v.upper[i] % 12u == c.root;   /* (PAIRS: the root in the right hand) */
                             assert(ok);
                             if (i)
                                 assert(v.upper[i] > v.upper[i - 1]);
@@ -71,6 +72,17 @@ int main(void)
         printf("chords: C maj9 close %u %u %u %u; wide %u %u %u %u; 6-voice wide (bass %u) %u %u %u %u %u %u\n",
                c.upper[0], c.upper[1], c.upper[2], c.upper[3], w.upper[0], w.upper[1], w.upper[2], w.upper[3],
                six.bass, six.upper[0], six.upper[1], six.upper[2], six.upper[3], six.upper[4], six.upper[5]);
+    }
+    {   /* PAIRS: Cmaj7 as E-B under C-G; Dm7 as F-C under D-A; the pairs a fifth (or less) wide, the right hand over */
+        chord_voicing a, b;
+        chord_pcs x = chord_build(0xAB5u, 0, 0, CHORD_BANK + 1u, 4), y = chord_build(0xAB5u, 0, 1, CHORD_BANK + 6u, 4);
+        assert(chord_voice(x, CHORD_PAIRS, 0, 0, &a) && chord_voice(y, CHORD_PAIRS, 0, &a, &b));
+        assert(a.upper[0] % 12 == 4 || a.upper[0] % 12 == 11);
+        assert(a.upper[2] % 12 == 0 || a.upper[2] % 12 == 7);
+        assert(a.upper[1] - a.upper[0] <= 9 && a.upper[3] - a.upper[2] <= 9 && a.upper[2] > a.upper[1]);
+        assert(b.upper[0] % 12 == 5 || b.upper[0] % 12 == 0);
+        printf("chords: PAIRS Cmaj7 %u %u | %u %u  -> Dm7 %u %u | %u %u\n", a.upper[0], a.upper[1], a.upper[2], a.upper[3],
+               b.upper[0], b.upper[1], b.upper[2], b.upper[3]);
     }
     printf("chords: %u voicings (3 to 6 voices), mean voice motion %.2f semitones, %.0f us each on this machine\n",
            voiced, (double)total_motion / moves, 1e6 * (double)(clock() - t0) / CLOCKS_PER_SEC / voiced);
