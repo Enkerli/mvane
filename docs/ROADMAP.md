@@ -72,7 +72,7 @@ In order, each to judge by ear on the FM-1:
       (multitimbral).
     - **The take's own scale** stored with it (the take file's header), so a take saved in C major plays in C minor
       from its first note when the scale has changed since.
-12. **The ARP** (Alex, 2026-11-22). **A basic one done in 0.12.4**: ARP tapped OFF / ON / LATCH (not a key), held
+12. **The ARP** (Alex, 2026-11-22). **A basic one done in 0.12.5**: ARP tapped OFF / ON / LATCH (not a key), held
     its layer; UP, DOWN, UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD; 1/4 to 1/32 with triplets; GATE;
     OCTAVES; a tempo of its own; each note on its source's MPE channel (its pressure and bend follow). Next:
     - **Its degrees from the expression**: pressure or slide choosing how far up the run goes, or which degree.
