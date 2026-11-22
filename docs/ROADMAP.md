@@ -56,7 +56,7 @@ In order, each to judge by ear on the FM-1:
 7. **The sound list curated**: engines dropped or folded (Alex: variety over count), which frees flash and RAM.
 8. **CPU**: a per-bus effect gate (about 15% of a light sound back while playing), the hot engine code in RAM if the
    xruns at a change of sound come back.
-9. **VIBE FM**, once the converter's log says why 0.10-beta does not convert.
+9. **VIBE FM**: the converter runs again (2026-11-22) and its platform now has the second core's calls and the USB host's state: the stand-ins for those, which it took for second definitions, are gone (0.12.6); next, its result in the plugin.
 10. **Try it in the browser, from the landing page** (Alex, 2026-11-22): fm1-base's WebAssembly emulator (the host
     build, as the VIBE route needs anyway) on the page, the panel and keys on screen, takes and sounds from the
     computer. Not installing from the browser: with the bricked-module stories around, the page points to

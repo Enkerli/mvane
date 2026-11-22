@@ -981,21 +981,13 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
 }
 
 /* ------------------------------------------------------------- VIBE FM --- */
-/* VIBE FM's converter (TheFirmwareHub) builds the firmware to WebAssembly on a platform of its own, which may lack
- * what mvane yard took up after 0.4 (the hub's newest that converts, 2026-11-22): the second core, the USB host, a
- * lost USB, the microsecond ticks. Weak stand-ins for that build only (a WebAssembly build that is not fm1-base's
- * emulator): where the converter's platform has them, its own win; where not, one core, no USB host */
+/* VIBE FM's converter (TheFirmwareHub) builds the firmware to WebAssembly on a platform of its own, in one unit with
+ * it (so a weak definition is still a second one). Since 2026-11-22 that platform has the second core's calls
+ * (one core there) and the USB host's state and messages; it lacks the USB host's switch and the microsecond ticks:
+ * stand-ins for those two only, in that build only (a WebAssembly build that is not fm1-base's emulator) */
 #if defined(__wasm__) && !defined(PLAT_HOST)
-__attribute__((weak)) int plat_cpu2_set(int on) { (void)on; return -1; }
-__attribute__((weak)) int plat_cpu2_on(void) { return 0; }
-__attribute__((weak)) int plat_cpu2_run(void (*fn)(uint32_t), uint32_t arg) { (void)fn, (void)arg; return 0; }
-__attribute__((weak)) int plat_cpu2_wait(void) { return -1; }
 __attribute__((weak)) uint32_t plat_ticks24(void) { return plat_ms() * 24000u; }
 __attribute__((weak)) void plat_usb_host(int on) { (void)on; }
-__attribute__((weak)) int plat_usb_host_msg(void) { return 0; }
-__attribute__((weak)) const char *plat_usb_host_name(void) { return ""; }
-__attribute__((weak)) int plat_usb_host_state(void) { return 0; }
-__attribute__((weak)) int plat_usb_lost(void) { return 0; }
 #endif
 
 /* -------------------------------------------------------------- the takes --- */
