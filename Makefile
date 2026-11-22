@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -59,3 +59,11 @@ clp-race:   # Clipper's voices on two threads under ThreadSanitizer, bit for bit
 	@mkdir -p $(B)
 	$(CC) -O1 -g -std=gnu99 -w -fsanitize=thread -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_race.c -o $(B)/clp_race -lm -lpthread
 	TSAN_OPTIONS=halt_on_error=1 $(B)/clp_race $(ENGINES)
+
+clp-bank:   # each Clipper sound's family by how it behaves (app/clipper/gen/clp_bank.h)
+	@mkdir -p $(B)
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_bank.c -o $(B)/clp_bank -lm
+	$(B)/clp_bank app/clipper/gen/clp_bank.h > $(B)/clp_bank.txt
+	tail -5 $(B)/clp_bank.txt
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_bank.c -o $(B)/clp_bank -lm
+	$(B)/clp_bank docs/SOUNDS.md list

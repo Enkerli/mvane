@@ -48,7 +48,9 @@ typedef struct {
     uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
     uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BREATH, 3 MONO+BREATH (synth_mode) */
     uint8_t slot;                        /* the take's slot (multiple takes) */
-    uint16_t sound;                      /* 0 mvane yard's saw; 1.. Clipper's factory sounds (clp.h) */
+    uint16_t sound;                      /* 0 mvane yard's saw; 1.. Clipper's factory sounds (clp.h), their place in the
+                                          * list here; stored as 0x8000 | its key (engine << 8 | preset: the list's
+                                          * order may change), before 0.10 as its place in the order as made */
     uint8_t quant;                       /* QUANT: 0 off, 1 basic, 2 full (the PLAY page; not acting yet) */
     uint8_t mpe_out;                     /* 1: a channel a note (MPE); 0: everything on channel 1 */
     uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
@@ -94,6 +96,21 @@ static void settings_load(void)
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
         || set.mpe_out > 1u || set.bend > 3u || set.page > 1u)
         settings_defaults();
+}
+
+/* the sound as stored to its place in the list (after clp_init), and back (to store) */
+static void sound_from_store(void)
+{
+    uint32_t key, i;
+    if (!set.sound)
+        return;
+    key = set.sound & 0x8000u ? set.sound & 0x7FFFu : clp_sound_old_key(set.sound - 1u);
+    i = clp_sound_of_key(key);
+    set.sound = (uint16_t)(i < clp_sounds() ? i + 1u : 0u);
+}
+static uint16_t sound_to_store(void)
+{
+    return (uint16_t)(set.sound ? 0x8000u | (clp_sound_key(set.sound - 1u) & 0x7FFFu) : 0u);
 }
 
 /* ------------------------------------------------------------- the render --- */
@@ -391,6 +408,7 @@ void app_init(void)
     plat_usb_audio_full(set.usb_full);
     synth_mode(set.play & 1u, set.play >> 1);
     clp_init();
+    sound_from_store();
     clp_cores(plat_cpu2_set(1) == 0 ? 2u : 1u);   /* the second core renders half of Clipper's voices */
     clp_mode(set.play & 1u, set.play >> 1);
     sound_apply();
@@ -772,6 +790,34 @@ static void sound_change_hold(void)
     }
 }
 
+/* PRESETS turned: a sound on or back; a fast turn, the next family's first sound (or this one's, then the one before):
+ * YARD (the saw), CHORDS LIGHT, CHORDS, HITS LIGHT, HITS, LEADS, OTHER (clp_sound_family) */
+static int32_t sound_fam(uint32_t s) { return s ? (int32_t)clp_sound_family(s - 1u) : -1; }
+static void sound_step(int32_t e)
+{
+    uint32_t ns = clp_sounds() + 1u, s = set.sound;
+    if (e > 4) {
+        int32_t f = sound_fam(s);
+        while (s + 1u < ns && sound_fam(s) == f)
+            s++;
+        if (sound_fam(s) == f)
+            s = 0;                       /* (past the last family: back to the start) */
+    } else if (e < -4) {
+        int32_t f = sound_fam(s);
+        if (s && sound_fam(s - 1u) == f) {   /* within a family: its first */
+            while (s && sound_fam(s - 1u) == f)
+                s--;
+        } else {                         /* at a family's first: the one before's first */
+            s = s ? s - 1u : ns - 1u;
+            f = sound_fam(s);
+            while (s && sound_fam(s - 1u) == f)
+                s--;
+        }
+    } else
+        s = (s + ns + (e > 0 ? 1u : ns - 1u)) % ns;
+    set.sound = (uint16_t)s;
+}
+
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
 {
     char t[16] = "TAKE ", n[12];
@@ -982,23 +1028,12 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
     } else if (l == B_SEQ)
         slot_step(d);
-    else {                               /* the play pages: a jump to the next / previous engine's sounds */
-        uint32_t ns = clp_sounds() + 1u, k = set.sound, n;
-        const char *eng = set.sound ? clp_sound_engine(set.sound - 1u) : "";
-        for (n = 0; n < ns; n++) {
-            k = (k + ns + (uint32_t)d) % ns;
-            if (!k || clp_sound_engine(k - 1u) != eng)
-                break;
-        }
-        if (d < 0 && k) {                /* back: to that engine's first sound */
-            const char *e2 = clp_sound_engine(k - 1u);
-            while (k > 1u && clp_sound_engine(k - 2u) == e2)
-                k--;
-        }
-        set.sound = (uint16_t)k;
+    else {                               /* the play pages: the next / previous family's first sound */
+        sound_step(d > 0 ? 5 : -5);
         set_dirty = 1;
         sound_change_hold();
-        app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_label());
+        app_say(set.sound ? clp_family_name(clp_sound_family(set.sound - 1u)) : "YARD",
+                set.sound ? clp_sound_name(set.sound - 1u) : "SAW");
     }
 }
 
@@ -1115,7 +1150,11 @@ static void input(void)
             uint32_t i;
             for (i = 0; i < SP_N; i++)
                 set.p[i] = knob[i];      /* the knobs as set, not as a take left them */
-            bad = plat_store_save(OBJ_SETTINGS, &set, sizeof set) != 0;
+            {
+                settings_t st = set;
+                st.sound = sound_to_store();
+                bad = plat_store_save(OBJ_SETTINGS, &st, sizeof st) != 0;
+            }
             if (!bad)
                 set_dirty = 0;
             if (take_dirty && !player.playing)
@@ -1151,13 +1190,12 @@ static void input(void)
             set.mode = (uint8_t)(e > 0);
             set_dirty = 1;
             app_say("MODE", set.mode ? "CHORDS" : "NOTES");
-        } else if (k == EN_PRESET) {     /* PRESETS: the sound (0 mvane yard's saw, then Clipper's) */
-            uint32_t ns = clp_sounds() + 1u;
-            int32_t d = e > 0 ? (e > 4 ? 8 : 1) : (e < -4 ? -8 : -1);   /* a fast turn: eight at a time */
-            set.sound = (uint16_t)(((int32_t)set.sound + d + 8 * (int32_t)ns) % (int32_t)ns);
+        } else if (k == EN_PRESET) {     /* PRESETS: the sound (0 mvane yard's saw, then Clipper's by family) */
+            sound_step(e);
             set_dirty = 1;
             sound_change_hold();
-            app_say(set.sound ? clp_sound_engine(set.sound - 1u) : "YARD", sound_label());
+            app_say(set.sound ? clp_family_name(clp_sound_family(set.sound - 1u)) : "YARD",
+                    set.sound ? clp_sound_name(set.sound - 1u) : "SAW");
         } else if (k == EN_SELECT)
             select_turn(e);
         else
@@ -1478,6 +1516,7 @@ void app_file_changed(uint32_t obj)
     if (obj != OBJ_SETTINGS)
         return;
     settings_load();
+    sound_from_store();
     for (i = 0; i < SP_N; i++)
         synth_set(i, set.p[i]), knob[i] = set.p[i];
     set_dirty = 0;
@@ -1491,6 +1530,13 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
 {
     uint32_t i, n;
     (void)c, (void)d;
+    if (!strcmp(cmd, "stored_sound")) {  /* the sound as a settings record holds it (before 0.10: a place in the old
+                                          * order; 0x8000 | key since), read as at the start */
+        set.sound = (uint16_t)strtoul(a, 0, 0);
+        sound_from_store();
+        printf("ok\n");
+        return 1;
+    }
     if (strcmp(cmd, "flood"))
         return 0;
     n = (uint32_t)atoi(a);
@@ -1552,6 +1598,14 @@ int app_expect(const char *what, int *got)
         *got = ui.hold;
     else if (!strcmp(what, "cores"))   /* the second core takes jobs: 2, else 1 */
         *got = plat_cpu2_on() ? 2 : 1;
+    else if (!strcmp(what, "sound_key"))   /* engine << 8 | preset of the sound (-1: the saw); stored: as saved */
+        *got = set.sound ? (int)clp_sound_key(set.sound - 1u) : -1;
+    else if (!strcmp(what, "sound_stored"))
+        *got = sound_to_store();
+    else if (!strcmp(what, "mono"))     /* the sound is a mono one */
+        *got = sound_mono();
+    else if (!strcmp(what, "family"))   /* its family: -1 the saw, 0 CHORDS LIGHT .. 5 OTHER */
+        *got = sound_fam(set.sound);
     else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
         *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */

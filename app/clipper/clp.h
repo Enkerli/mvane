@@ -14,7 +14,15 @@ const char *clp_sound_engine(uint32_t i);     /* its engine's name */
 const char *clp_sound_kind(uint32_t i);
 int clp_sound_mono(uint32_t i);              /* 1: a mono sound (legato) */
 uint32_t clp_sound_key(uint32_t i);           /* engine << 8 | preset (tools) */
-uint32_t clp_sound_cost(uint32_t i);          /* 0 LIGHT, 1 MID, 2 HEAVY: its measured CPU (tools/clp_cost.c) */       /* BASS KEYS ORGN PAD LEAD PLCK STAB FX */
+uint32_t clp_sound_cost(uint32_t i);
+/* the families (by how each sound behaves: tools/clp_bank.c): 0 CHORDS LIGHT, 1 CHORDS, 2 HITS LIGHT, 3 HITS, 4 LEADS,
+ * 5 OTHER; the list runs through them in that order */
+uint32_t clp_sound_family(uint32_t i);
+const char *clp_family_name(uint32_t f);
+uint32_t clp_sound_kind_id(uint32_t i);       /* Clipper's kind: 0 BASS 1 KEYS 2 ORGAN 3 PAD 4 LEAD 5 PLUCK 6 STAB 7 FX 8 none */
+void clp_bank_on(int on);                     /* 1 (default): by family; 0: as made, by engine (tools) */
+uint32_t clp_sound_old_key(uint32_t i);       /* engine << 8 | preset of index i in the order before 0.10 */
+uint32_t clp_sound_of_key(uint32_t key);      /* the index of a sound by its key now (clp_sounds(): none) */          /* 0 LIGHT, 1 MID, 2 HEAVY: its measured CPU (tools/clp_cost.c) */       /* BASS KEYS ORGN PAD LEAD PLCK STAB FX */
 void clp_select(uint32_t i);                  /* play sound i (main loop: the part switches at its next block) */
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2);   /* a MIDI message (render: before clp_render) */
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12);   /* n stereo frames, 24-bit, MASTER as the render has it */

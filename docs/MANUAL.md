@@ -54,8 +54,8 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | Control | Does |
 | --- | --- |
 | **ALGORITHM** | NOTES (left) / CHORDS (right) |
-| **PRESETS** | The sound: mvane yard's saw, then Clipper's sounds (a fast turn moves eight at a time) |
-| **SELECT** | On the pages: the next or previous engine's sounds. In a layer: as above |
+| **PRESETS** | The sound: mvane yard's saw, then Clipper's sounds by family (a fast turn: the next family) |
+| **SELECT** | On the pages: the next or previous family's first sound. In a layer: as above |
 | **HOME** | PLAY page / SOUND page |
 | **OCT- / OCT+** | Octave; both together: panic (everything off) |
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history |
@@ -121,10 +121,22 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 
 ### Sounds
 
-PRESETS steps through mvane yard's saw (a band-limited saw through a key-tracked lowpass, dark to bright), then
-Clipper's factory sounds (337), engines in an order for chords: HYBRID, JUNO, STRINGS, ANALOG, FM6, FMX, DIGITAL, WHEEL,
-PHASE, VOICE, MACRO, PHYS, TRIO, VPS, TERRAIN, WSEQ, VECTOR, GRAIN, SAMPLE. WAVE is left out for now (RAM); ACID,
-NOISE and LOFI are out of the list. Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
+PRESETS steps through mvane yard's saw (YARD: a band-limited saw through a key-tracked lowpass, dark to bright), then
+Clipper's factory sounds (337) in families, by how each behaves (the full list: [SOUNDS.md](SOUNDS.md)):
+
+| Family | What | For |
+| --- | --- | --- |
+| **CHORDS LIGHT** (14) | Sustained, polyphonic, light on the CPU: SAMPLE's pads, the WHEEL organs, PHASE's organ and keys | Chords, with CPU to spare |
+| **CHORDS** (119) | Sustained, polyphonic: pads, strings, organs, keys that hold | Chords |
+| **HITS LIGHT** (24), **HITS** (72) | Short, polyphonic: plucks, bells, stabs | Stabs, hits, bursts, arpeggios |
+| **LEADS** (79) | Mono, sustained: leads and basses | A wind controller |
+| **OTHER** (29) | Mono and short, percussion, noises | |
+
+The screen names the family as the sound changes (CHORDS LIGHT, SAMPLE CHOIR). A fast turn of PRESETS, or SELECT on
+the play pages, goes to the next family's first sound (back: this family's first, then the one before). Within a
+family, sounds of a kind are together, in Clipper's own filing: pads, organs, keys, stabs, plucks, leads, basses.
+WAVE is left out for now (RAM); ACID, NOISE and LOFI are out of the list. A sound saved in the settings stays the
+same across the reordering (it is kept by name, not by place). Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
 aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (71 resonance, 72 release, 73 attack,
 74 cutoff, 75 decay, 5 glide, 16 to 19 the macros). A sound that full pressure or slide left unchanged as Clipper
 made it (measured, `make clp-expr`) gets them routed when it loads: pressure to its tone and a little to its level,

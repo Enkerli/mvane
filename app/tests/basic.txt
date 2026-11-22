@@ -310,10 +310,19 @@ tapkey 0 90
 wait 100
 expect chord_n 5
 expect voices 5
-turn PRESET 1
-turn PRESET 1
+# (a fast turn, all at once: the next family's first sound; four of them from CHORDS LIGHT: LEADS, mono)
+expect family 0
+spin PRESET 9
+wait 50
+expect family 1
+spin PRESET 9
+wait 50
+spin PRESET 9
+wait 50
+spin PRESET 9
 wait 200
-expect sound 4
+expect family 4
+expect mono 1
 expect chord_n 5
 expect voices 1
 shot mono-sound.png

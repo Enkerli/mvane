@@ -222,6 +222,11 @@ keep the ones that suit chords, keys and leads, merge or drop the rest.
 | VPS, TERRAIN, PHASE | experimental timbres; a few sounds could join a "TEXTURES" list |
 | WSEQ, VECTOR | wave sequencing, vector: interesting, heavier to drive without their editor |
 
+**Families** (0.10-dev, Alex 2026-11-22): PRESETS runs through CHORDS LIGHT, CHORDS, HITS LIGHT, HITS, LEADS,
+OTHER, by how each sound behaves (`make clp-bank`: held 2.5 s, sustained or not; poly or mono; Clipper's own kind
+where it is clear) and its cost; [SOUNDS.md](SOUNDS.md) lists them. Next: the curated selection within them
+(dropping engines and sounds), arpeggios for HITS.
+
 Alex, after 0.9 on the device (2026-11-22): the most interesting **light polyphonic** sounds are in WHEEL, PHASE and
 SAMPLE; the other light ones are mono or semi-percussive. MID covers a wide variety: favour **variety of sound** over
 the number of sounds when choosing what stays. Removing engines makes room on the device (flash, RAM).

@@ -299,6 +299,7 @@ void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (C
 
 void clp_cores(uint32_t n) { cpu1_units = n > 1u ? 1 : 0; }   /* the app started the second core (app_init) */
 
+static void clp_order(void);
 void clp_init(void)
 {
     uint32_t i, e, p;
@@ -311,23 +312,104 @@ void clp_init(void)
             trk[i].p[p] = TP[p].def;
     song.master_q12 = 4096;
     mpe_mode = 1;                                /* MPE: the member channels' own bend (48), pressure, slide */
-    clp_n = 0;
-    {   /* every factory sound, the engines in an order for chords: pads and keys first, basses and noises last */
-        static const uint8_t ORDER[] = {ENGI_HYBRID, ENGI_JUNO, ENGI_STRINGS, 0 /* ANALOG */, ENGI_FM6, ENGI_FMX,
-                                        1 /* DIGITAL */, 7 /* WHEEL */, 2 /* PHASE */, 5 /* VOICE */, ENGI_MACRO,
-                                        ENGI_PHYS, 6 /* TRIO */, ENGI_VPS, ENGI_TERRAIN, ENGI_WAVE, ENGI_WSEQ,
-                                        ENGI_VECTOR, ENGI_GRAIN, 4 /* SAMPLE */};
-        /* (left out, Alex 2026-11-21: ACID, NOISE, LOFI; their code stays, out of the list) */
-        uint32_t k;
-        for (k = 0; k < sizeof ORDER; k++) {
-            e = ORDER[k];
-            for (p = 0; e < NENGINES && p < ENGINES[e]->npresets && clp_n < CLP_NSOUNDS; p++)
-                clp_list[clp_n++] = (uint16_t)(e << 8 | p);
-        }
-    }
+    clp_order();
     trk[0].engine = 0;
     clp_load(clp_list[0] >> 8, clp_list[0] & 0xFFu);
     trk[0].engine = trk[0].eng_req;
+}
+
+/* the sounds' order. As made: the engines in an order for chords (Clipper's sounds within each), also the order a
+ * settings record from before 0.10 counts by (clp_sound_old_key). Banked (the default, Alex 2026-11-22): by family,
+ * as each sound behaves (tools/clp_bank.c, gen/clp_bank.h): CHORDS LIGHT, CHORDS (poly, sustained), HITS LIGHT, HITS
+ * (poly, short), LEADS (mono, sustained: a wind controller's), OTHER (mono and short, Clipper's FX); within one, by
+ * Clipper's kind (its ui.c BANK[], gen/clp_kind.h: pads, organs, keys, stabs, plucks, leads, basses), then as made */
+#if __has_include("clp_kind.h")
+#include "clp_kind.h"
+#else
+enum { CK_BASS, CK_KEYS, CK_ORGAN, CK_PAD, CK_LEAD, CK_PLUCK, CK_STAB, CK_FX, CK_NONE };
+static const struct { uint8_t kind, e; const char *name; } CLP_KIND[] = {{CK_NONE, 0, ""}};
+#endif
+#if __has_include("clp_bank.h")
+#include "clp_bank.h"
+#else
+static const uint8_t CLP_FAM[NENGINES][40];
+#endif
+#if __has_include("clp_cost.h")
+#include "clp_cost.h"                           /* tools/clp_cost.c: each sound's measured cost, 0 light .. 2 heavy */
+#else
+static const uint8_t CLP_COST[NENGINES][40];
+#endif
+static const char *const CLP_KIND_N[CK_NONE + 1] = {"BASS", "KEYS", "ORGAN", "PAD", "LEAD", "PLUCK", "STAB", "FX", ""};
+static const char *const CLP_FAM_N[6] = {"CHORDS LIGHT", "CHORDS", "HITS LIGHT", "HITS", "LEADS", "OTHER"};
+static uint16_t clp_list0[CLP_NSOUNDS];         /* as made */
+static uint8_t clp_bank_wanted = 1;
+static uint32_t clp_kind_of(uint32_t key)
+{
+    uint32_t j, e = key >> 8;
+    const char *nm = ENGINES[e % NENGINES]->presets[key & 0xFFu].name;
+    for (j = 0; j < sizeof CLP_KIND / sizeof CLP_KIND[0]; j++)
+        if (CLP_KIND[j].e == e && str_eq(CLP_KIND[j].name, nm))
+            return CLP_KIND[j].kind;
+    return CK_NONE;
+}
+static uint32_t clp_cost_of(uint32_t key)
+{
+    uint32_t e = key >> 8, p = key & 0xFFu;
+    return e < NENGINES && p < 40u ? CLP_COST[e][p] : 0u;
+}
+static uint32_t clp_fam_of(uint32_t key)        /* 0 CHORDS LIGHT .. 5 OTHER */
+{
+    uint32_t e = key >> 8, p = key & 0xFFu, f = e < NENGINES && p < 40u ? CLP_FAM[e][p] : 3u;
+    return f == 0u ? (clp_cost_of(key) ? 1u : 0u) : f == 1u ? (clp_cost_of(key) ? 3u : 2u) : f + 2u;
+}
+static uint32_t clp_rank(uint32_t key, uint32_t at)   /* the banked order's sort key */
+{
+    static const uint8_t KR[CK_NONE + 1] = {6, 2, 1, 0, 5, 4, 3, 7, 8};   /* PAD ORGAN KEYS STAB PLUCK LEAD BASS FX */
+    return clp_fam_of(key) << 16 | (uint32_t)KR[clp_kind_of(key)] << 12 | at;
+}
+static void clp_order(void)
+{
+    static const uint8_t ORDER[] = {ENGI_HYBRID, ENGI_JUNO, ENGI_STRINGS, 0 /* ANALOG */, ENGI_FM6, ENGI_FMX,
+                                    1 /* DIGITAL */, 7 /* WHEEL */, 2 /* PHASE */, 5 /* VOICE */, ENGI_MACRO,
+                                    ENGI_PHYS, 6 /* TRIO */, ENGI_VPS, ENGI_TERRAIN, ENGI_WAVE, ENGI_WSEQ,
+                                    ENGI_VECTOR, ENGI_GRAIN, 4 /* SAMPLE */};
+    /* (left out, Alex 2026-11-21: ACID, NOISE, LOFI; their code stays, out of the list) */
+    static uint32_t rk[CLP_NSOUNDS];
+    uint32_t k, e, p, i, j;
+    clp_n = 0;
+    for (k = 0; k < sizeof ORDER; k++) {
+        e = ORDER[k];
+        for (p = 0; e < NENGINES && p < ENGINES[e]->npresets && clp_n < CLP_NSOUNDS; p++)
+            clp_list0[clp_n] = clp_list[clp_n] = (uint16_t)(e << 8 | p), clp_n++;
+    }
+    if (!clp_bank_wanted)
+        return;
+    for (i = 0; i < clp_n; i++)
+        rk[i] = clp_rank(clp_list[i], i);
+    for (i = 1; i < clp_n; i++)                  /* (insertion: once, at the start) */
+        for (j = i; j > 0 && rk[j - 1u] > rk[j]; j--) {
+            uint32_t r = rk[j];
+            uint16_t l = clp_list[j];
+            rk[j] = rk[j - 1u], clp_list[j] = clp_list[j - 1u];
+            rk[j - 1u] = r, clp_list[j - 1u] = l;
+        }
+}
+void clp_bank_on(int on)                        /* 1 (default): by family; 0: as made (tools). Call before clp_init */
+{
+    clp_bank_wanted = (uint8_t)(on != 0);
+    if (clp_n)
+        clp_order();
+}
+uint32_t clp_sound_family(uint32_t i) { return i < clp_n ? (clp_bank_wanted ? clp_fam_of(clp_list[i]) : 0u) : 0u; }
+const char *clp_family_name(uint32_t f) { return f < 6u ? CLP_FAM_N[f] : ""; }
+uint32_t clp_sound_kind_id(uint32_t i) { return i < clp_n ? clp_kind_of(clp_list[i]) : CK_NONE; }
+uint32_t clp_sound_old_key(uint32_t i) { return i < clp_n ? clp_list0[i] : 0xFFFFu; }   /* (before 0.10: as made) */
+uint32_t clp_sound_of_key(uint32_t key)         /* its place in the list now, or clp_sounds() */
+{
+    uint32_t i;
+    for (i = 0; i < clp_n && clp_list[i] != key; i++)
+        ;
+    return i;
 }
 
 uint32_t clp_sounds(void) { return clp_n; }
@@ -336,13 +418,8 @@ const char *clp_sound_name(uint32_t i)
     return i < clp_n ? ENGINES[clp_list[i] >> 8]->presets[clp_list[i] & 0xFFu].name : 0;
 }
 const char *clp_sound_engine(uint32_t i) { return i < clp_n ? ENGINES[clp_list[i] >> 8]->name : 0; }
-const char *clp_sound_kind(uint32_t i) { (void)i; return ""; }
+const char *clp_sound_kind(uint32_t i) { return i < clp_n ? CLP_KIND_N[clp_kind_of(clp_list[i])] : ""; }
 uint32_t clp_sound_key(uint32_t i) { return i < clp_n ? clp_list[i] : 0xFFFFu; }   /* engine << 8 | preset */
-#if __has_include("clp_cost.h")
-#include "clp_cost.h"                           /* tools/clp_cost.c: each sound's measured cost, 0 light .. 2 heavy */
-#else
-static const uint8_t CLP_COST[NENGINES][40];
-#endif
 uint32_t clp_sound_cost(uint32_t i)             /* 0 LIGHT, 1 MID, 2 HEAVY (measured: tools/clp_cost.c) */
 {
     uint32_t e, p;
