@@ -5,7 +5,7 @@
   "author": "Alexandre Enkerli",
   "license": "GPL-3.0-only",
   "tagline": "a lead, bass and chord synth for any scale, always recording, expressive (MPE, wind controllers)",
-  "description": "A lead, bass and chord synth for the M-VAVE FM-1. Chords from any scale on the white keys, their qualities latched (and combined) on the black keys as on Coral Flower, voiced smoothly over a separate bass, or single notes; a history that never stops, so a phrase becomes a take after the fact (eight slots, to a DAW as MIDI); expressive sounds: YARD, its own light synth, and Clipper's 337, by family and load, on both cores, with MPE in and out, per-voice MPE glide and wind controllers; your own sounds saved and moved as files; full-duplex USB audio and MIDI.",
+  "description": "A lead, bass and chord synth for the M-VAVE FM-1. Chords from any of 4096 scales on the white keys, their qualities latched and combined on the black keys as on Coral Flower, voiced over a separate bass, or single notes; an arpeggiator; a history that never stops, so a phrase becomes a recording after the fact: eight slots, looped, overdubbed, moved to another scale as it plays, to a DAW as MIDI; YARD, its own light synth, and Clipper's 337 sounds on both cores, with MPE in and out and wind controllers; your sounds and scales as files; full-duplex USB audio and MIDI.",
   "tags": ["synth", "chords", "sequencer", "midi"],
   "install": "https://github.com/Enkerli/mvane-yard/releases",
   "site": "https://enkerli.github.io/mvane-yard/",
