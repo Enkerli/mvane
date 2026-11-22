@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -48,3 +48,8 @@ clp-expr:   # how each Clipper sound answers pressure and slide (build/desktop/c
 	$(B)/clp_expr $(B)/clp_expr.tsv app/clipper/gen/clp_expr.h
 	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_expr.c -o $(B)/clp_expr -lm
 	$(B)/clp_expr $(B)/clp_expr.tsv $(B)/clp_expr_again.h check
+
+clp-split:   # the expression slots must leave each Clipper sound's voices split between the cores
+	@mkdir -p $(B)
+	$(CC) -O1 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_split.c -o $(B)/clp_split -lm
+	$(B)/clp_split

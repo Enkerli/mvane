@@ -1322,7 +1322,12 @@ static void draw(void)
         int_text((int32_t)plat_cpu_pct(), x);
         text_cat(t, x);
         text_cat(t, "%");
-        l = cv_text(10, 81, &FONT_S, t, C_WHITE) + 10;
+        l = cv_text(10, 81, &FONT_S, t, C_WHITE) + 4;
+        if (set.sound)                   /* Clipper's sound: x2 while the second core takes half its voices, x1 when
+                                          * it does not run (not started, or given up: plat_cpu2_gave_up) */
+            l = cv_text(l, 82, &FONT_XS, plat_cpu2_on() ? "x2" : "x1", plat_cpu2_on() ? C_GRAY : C_HI) + 10;
+        else
+            l += 6;
         t[0] = 0;
         text_cat(t, "XR ");
         int_text((int32_t)plat_xruns(), x);
@@ -1545,6 +1550,8 @@ int app_expect(const char *what, int *got)
         *got = set.voices;
     else if (!strcmp(what, "hold"))
         *got = ui.hold;
+    else if (!strcmp(what, "cores"))   /* the second core takes jobs: 2, else 1 */
+        *got = plat_cpu2_on() ? 2 : 1;
     else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
         *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */

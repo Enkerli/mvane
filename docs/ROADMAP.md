@@ -248,7 +248,11 @@ range, all at rest at 0. **Now 93 ignore pressure.** What is left needs each eng
   engine.
 - The level slot is often flattened by the master chain (compressor, limiter): it works best with a timbre change.
 
-The amounts (32: half the range) are a first guess, to judge by ear; a batch edit in the web editor (M6) could set
+An engine whose voices split between the two cores takes the matrix's CUT or SHAPE, never an EDIT value: a slot on an
+EDIT value keeps every voice on one core (found on the device, 2026-11-22; `make clp-split` guards it). With that,
+96 sounds ignore pressure (MACRO answers less, FMX much more).
+
+The amounts (half the range) are a first guess, to judge by ear; a batch edit in the web editor (M6) could set
 them per sound.
 
 ### M3: ProgGenie on the device

@@ -72,6 +72,34 @@ For each sound (the saw, then STRINGS, HYBRID, FM6, JUNO and one LIGHT sound suc
 CPU at rest, the highest CPU seen in each part, XR and Q at the end, and anything heard (crackle, stuck notes, steps
 in a bend). The screen shows the mean load, not the worst block, so XR is the stronger sign.
 
+## Readings on the device
+
+Alex, 2026-11-22, the baseline phrase played from a slot (build 5f48553, with the expression slots):
+
+| Sound | Engine, cost | CPU | Notes |
+| --- | --- | --- | --- |
+| at rest | | 18%, then 9% | the effect gate: buses off after 20 s of silent sends |
+| SAW ENSEMBLE | SAMPLE, light poly | 37-38%, 24 to 42% | XR 1 |
+| PLUCK | HYBRID, mid poly | about 50%, 29 to 54% | |
+| GLASS PAD | HYBRID, heavy poly | 58% rising to 78% | 48-54% on 0.9: the regression below |
+| CLIPPER (init) | HYBRID, light poly | 33% | |
+| 80S HITS | JUNO, light, short | 11 to 54% | XR 2 |
+
+Q rose by 344 a run: the phrase's 600 pressure messages at one instant, less the queue's 256. Quick successions of
+notes or chords raise the load most (voices starting while others release).
+
+**The regression, found and fixed.** Clipper splits a sound's voices between the cores only for voices whose EDIT
+values the matrix leaves alone (voice.c: such a voice writes the part's values for its call, so it renders on this
+core after the other's). The expression slots of 5f48553 pointed HYBRID's pressure at its CUT (E1) and JUNO's slide
+at its CUT (E6): those sounds lost the second core entirely (`tools/clp_split.c`: GLASS PAD from 2,880 voice-blocks
+on core 1 to none). Now an engine that splits takes the matrix's CUT or SHAPE, carried per voice; `make clp-split`
+(in CI) fails when any sound splits less with the slots. 185 of 337 sounds split; the rest are mono sounds (one
+voice) and the five engines Clipper keeps on one core: SAMPLE, VOICE, WHEEL, GRAIN, PHYS (72 sounds, among them the
+light polyphonic ones Alex likes). The screen shows x2 after CPU while the second core takes jobs, x1 lit when not.
+
+Next: whether SAMPLE and WHEEL could split (what their render shares: WHEEL's organ is set once a block, which suits
+splitting its voices); the load of quick successions (voice starts, release tails, stealing).
+
 ## Sequence
 
 1. A baseline: worst-block CPU, xruns and memory over representative Clipper sounds and fixed expressive MIDI.

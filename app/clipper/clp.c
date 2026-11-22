@@ -184,30 +184,34 @@ static volatile int32_t clp_req = -1;           /* the sound asked for (main loo
 static const uint8_t CLP_EXPR[NENGINES][40];
 #endif
 #define XE(k) ((uint8_t)(MT_E1 + (k) - 1u))     /* the engine's parameter k, 1..8 */
-static const uint8_t CLP_EXPR_DST[NENGINES][2] = {   /* pressure's, slide's destination, by engine (N_ENGNAME) */
-    {XE(5), XE(5)},         /* ANALOG   CUT, CUT */
-    {XE(5), XE(7)},         /* DIGITAL  IDX, FB */
-    {XE(3), XE(3)},         /* PHASE    DCW, DCW */
+/* pressure's, slide's destination, by engine (N_ENGNAME). An engine whose voices split between the cores (voice.c
+ * vs_ok) takes the matrix's CUT or SHAPE, which each voice carries: a slot on one of its EDIT values (E1..E8) would
+ * write the part's values for each voice's call, which voice.c renders on this core after the other's (no split:
+ * HYBRID GLASS PAD from about 50% to 78% on the FM-1, Alex 2026-11-22). The others take an EDIT value, free there */
+static const uint8_t CLP_EXPR_DST[NENGINES][2] = {
+    {MT_CUT, MT_CUT},       /* ANALOG   (splits) */
+    {MT_CUT, MT_SHAPE},     /* DIGITAL  (splits) */
+    {MT_CUT, MT_SHAPE},     /* PHASE    (splits) */
     {MT_OFF, MT_OFF},       /* LOFI     (not offered) */
     {XE(5), XE(5)},         /* SAMPLE   CUT, CUT */
     {XE(5), XE(1)},         /* VOICE    BUZZ, VOWL */
-    {XE(6), XE(6)},         /* TRIO     CUT, CUT */
+    {MT_CUT, MT_SHAPE},     /* TRIO     (splits) */
     {XE(7), XE(4)},         /* WHEEL    DRV, TOP */
     {XE(8), XE(2)},         /* GRAIN    TONE, POS */
-    {XE(3), XE(2)},         /* FM6      MLVL, FB */
+    {MT_CUT, MT_SHAPE},     /* FM6      (splits) */
     {XE(3), XE(5)},         /* PHYS     BRIT, POS */
     {MT_OFF, MT_OFF},       /* NOISE    (not offered) */
-    {XE(1), XE(1)},         /* HYBRID   CUT, CUT */
+    {MT_CUT, MT_CUT},       /* HYBRID   (splits) */
     {MT_OFF, MT_OFF},       /* WAVE     (not offered) */
     {MT_OFF, MT_OFF},       /* ACID     (not offered) */
-    {XE(5), XE(5)},         /* STRINGS  CUT, CUT */
-    {XE(3), XE(2)},         /* MACRO    TIMB, HARM */
-    {XE(5), XE(1)},         /* VPS      CUT, D */
-    {XE(7), XE(4)},         /* TERRAIN  CUT, Y */
-    {XE(3), XE(4)},         /* FMX      MOD, FB */
-    {XE(7), XE(3)},         /* WSEQ     CUT, XFADE */
-    {XE(6), XE(6)},         /* JUNO     CUT, CUT */
-    {XE(8), XE(5)},         /* VECTOR   CUT, X */
+    {MT_CUT, MT_CUT},       /* STRINGS  (splits) */
+    {MT_CUT, MT_CUT},       /* MACRO    (splits) */
+    {MT_CUT, MT_SHAPE},     /* VPS      (splits) */
+    {MT_CUT, MT_SHAPE},     /* TERRAIN  (splits) */
+    {MT_SHAPE, MT_SHAPE},   /* FMX      (splits; reads no cutoff) */
+    {MT_CUT, MT_CUT},       /* WSEQ     (splits) */
+    {MT_CUT, MT_SHAPE},     /* JUNO     (splits) */
+    {MT_CUT, MT_SHAPE},     /* VECTOR   (splits) */
 };
 #define CLP_EXPR_AMT 32
 static uint8_t clp_expr_enabled = 1;
@@ -235,7 +239,7 @@ static void clp_expr_fill(track_t *t, uint32_t e, uint32_t pi)
                 continue;
             t->p[id] = (int16_t)(w == 1u ? MS_SLIDE : MS_AT);
             t->p[id + 1u] = (int16_t)dst;
-            t->p[id + 2u] = CLP_EXPR_AMT;
+            t->p[id + 2u] = dst >= MT_E1 ? CLP_EXPR_AMT : 56;   /* (CUT and SHAPE: half of x first, voice.c) */
             used |= 1u << k;
             break;
         }
