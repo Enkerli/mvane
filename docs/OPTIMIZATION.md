@@ -65,7 +65,7 @@ from a DAW, so that readings before and after a change compare:
 
 - 0-10 s: five six-note chords, each note on its own member channel, no expression;
 - 10-20 s: the same with each note's bend, pressure and slide every 10 ms (about 1,800 messages a second);
-- 20-30 s: a held chord with sixteenth-note arpeggios and expression on eight channels, then 600 pressure messages at
+- 20-30 s: a held chord with sixteenth-note arpeggios and expression on eight channels every 20 ms, then 600 pressure messages at
   one instant (the queue at its busiest: Q may count, and nothing should stay stuck).
 
 For each sound (the saw, then STRINGS, HYBRID, FM6, JUNO and one LIGHT sound such as SAMPLE), from a fresh boot:

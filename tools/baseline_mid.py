@@ -5,7 +5,7 @@ CPU, XR and Q on its screen, so that readings before and after a change compare.
 
   0-10 s   chords: six notes, each on its own MPE member channel (2-7), held two seconds, no expression
   10-20 s  the same chords with dense expression: each note's bend, pressure and slide (CC74) every 10 ms
-  20-30 s  a burst: sixteenth-note arpeggios over a held chord, expression on every channel, then 600 pressure
+  20-30 s  a burst: sixteenth-note arpeggios over a held chord, expression on eight channels every 20 ms, then 600 pressure
            messages at one instant (the render's queue at its busiest)
 
 Usage: tools/baseline_mid.py [out.mid]   (default tests/baseline.mid)
@@ -81,8 +81,8 @@ def build():
         n = arp[s % len(arp)]
         at(t, [0x90 | ch, n, 100])
         at(t + 0.11, [0x80 | ch, n, 0], 0)
-        for q in range(12):
-            tq = t + q * 0.01
+        for q in range(6):                                       # every 20 ms (the file within 30,000 events)
+            tq = t + q * 0.02
             for c in range(1, 9):
                 ph = 2 * math.pi * (tq * 3 + c / 8.0)
                 at(tq, [0xD0 | c, 64 + int(60 * math.sin(ph))])
