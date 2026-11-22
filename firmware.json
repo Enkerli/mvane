@@ -10,7 +10,7 @@
   "install": "https://github.com/Enkerli/mvane-yard/releases",
   "site": "https://enkerli.github.io/mvane-yard/",
   "source": "https://github.com/Enkerli/mvane-yard",
-  "screenshot": "docs/media/screen.png",
+  "screenshot": "docs/media/card.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],
