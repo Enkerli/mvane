@@ -1,6 +1,7 @@
 # mvane yard: custom FM-1 firmware (tools: base/tools/build.py app)
 name = "MVANE-YARD"
-id_prefix = "FM-1_17"          # package identity: dev FM-1_1700, releases FM-1_17XXYYZZ (unclaimed as far as known)
+id_prefix = "FM-1_53"          # package identity: dev FM-1_5300, releases FM-1_53XXYYZZ (the hub's check, 2026-11-22:
+                               # free from 0.00 to 9.99; FM-1_17, fm1-base's template's, is inside LOOM-8's range)
 usb_manufacturer = "mvane yard"
 usb_product = "MVANE YARD FM-1"
 usb_serial = true

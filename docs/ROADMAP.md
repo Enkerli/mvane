@@ -26,12 +26,12 @@ tools (https://enkerli.github.io/mvane-yard/).
 | --- | --- |
 | Open source, the source at each release's tag | GPL-3.0, public |
 | A GitHub release with the `.fwsc` (pre-releases too) | v0.9-beta, v0.10-beta; built and signed from source (zvenson/fm1-build: "Built from source on GitHub") |
-| Its own identity (`FM-1_` number, not the one it started from) | `FM-1_17` + the version's six digits; none in the hub's catalogue starts with `FM-1_17` (2026-11-22) |
+| Its own identity (`FM-1_` number, not the one it started from) | `FM-1_53` + the version's six digits (the form's check, 2026-11-22: free from 0.00 to 9.99); `FM-1_17`, fm1-base's template's, until 0.11-beta, is inside LOOM-8's range |
 | The update loader in the package | felucca-bsp's, in every fm1-base package |
 | Both flash chips (`0x856014`, the newer `0xB36014`) | fm1-base's `fm1_flash_ok.h` (Alex's unit is a newer one) |
 | `fmhub.json` in the root (what, kinds, image, sounds ...) | written: `chords`, `docs/media/card.png` (240 x 240), the page as its editor, the manual as its cheat sheet |
 | Sounds: what ships | `none – all synthesised`: Clipper's synthesized sets only; Felucca's recorded sets (never compiled here) taken out of the vendored copy |
-| Tested on a real FM-1: installed from V15 and from another firmware, and left again | Alex, 0.11-beta with M-Flasher 0.10.0: from M-VAVE's stock firmware (FM-1 016, its stock loader) and back, a sound saved; from another custom firmware: to do |
+| Tested on a real FM-1: installed from V15 and from another firmware, and left again | Alex, 0.11-beta and 0.11.1 with M-Flasher 0.10.0: to and from M-VAVE's stock FM-1 016, the official V15 and Coral Flower 0.7.1, saving checked at every step; the release with the new identity: to check before the form |
 | The form: name, your name, an address (never shown), one line, how it was tested | **Alex** |
 
 To do: a release with `fmhub.json` in it (0.11), Alex's test of it (from V15, from another firmware, and back), then
@@ -486,7 +486,7 @@ scale). Before 1.0, map controls the way FM-1 players expect from M-VAVE's firmw
 
 ## Name
 
-**mvane yard** (Alex, 2026-11-21): "mvane" alone read like a typo for M-VAVE. Package identity unchanged (`FM-1_17...`).
+**mvane yard** (Alex, 2026-11-21): "mvane" alone read like a typo for M-VAVE. Package identity unchanged then (`FM-1_17...`); `FM-1_53` from 0.12 (the hub's check: 17 is inside LOOM-8's range).
 
 Where it comes from (Alex, 2026-11-22): first hills, terrain, textures, a landscape with a weathervane; then a
 playground, a schoolyard. This synth is meant for playful exploration, and *yard* says that. The *vane* is less tied
