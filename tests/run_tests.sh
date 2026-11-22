@@ -23,4 +23,5 @@ if grep -q '^FAIL' build/host.log; then grep '^FAIL' build/host.log; exit 1; fi
 python3 tools/yard_test.py
 node web/take_test.mjs
 node web/ysb_test.mjs
+node web/zip_test.mjs
 echo "run_tests: all checks passed"

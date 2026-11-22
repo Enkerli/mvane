@@ -16,13 +16,13 @@ start from their defaults after an update that changes their layout (0.6 and 0.7
 
 | Where | What |
 | --- | --- |
-| Top left | NOTES or CHORDS; a message for a moment after you change something |
+| Top left | NOTES or CHORDS (USB HOST, lit, while the port hosts a device: no computer meanwhile); a message for a moment after you change something |
 | Top right | The sound |
 | Middle (CHORDS) | The chord sounding (or the last one, dimmed); below: key, scale, chord type, voicing, voices + BASS, the pitch-class set's number, HOLD |
 | Middle (NOTES) | The notes held |
 | Knob row | K1 to K4: tone, release, glide, attack |
-| HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a take not yet saved |
-| TAKE n/8 | The take in the current slot, its length, PLAYING or NOT SAVED |
+| HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a recording not yet saved |
+| RECORDING n/8 | The recording in the current slot, its length, PLAYING or NOT SAVED |
 | Bottom | CPU load (then x2 while the second core renders half the voices, x1 lit when it does not run) and XR (with how many came within a second of a change of sound, n SW, or of a flash write, n FL: SAVE, a file from the computer, where the FM-1's audio stops for each sector erased), PK and SW (the worst single block since the latest change of sound, and in the second after it, in % of a block's time: 100 misses it) (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (larger, on the left; the play mode, the sound's cost and HOST on the right, each where it fits) (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (EZ, HRD), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
 
 ## Controls
@@ -38,7 +38,7 @@ The four knobs' names are on the screen above them, and the one you turn lights 
 | **SOUND**, Clipper's sounds | BRITE | TIMBR | MOTN | SPACE (Clipper's four macros) |
 | **SOUND**, YARD's sounds | TONE | ATTACK | DECAY (PLUCK's fall) | RELEASE |
 
-Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 to 74), so a take replays it.
+Every knob move on these pages is kept in the recording (as CC 5, 16 to 19, 72 to 74), so a recording replays it.
 
 ### Layers: hold a button and turn a knob (or tap it, turn, tap again)
 
@@ -47,11 +47,11 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **EDIT** on the PLAY page: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
 | **EDIT** on the SOUND page, a YARD sound (FX shows the same) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
-| **GLO** on the PLAY page: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
+| **GLO** on the PLAY page: SETTINGS (its screen: HOME for MORE, and where the USB port stands) | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
 | **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
-| **SEQ**: TAKES | SLOT | LOOP (off, on) | | | the take slot (1 to 8); the screen shows the eight slots |
-| **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the named scales (MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC) |
+| **SEQ**: RECORDINGS | SLOT | LOOP (off, on) | | | the recording slot (1 to 8); the screen shows the eight slots |
+| **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the list (below), yours after it; SAVE: keep the number in your list |
 
 **The scale is a pitch-class set's number**, 0 to 4095, as in the Music Suite: each of the twelve semitones above
 the key is a bit (the key 1, a semitone up 2, a whole tone up 4 ... the major seventh 2048), and the scale is their
@@ -60,6 +60,13 @@ sum. C major is 2741 (1 + 4 + 16 + 32 + 128 + 512 + 2048), the minor 1453, the w
 it has one, and the twelve semitones from the key (the key lit). The PLAY page's SCALE steps through the named
 scales; a number of your own shows as PCS and its number. It is saved with the settings.
 
+**The list**, on SCALE and on SEL's SELECT, from bright to dark: the diatonic modes LYDIAN, MAJOR (Ionian, the
+default), MIXOLYDIAN, DORIAN, MINOR (Aeolian), PHRYGIAN, LOCRIAN; the pentatonics MAJ PENTA, SUS PENTA, MIN PENTA;
+MAJ BLUES, MIN BLUES; MEL MIN, HARM MIN; the symmetric WHOLE TONE, OCT H-W, OCT W-H, AUGMENTED; Alex's PCO and
+NOODLING; CHROMATIC. Then **your own**: on SEL's layer, set a number and SAVE (up to 16; SAVE there keeps the scale,
+not the settings). The page names them, renumbers them and removes them (Your sounds and scales); one without a name
+shows as its number.
+
 ### Encoders and buttons
 
 | Control | Does |
@@ -67,15 +74,15 @@ scales; a number of your own shows as PCS and its number. It is saved with the s
 | **ALGORITHM** | NOTES (left) / CHORDS (right) |
 | **PRESETS** | The sound: mvane yard's saw, then Clipper's sounds by family (a fast turn: the next family) |
 | **SELECT** | On the pages: the next or previous family's first sound. In a layer: as above |
-| **HOME** | PLAY page / SOUND page |
+| **HOME** | PLAY page / SOUND page (with GLO or EDIT open: their other half) |
 | **OCT- / OCT+** | Octave; both together: panic (everything off) |
-| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a take loops: tap, overdub (from the next pass; again, stop at its end); hold, undo the last layer |
-| **PLAY** | Play / stop the take |
-| **SAVE** | Save the settings, and the take into its slot |
+| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub (from the next pass; again, stop at its end); hold, undo the last layer |
+| **PLAY** | Play / stop the recording |
+| **SAVE** | Save the settings, and the recording into its slot |
 
 **QUANT** as Coral Flower's: OFF, the chords' roots a semitone a white key; BASIC, the roots the scale's degrees; FULL, the chords' tones too, and the notes coming in over MIDI (USB, TRS, a hosted device), each to the nearest tone of the scale (down on a tie: C# to C in C major). A note's release finds the note it became, even after the scale or QUANT has changed.
 
-Moving to another slot with a take not saved: the first turn warns, a second within 3 s moves on and drops it.
+Moving to another slot with a recording not saved: the first turn warns, a second within 3 s moves on and drops it.
 
 ## Playing
 
@@ -108,7 +115,7 @@ pressure apart).
 - **MPE glide** (SPREAD up, GLO on the SOUND page; MPE OUT on): each moving voice glides in its own time, the lowest
   in GLIDE's, the highest up to four times longer, so a change of chord blooms rather than moving as a block. A new
   note starts bent to the pitch of the note it takes over (the closest pairs first) and the bend eases back to 0:
-  plain MPE, so YARD, Clipper and an MPE synth on MPE OUT glide alike, and a take keeps the gesture. The engines' own
+  plain MPE, so YARD, Clipper and an MPE synth on MPE OUT glide alike, and a recording keeps the gesture. The engines' own
   glide is off meanwhile; a chord let go is glided from for 2 s. SPREAD OFF: the engines' glide as before.
 - Voicings: CLOSE (within about an octave), OPEN (drop-2-like), WIDE (broad, every gap a fourth or more), PAIRS (the
   3rd and 7th in the left hand, the root and 5th above them in the right: two pairs of fifths moving around; more
@@ -212,43 +219,47 @@ of a light sound is Clipper's effect buses, which stop only once every send has 
 - It is always on, from power-on: everything you play goes into the history (notes, pressure, knob moves, MIDI in),
   as events, so its length is counted in events (32,768), not in time.
 - It sleeps: a pause longer than 4 s is kept as 4 s.
-- **REC** keeps a take from the history: a tap, the last phrase; held, everything. Nothing is copied: the take stays
+- **REC** keeps a recording from the history: a tap, the last phrase; held, everything. Nothing is copied: the recording stays
   where it is in the history, protected until you save it (the history shows FULL: SAVE if you play on until it
   reaches it).
-- **PLAY** replays the take through the current sound: try a take through different sounds.
-- **In any scale:** while a take plays, change the KEY or the SCALE (the PLAY page, or SEL's number) and the take
+- **PLAY** replays the recording through the current sound: try a recording through different sounds.
+- **In any scale:** while a recording plays, change the KEY or the SCALE (the PLAY page, or SEL's number) and the recording
   follows: each note to the same degree of the new scale, in the same octave (from C major to C minor, E becomes Eb;
   to D minor, F). A scale with fewer or more tones takes the degrees in proportion; a note outside the scale keeps its
-  distance from the degree below it. The scale in force when you pressed PLAY is the take's own.
-- **LOOP** (SEQ, K2): the take plays again from its start when it ends, on time, still in the scale you moved it to
-  (the screen: LOOPING). The loop is the take's length: from its first note to where you tapped REC.
-- **Overdub**: while a take loops, tap **REC**. From the top of the next pass (the screen: OVERDUB AT TOP, then
-  OVERDUB 1, 2 ...) what you play goes in with the take, and at the end of each pass that pass becomes the take: a
+  distance from the degree below it. The scale in force when you pressed PLAY is the recording's own.
+- **LOOP** (SEQ, K2): the recording plays again from its start when it ends, on time, still in the scale you moved it to
+  (the screen: LOOPING). The loop is the recording's length: from its first note to where you tapped REC.
+- **Overdub**: while a recording loops, tap **REC**. From the top of the next pass (the screen: OVERDUB AT TOP, then
+  OVERDUB 1, 2 ...) what you play goes in with the recording, and at the end of each pass that pass becomes the recording: a
   layer. Play over it again on the next pass, and the next. Tap REC again to stop at the end of the pass (OVERDUB
   n END); PLAY stops at once (the pass under way is not kept). **Hold REC** while it loops: the last layer undone
-  (one step). What a layer keeps is what you heard: the take as it played (in the scale it was moved to) and what
-  you played over it, knob moves included. Stop the take, then SAVE, to keep the layers in the slot. Each layer is a
+  (one step). What a layer keeps is what you heard: the recording as it played (in the scale it was moved to) and what
+  you played over it, knob moves included. Stop the recording, then SAVE, to keep the layers in the slot. Each layer is a
   copy in the history, so a long, busy loop fills it sooner (FULL: SAVE).
-- **SAVE** writes the take into the current slot (the sound stops for a moment while the flash is written). Saved takes
+- **SAVE** writes the recording into the current slot (the sound stops for a moment while the flash is written). Saved recordings
   play from the flash.
-- **SEQ** (held or tapped) and SELECT pick one of eight slots. A take sent from the computer (the page, `yard.py put`)
-  makes its slot the current one, ready for PLAY (unless the current slot holds a take not yet saved: then it waits in
+- **SEQ** (held or tapped) and SELECT pick one of eight slots. A recording sent from the computer (the page, `yard.py put`)
+  makes its slot the current one, ready for PLAY (unless the current slot holds a recording not yet saved: then it waits in
   its slot, and the screen says so).
 
-## Your takes on the computer
+## Your recordings on the computer
 
 - **The page**, <https://enkerli.github.io/mvane-yard/>, in Chrome or Edge with the FM-1 plugged in by a data cable
-  (stop PLAY first): Connect; the eight slots; a piano roll of the selected take; **Download as MIDI** (one channel:
+  (stop PLAY first): Connect; the eight slots; a piano roll of the selected recording; **Download as MIDI** (one channel:
   one clip in a DAW, each note's pressure as poly aftertouch), **MIDI with MPE channels** (a channel a note, as
   played), **Download .mvt**; **Send a MIDI or .mvt file to this slot** (a MIDI file's notes, controllers, pressure
-  and bend, all tracks merged, tempo honoured, 30,000 events at most); settings download and restore.
+  and bend, all tracks merged, tempo honoured, 30,000 events at most); **Download all (ZIP)**: every slot as both
+  MIDI files and as .mvt, with a README; your sounds and scales; settings download and restore.
+- **.mvt** is mvane yard's own recording format: the recording whole, exactly as the FM-1 keeps and plays it (each
+  event one 32-bit word: the milliseconds since the one before, then a MIDI message; a header "MVT1", version, count,
+  length: `core/rec.h`). Keep it to keep a recording whole; the MIDI files are made from it.
 - **The command line**: `python3 tools/yard.py take --slot 3` (slot 3 as `take3.mid`), `yard.py takes` (every slot),
   `yard.py put song.mid --slot 5`, `yard.py settings`, `yard.py ls`. Needs `pip install mido python-rtmidi`.
 
 ## The plugin (VIBE FM VST)
 
-TheFirmwareHub's converter turns mvane yard into a VIBE FM firmware; it plays as on the FM-1. In the plugin the take
-stays in memory (its platform has no flash for files): capture and replay work, a take is gone when the session
+TheFirmwareHub's converter turns mvane yard into a VIBE FM firmware; it plays as on the FM-1. In the plugin the recording
+stays in memory (its platform has no flash for files): capture and replay work, a recording is gone when the session
 closes. Whether settings persist with the DAW project depends on VIBE's store; see the roadmap.
 
 ## USB

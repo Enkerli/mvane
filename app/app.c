@@ -118,7 +118,7 @@ static void settings_defaults(void)
     set.magic = SET_MAGIC;
     set.mode = 1;
     set.tonic = 0;
-    set.scale = 0;
+    set.scale = 1;                       /* MAJOR (CHORD_SCALES, bright to dark: LYDIAN first) */
     set.octave = 0;
     for (i = 0; i < SP_N; i++)
         set.p[i] = P[i];
@@ -136,7 +136,7 @@ static void settings_defaults(void)
     set.page = 0;
     set.phones = 20;
     set.spread = 0;
-    set.pcs = 0;
+    set.pcs = (uint16_t)(0x8000u | 2741u);
     set.loop = 0;
     mvane_zero(set.room, sizeof set.room);
 }
@@ -187,14 +187,16 @@ static void settings_load(void)
         bad = 1;
     for (i = 0; i < SP_N; i++)
         bad |= set.p[i] > 127u;
-    if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
+    if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES + 16u || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
         || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u
         || set.loop > 1u || (set.pcs && (set.pcs & 0x7000u) != 0u))
         settings_defaults();
-    if (!(set.pcs & 0x8000u))            /* (before 0.12: the named scale's set) */
-        set.pcs = (uint16_t)(0x8000u | CHORD_SCALES[set.scale].mask);
+    if (!(set.pcs & 0x8000u)) {          /* (before 0.12: the named scale's set, in 0.11's list) */
+        static const uint16_t OLD[8] = {2741, 1453, 1709, 2477, 661, 1723, 1267, 2925};
+        set.pcs = (uint16_t)(0x8000u | OLD[set.scale % 8u]);
+    }
 }
 
 static void text_cat(char *d, const char *s);
@@ -202,14 +204,37 @@ static void int_text(int32_t v, char *b);
 /* the scale: its pitch-class set, the tonic always in; its number as set (an even one: the tonic added) */
 static uint16_t scale_mask(void) { return (uint16_t)((set.pcs & 0xFFFu) | 1u); }
 static uint32_t scale_num(void) { return set.pcs & 0xFFFu; }
-/* the named scale with this set, or -1 */
+/* The scales SCALE and SELECT step through: the named ones (CHORD_SCALES, bright to dark), then the user's own (up
+ * to US_N, in the bank: SAVE on SEL's SCALE layer keeps the number set; the page names them); scale_list_n of them */
+#define US_N 16u
+static uint16_t us_pcs[US_N];
+static char us_name[US_N][13];           /* "" : shown as its number */
+static uint8_t us_slot[US_N], nus;
+static uint32_t scale_list_n(void) { return CHORD_NSCALES + nus; }
+static uint32_t scale_list_num(uint32_t i)
+{
+    return i < CHORD_NSCALES ? CHORD_SCALES[i].mask : us_pcs[(i - CHORD_NSCALES) % US_N];
+}
+/* the list's scale with this set, or -1 */
 static int32_t scale_named(void)
 {
     uint32_t i;
-    for (i = 0; i < CHORD_NSCALES; i++)
-        if ((CHORD_SCALES[i].mask | 1u) == scale_mask())
+    for (i = 0; i < scale_list_n(); i++)
+        if ((scale_list_num(i) | 1u) == scale_mask() && (i < CHORD_NSCALES || us_name[i - CHORD_NSCALES][0]))
             return (int32_t)i;
     return -1;
+}
+static int32_t scale_listed(void)        /* in the list at all (a user's without a name too), or -1 */
+{
+    uint32_t i;
+    for (i = 0; i < scale_list_n(); i++)
+        if ((scale_list_num(i) | 1u) == scale_mask())
+            return (int32_t)i;
+    return -1;
+}
+static const char *scale_list_name(uint32_t i)   /* "" for a user's without a name */
+{
+    return i < CHORD_NSCALES ? CHORD_SCALES[i].name : us_name[(i - CHORD_NSCALES) % US_N];
 }
 /* its name, or its number: "MAJOR", "PCS 1365" */
 static void scale_text(char *out)
@@ -217,17 +242,26 @@ static void scale_text(char *out)
     int32_t n = scale_named();
     out[0] = 0;
     if (n >= 0)
-        text_cat(out, CHORD_SCALES[n].name);
+        text_cat(out, scale_list_name((uint32_t)n));
     else {
         text_cat(out, "PCS ");
         int_text((int32_t)scale_num(), out + 4);
     }
 }
+static void scale_step(int32_t d)        /* SCALE, SELECT on SCALE: the list's next or previous */
+{
+    uint32_t n = scale_list_n();
+    int32_t at = scale_listed();
+    if (at < 0)                          /* (a number not in the list: from the one last stepped to) */
+        at = d > 0 ? (int32_t)set.scale - 1 : (int32_t)set.scale + 1;
+    set.scale = (uint8_t)((((at + d) % (int32_t)n) + (int32_t)n) % (int32_t)n);
+    set.pcs = (uint16_t)(0x8000u | scale_list_num(set.scale));
+}
 static void scale_set(uint32_t num)      /* a new number: the named one it is, if any, for SCALE's steps */
 {
     int32_t n;
     set.pcs = (uint16_t)(0x8000u | (num > 4095u ? 4095u : num));
-    n = scale_named();
+    n = scale_listed();
     if (n >= 0)
         set.scale = (uint8_t)n;
 }
@@ -265,9 +299,19 @@ typedef struct {
     uint32_t cmagic;                     /* (version 2) */
     uint8_t cn, cpad[3];
     cb_sound_t c[YB_N];
+    uint32_t smagic;                     /* (version 3, 0.12) the user's scales */
+    uint8_t sn, spad[3];
+    struct {
+        char name[12];                   /* "": shown as its number */
+        uint16_t pcs;                    /* 0x8000 | the number: used */
+        uint8_t pad[2];
+    } sc[US_N];
 } yard_bank_t;
-typedef char cb_sound_is_64[sizeof(cb_sound_t) == 64u ? 1 : -1];
+#define SB_MAGIC 0x4253564Du             /* "MVSB" */
 #define YB_V1_SIZE (8u + 32u * YB_N)
+#define YB_V2_SIZE (YB_V1_SIZE + 8u + 64u * YB_N)
+typedef char yb_bank_size[sizeof(yard_bank_t) == YB_V2_SIZE + 8u + 16u * US_N && sizeof(yard_bank_t) <= PLAT_STORE_MAX ? 1 : -1];
+typedef char cb_sound_is_64[sizeof(cb_sound_t) == 64u ? 1 : -1];
 typedef char yb_sound_is_32[sizeof(yb_sound_t) == 32u ? 1 : -1];
 static yard_bank_t ybank;
 static synth_sound_t yuser[YB_N];        /* the used ones, in slot order, as PRESETS lists them */
@@ -323,10 +367,28 @@ static void yard_bank_load(void)
     int n = plat_store_load(OBJ_YARD, &ybank, sizeof ybank);
     if (n == (int)YB_V1_SIZE && ybank.magic == YB_MAGIC && ybank.version == 1u)   /* 0.10's: YARD's only */
         mvane_zero(&ybank.cmagic, sizeof ybank - YB_V1_SIZE);
-    else if (n != (int)sizeof ybank || ybank.magic != YB_MAGIC || ybank.version != 2u || ybank.cmagic != CB_MAGIC)
+    else if (n == (int)YB_V2_SIZE && ybank.magic == YB_MAGIC && ybank.version == 2u && ybank.cmagic == CB_MAGIC)
+        mvane_zero(&ybank.smagic, sizeof ybank - YB_V2_SIZE);   /* 0.11's: no scales */
+    else if (n != (int)sizeof ybank || ybank.magic != YB_MAGIC || ybank.version != 3u || ybank.cmagic != CB_MAGIC
+             || ybank.smagic != SB_MAGIC)
         mvane_zero(&ybank, sizeof ybank);
-    ybank.magic = YB_MAGIC, ybank.version = 2, ybank.n = YB_N;
+    ybank.magic = YB_MAGIC, ybank.version = 3, ybank.n = YB_N;
     ybank.cmagic = CB_MAGIC, ybank.cn = YB_N;
+    ybank.smagic = SB_MAGIC, ybank.sn = US_N;
+    {                                    /* the user's scales, in slot order */
+        uint32_t i, k;
+        nus = 0;
+        for (i = 0; i < US_N; i++)
+            if (ybank.sc[i].pcs & 0x8000u) {
+                for (k = 0; k < 12u; k++) {
+                    char c = ybank.sc[i].name[k];
+                    us_name[nus][k] = c >= ' ' && c <= '~' ? c : (c ? '?' : 0);
+                }
+                us_name[nus][12] = 0;
+                us_pcs[nus] = (uint16_t)(ybank.sc[i].pcs & 0xFFFu);
+                us_slot[nus++] = (uint8_t)i;
+            }
+    }
     yard_bank_index();
     clp_bank_index();
 }
@@ -1495,6 +1557,40 @@ static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the 
 
 /* FX held, SAVE: the YARD sound as the knobs have it into the user's bank: over itself if it is a user sound, else
  * into the first free slot (USER n, mono as its source); the bank saved, the new one playing */
+static void yard_bank_load(void);
+static void scale_store(void)            /* SAVE on SEL's SCALE layer: the number set kept in the list (once) */
+{
+    uint32_t i, slot = US_N;
+    char t[16];
+    if (scale_listed() >= 0) {
+        scale_text(t);
+        app_say("SCALE: LISTED", t);
+        return;
+    }
+    for (i = 0; i < US_N && slot == US_N; i++)
+        if (!(ybank.sc[i].pcs & 0x8000u))
+            slot = i;
+    if (slot >= US_N) {
+        app_say("SCALES", "16 KEPT: FULL");
+        return;
+    }
+    rt_flash();
+    mvane_zero(&ybank.sc[slot], sizeof ybank.sc[slot]);
+    ybank.sc[slot].pcs = (uint16_t)(0x8000u | scale_num());
+    if (plat_store_save(OBJ_YARD, &ybank, sizeof ybank)) {
+        ybank.sc[slot].pcs = 0;
+        app_say("SCALE", "NOT SAVED");
+        return;
+    }
+    yard_bank_load();
+    for (i = 0; i < nus; i++)
+        if (us_slot[i] == slot)
+            set.scale = (uint8_t)(CHORD_NSCALES + i);
+    int_text((int32_t)scale_num(), t);
+    app_say("SCALE SAVED", t);
+    ui.redraw = 1;
+}
+
 static void yard_store(void)
 {
     rt_flash();
@@ -1592,7 +1688,7 @@ static void clp_user_store(void)
 
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
 {
-    char t[16] = "TAKE ", n[12];
+    char t[20] = "RECORDING ", n[12];
     uint32_t now = plat_ms();
     if (take_dirty && now - ui.slot_warn > 3000u) {
         ui.slot_warn = now;
@@ -1637,7 +1733,7 @@ static const char *layer_name(int32_t l)
 {
     return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX"
            : l == B_GLO ? (set.page ? "MORE" : "SETTINGS")
-           : l == B_SEQ ? "TAKES" : l == B_SEL ? "SCALE" : 0;
+           : l == B_SEQ ? "RECORDINGS" : l == B_SEL ? "SCALE" : 0;
 }
 
 static void knob_info(uint32_t i, const char **label, char *val)
@@ -1848,7 +1944,7 @@ static void knob_turn(uint32_t i, int32_t e)
         int_text((int32_t)scale_num(), t);
         if (scale_named() >= 0) {
             text_cat(t, " ");
-            text_cat(t, CHORD_SCALES[scale_named()].name);
+            text_cat(t, scale_list_name((uint32_t)scale_named()));
         }
         app_say("SCALE", t);
         return;
@@ -1868,9 +1964,15 @@ static void knob_turn(uint32_t i, int32_t e)
             set.tonic = (uint8_t)((set.tonic + 12u + (uint32_t)d) % 12u);
             harmony_changed();
         } else if (i == 2) {
-            set.scale = (uint8_t)((set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
-            scale_set(CHORD_SCALES[set.scale].mask);
+            scale_step(d);
             harmony_changed();
+            {
+                char t[16];
+                scale_text(t);
+                app_say("SCALE", t);
+            }
+            set_dirty = 1;
+            return;
         } else {
             char t[8];                   /* GLIDE: the engines' own, or MPE glide's time (glide_engines) */
             knob[SP_GLIDE] = (uint8_t)clamp((int32_t)knob[SP_GLIDE] + e * 2, 0, 127);
@@ -1928,9 +2030,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         slot_step(d);
     else if (l == B_SEL) {               /* SCALE: the named scales */
         char t[16];
-        int32_t n = scale_named();
-        set.scale = (uint8_t)(n < 0 && d < 0 ? set.scale : (set.scale + CHORD_NSCALES + (uint32_t)d) % CHORD_NSCALES);
-        scale_set(CHORD_SCALES[set.scale].mask);
+        scale_step(d);
         set_dirty = 1;
         harmony_changed();
         scale_text(t);
@@ -2056,8 +2156,11 @@ static void input(void)
         } else if (k == B_EDIT || k == B_FX || k == B_GLO || k == B_SEQ || k == B_SEL) {   /* a layer: held, or a tap opens it */
             ui.held = (int8_t)k;
             ui.held_used = 0;
-        } else if (k == B_HOME) {        /* the knobs' page: PLAY / SOUND */
-            ui.latched = -1;
+        } else if (k == B_HOME) {        /* the knobs' page: PLAY / SOUND (GLO and EDIT, which follow it, stay open) */
+            if (ui.latched != B_GLO && ui.latched != B_EDIT)
+                ui.latched = -1;
+            if (ui.held >= 0)
+                ui.held_used = 1;
             set.page ^= 1u;
             set_dirty = 1;
             app_say("KNOBS", set.page ? "SOUND" : "PLAY");
@@ -2066,12 +2169,16 @@ static void input(void)
         else if (k == B_PLAY) {
             if (player.playing) {
                 rec_play_stop(&player, play_emit, 0);
-                app_say("TAKE", "STOPPED");
+                app_say("RECORDING", "STOPPED");
             } else if (take.count) {
                 take_play(now);
-                app_say("TAKE", "PLAYING");
+                app_say("RECORDING", "PLAYING");
             } else
-                app_say("TAKE", "EMPTY");
+                app_say("RECORDING", "EMPTY");
+        } else if (k == B_SAVE && layer_now() == B_SEL) {   /* SEL (SCALE) and SAVE: the scale kept in the list */
+            if (ui.held >= 0)
+                ui.held_used = 1;
+            scale_store();
         } else if (k == B_SAVE && (layer_now() == B_FX || sound_edit())) {   /* FX (or EDIT on SOUND) and SAVE: this
                                                                              * sound kept, YARD's or Clipper's */
             if (ui.held >= 0)
@@ -2095,7 +2202,7 @@ static void input(void)
                 set_dirty = 0;
             if (take_dirty && !player.playing)
                 bad |= take_save() != 0;
-            app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : take_dirty && player.playing ? "TAKE: STOP IT FIRST" : "");
+            app_say(bad ? "SAVE" : "SAVED", bad ? "FAILED" : take_dirty && player.playing ? "RECORDING: STOP IT FIRST" : "");
         }
     }
     if (ui.held >= 0 && !(btn >> ui.held & 1u)) {   /* a layer button let go: a tap opens or closes its page */
@@ -2195,6 +2302,8 @@ static void draw(void)
         const char *sn = sound_name();
         if (lay >= 0)                    /* a layer open: its name, lit */
             cv_text(10, 6, &FONT_B, layer_name(lay), C_WHITE);
+        else if (plat_usb_host_state())  /* USB hosting a device: no computer meanwhile (GLO + SELECT left: back) */
+            cv_text(10, 6, &FONT_B, "USB HOST", C_HI);
         else
             cv_text(10, 6, &FONT_B, set.mode ? "CHORDS" : set.page ? "NOTES" : "NOTES", C_HI);
         cv_text(230 - text_w(&FONT_B, sn), 6, &FONT_B, sn, C_WHITE);
@@ -2212,20 +2321,28 @@ static void draw(void)
             cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
         cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   K2: LOOP   REC, PLAY, SAVE", C_GRAY);
+    } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
+        int h = plat_usb_host_state();
+        cv_text(10, 4, &FONT_S, set.page ? "MORE: THE OUTPUT" : "SETTINGS: PLAYING, USB", C_WHITE);
+        cv_text(10, 22, &FONT_S, set.page ? "HOME: PLAY, USB, MPE, BEND" : "HOME: PHONES MAX, SPREAD", C_GRAY);
+        cv_text(10, 44, &FONT_XS, h ? "USB: HOSTING A DEVICE   SELECT LEFT: COMPUTER" : "USB: TO A COMPUTER   SELECT RIGHT: HOST",
+                h ? C_HI : C_GRAY);
     } else if (lay == B_SEL) {           /* SCALE: the number, its name, its twelve pitch classes from the key */
         uint32_t m = scale_mask();
         char nb[16];
         int_text((int32_t)scale_num(), nb);
         cv_text(10, 2, &FONT_L, nb, C_WHITE);
         if (scale_named() >= 0)
-            cv_text(120, 4, &FONT_S, CHORD_SCALES[scale_named()].name, C_HI);
+            cv_text(120, 4, &FONT_S, scale_list_name((uint32_t)scale_named()), C_HI);
+        else if (scale_listed() >= 0)
+            cv_text(120, 4, &FONT_S, "SAVED", C_GRAY);
         for (i = 0; i < 12u; i++) {
             int32_t x = 120 + (int32_t)i * 9, on = m >> i & 1u;
             cv_rect(x, 24, 7, 7, on ? (i ? C_WHITE : C_HI) : C_LINE);
             if (!on)
                 cv_rect(x + 1, 25, 5, 5, C_BLACK);
         }
-        cv_text(10, 44, &FONT_XS, "K1-K4: ITS DIGITS   SELECT: NAMED SCALES", C_GRAY);
+        cv_text(10, 44, &FONT_XS, "K1-K4: DIGITS  SELECT: THE LIST  SAVE: KEEP IT", C_GRAY);
     } else if (lay == B_EDIT && sound_edit() && clp_on()) {   /* SOUND: a Clipper sound's three pages */
         static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
         int32_t x = 10;
@@ -2254,7 +2371,7 @@ static void draw(void)
         text_cat(t, NOTE_N[set.tonic]);
         text_cat(t, " ");
         if (scale_named() >= 0)
-            text_cat(t, CHORD_SCALES[scale_named()].name);
+            text_cat(t, scale_list_name((uint32_t)scale_named()));
         text_cat(t, "  ");
         {
             char ql[24];
@@ -2311,8 +2428,8 @@ static void draw(void)
     else
         text_cat(t, "EMPTY");
     {
-        char l[12] = "TAKE ";
-        l[5] = (char)('1' + set.slot), l[6] = 0;
+        char l[16] = "RECORDING ";
+        l[10] = (char)('1' + set.slot), l[11] = 0;
         text_cat(l, "/8");
         label_value(10, 42, l, t);
     }
@@ -2332,7 +2449,7 @@ static void draw(void)
         } else
             cv_text(130, 58, &FONT_XS, set.loop ? "LOOPING" : "PLAYING", C_HI);
     } else if (old_take)
-        cv_text(80, 58, &FONT_XS, "0.4'S TAKE: SAVE KEEPS IT", C_HI);
+        cv_text(80, 58, &FONT_XS, "0.4'S RECORDING: SAVE KEEPS IT", C_HI);
     else if (take_dirty)
         cv_text(80, 58, &FONT_XS, "NOT SAVED", C_DIM);
     {                                    /* the bottom line: the render's load, missed deadlines and lost events on
@@ -2517,8 +2634,8 @@ int app_file_commit(uint32_t i, uint32_t size, uint32_t crc)
     (void)size;
     write_slot = -1;
     if (!rc && i != set.slot && i < TAKE_SLOTS && !player.playing) {
-        char t[12] = "TAKE ";
-        t[5] = (char)('1' + i), t[6] = 0;
+        char t[16] = "RECORDING ";
+        t[10] = (char)('1' + i), t[11] = 0;
         if (take_dirty)                  /* (an unsaved take here: kept; the new one waits in its slot) */
             app_say(t, "IN: SEQ TO PLAY");
         else {                           /* a take from the computer: its slot is the current one, PLAY plays it (Alex,
@@ -2681,6 +2798,8 @@ int app_expect(const char *what, int *got)
         *got = ov.on ? 2 + ov.ending : ov.armed;
     else if (!strcmp(what, "layers"))
         *got = ov.layers;
+    else if (!strcmp(what, "us_n"))      /* the user's scales */
+        *got = nus;
     else if (!strcmp(what, "pcs"))       /* the scale's number */
         *got = (int)scale_num();
     else if (!strcmp(what, "in_last"))   /* MIDI in: the last note on, as it plays */

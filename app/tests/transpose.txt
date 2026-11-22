@@ -21,7 +21,9 @@ tap PLAY
 wait 30
 expect playing 1
 expect pl_last 64
-# C minor while it plays: the next time round, E is Eb
+# C minor while it plays (MAJOR, MIXOLYDIAN, DORIAN, MINOR): the next time round, E is Eb
+spin K3 1
+spin K3 1
 spin K3 1
 expect pcs 1453
 wait 400
@@ -33,7 +35,7 @@ spin K2 1
 expect tonic 2
 wait 400
 expect pl_last 65
-# a scale of another size (PENTA, 5 tones: the third degree of 7 is the second of 5): D, E
+# a scale of another size (MAJ PENTA, after PHRYGIAN and LOCRIAN; 5 tones: the third degree of 7 is the second of 5): D, E
 spin K2 -1
 spin K2 -1
 spin K3 1

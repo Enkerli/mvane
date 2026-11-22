@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Your own sounds, YARD's and Clipper's: the FM-1's bank (yard.ysb, app.c yard_bank_t) to lists and back; the format
-// of tools/ysb.py (version 2; version 1, 0.10's, had YARD's only). Clipper's names (web/clp_names.json, make
+// Your own sounds, YARD's and Clipper's, and your scales: the FM-1's bank (yard.ysb, app.c yard_bank_t) to lists and
+// back; the format of tools/ysb.py (version 3; version 2, 0.11's, had no scales; version 1, 0.10's, YARD's only). Clipper's names (web/clp_names.json, make
 // clp-names) turn a change's label into its parameter and back.
-export const MAGIC = 0x4259564d, CMAGIC = 0x4243564d, N = 32, CN = 32, OV = 14, HYBRID = 12;
-export const SIZE1 = 8 + 32 * N, SIZE = SIZE1 + 8 + 64 * CN;
+export const MAGIC = 0x4259564d, CMAGIC = 0x4243564d, SMAGIC = 0x4253564d, N = 32, CN = 32, SN = 16, OV = 14, HYBRID = 12;
+export const SIZE1 = 8 + 32 * N, SIZE2 = SIZE1 + 8 + 64 * CN, SIZE = SIZE2 + 8 + 16 * SN;
 export const PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave", "pw", "noise", "filter"];
 export const DEFAULT = { tone: 56, release: 60, glide: 30, attack: 24, decay: 64, res: 0, detune: 0, sub: 0, pluck: 0,
   wave: 0, pw: 0, noise: 0, filter: 0 };   // (0.11: the last four; 0 leaves a sound as 0.10 made it)
@@ -48,10 +48,10 @@ function putName(raw, o, s, fallback) {
 const getName = (raw, o) => { let s = ""; for (let k = 0; k < 12 && raw[o + k]; k++) s += raw[o + k] >= 32 && raw[o + k] <= 126 ? String.fromCharCode(raw[o + k]) : "?"; return s; };
 
 export function toJson(raw, names) {            // yard.ysb's bytes -> {format, version, sounds, clipper}
-  const out = { format: "mvane-yard-sounds", version: 2, sounds: [], clipper: [] };
-  if (!raw || (raw.length !== SIZE1 && raw.length !== SIZE)) return out;
+  const out = { format: "mvane-yard-sounds", version: 3, sounds: [], clipper: [], scales: [] };
+  if (!raw || ![SIZE1, SIZE2, SIZE].includes(raw.length)) return out;
   const v = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-  if (v.getUint32(0, true) !== MAGIC || (raw[4] !== 1 && raw[4] !== 2)) return out;
+  if (v.getUint32(0, true) !== MAGIC || ![1, 2, 3].includes(raw[4])) return out;
   for (let i = 0; i < N; i++) {
     const o = 8 + 32 * i;
     if (!(raw[o + 12] & 1)) continue;
@@ -59,7 +59,12 @@ export function toJson(raw, names) {            // yard.ysb's bytes -> {format, 
     PARAMS.forEach((k, j) => { s[k] = Math.min(127, raw[o + 13 + j]); });
     out.sounds.push(s);
   }
-  if (raw.length !== SIZE || raw[4] !== 2 || v.getUint32(SIZE1, true) !== CMAGIC) return out;
+  if (raw.length === SIZE1 || raw[4] === 1 || v.getUint32(SIZE1, true) !== CMAGIC) return out;
+  if (raw.length === SIZE && raw[4] === 3 && v.getUint32(SIZE2, true) === SMAGIC)
+    for (let i = 0; i < SN; i++) {
+      const o = SIZE2 + 8 + 16 * i, p = v.getUint16(o + 12, true);
+      if (p & 0x8000) out.scales.push({ slot: i + 1, name: getName(raw, o), pcs: p & 0xfff });
+    }
   for (let i = 0; i < CN; i++) {
     const o = SIZE1 + 8 + 64 * i;
     if (!(raw[o + 12] & 1)) continue;
@@ -76,11 +81,11 @@ export function toJson(raw, names) {            // yard.ysb's bytes -> {format, 
   return out;
 }
 
-export function fromJson(d, names) {            // the lists -> yard.ysb's bytes (version 2); throws on a bad sound
+export function fromJson(d, names) {            // the lists -> yard.ysb's bytes (version 3); throws on a bad sound
   if (d.format !== undefined && d.format !== "mvane-yard-sounds") throw new Error(`not mvane yard's sounds (${d.format})`);
   const raw = new Uint8Array(SIZE), v = new DataView(raw.buffer);
   v.setUint32(0, MAGIC, true);
-  raw[4] = 2, raw[5] = N;
+  raw[4] = 3, raw[5] = N;
   slots(d.sounds, N, "YARD sounds").forEach((s, i) => {
     if (!s) return;
     const o = 8 + 32 * i, name = putName(raw, o, s, `USER ${i + 1}`);
@@ -121,6 +126,15 @@ export function fromJson(d, names) {            // the lists -> yard.ysb's bytes
       raw[o + 20 + 3 * k] = id;
       v.setInt16(o + 21 + 3 * k, c.value, true);
     });
+  });
+  v.setUint32(SIZE2, SMAGIC, true);
+  raw[SIZE2 + 4] = SN;
+  slots(d.scales, SN, "scales").forEach((s, i) => {
+    if (!s) return;
+    const o = SIZE2 + 8 + 16 * i;
+    if (!Number.isInteger(s.pcs) || s.pcs < 0 || s.pcs > 4095) throw new Error(`scale ${s.name || ""}: ${s.pcs}, not 0..4095`);
+    putName(raw, o, s, "");
+    v.setUint16(o + 12, 0x8000 | s.pcs, true);
   });
   return raw;
 }

@@ -29,7 +29,7 @@ jobs:
       - name: The page only (no tests, no local emulator)
         run: |
           mkdir site
-          cp -R web/index.html web/take.js web/ysb.js web/clp_names.json web/fm1ports.js web/lib site/
+          cp -R web/index.html web/take.js web/ysb.js web/zip.js web/clp_names.json web/fm1ports.js web/lib site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

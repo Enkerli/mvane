@@ -19,28 +19,60 @@ shot scale.png
 release SEL
 wait 50
 expect layer -1
-# SEL tapped: the layer stays; SELECT, the next named scale (MINOR, 1453); again: DORIAN; back: MINOR
+# SEL tapped: the layer stays; SELECT, the list from bright to dark: 4095 is CHROMATIC, the last; then LYDIAN (2773),
+# MAJOR (2741); back: LYDIAN
 tap SEL
 wait 50
 expect layer 1
 spin SELECT 1
-expect pcs 1453
+expect pcs 2773
 spin SELECT 1
-expect pcs 1709
+expect pcs 2741
 spin SELECT -1
-expect pcs 1453
+expect pcs 2773
 spin K2 -4
-expect pcs 1053
-spin K2 4
-expect pcs 1453
+expect pcs 2373
+# SAVE on SCALE: 2373 kept in the list (once); then SELECT from it: after CHROMATIC, before LYDIAN
+press SAVE
+release SAVE
+wait 50
+expect us_n 1
+press SAVE
+release SAVE
+wait 50
+expect us_n 1
+spin SELECT 1
+expect pcs 2773
+spin SELECT -1
+expect pcs 2373
+spin SELECT -1
+expect pcs 4095
+spin K2 -1
+expect pcs 4095
 tap SEL
 wait 50
 expect layer -1
-# the PLAY page's SCALE: from MINOR to DORIAN
+# the PLAY page's SCALE: the same list; MINOR is LYDIAN's fourth after (MAJOR, MIXOLYDIAN, DORIAN, MINOR)
 spin K3 1
-expect pcs 1709
+spin K3 1
+expect pcs 2773
+spin K3 1
+spin K3 1
+spin K3 1
+spin K3 1
+expect pcs 1453
+spin K3 1
+expect pcs 1451
 spin K3 -1
 expect pcs 1453
+# after a reboot: the scale and the list kept (the list in the bank; the scale with SAVE's settings)
+press SAVE
+release SAVE
+wait 50
+reboot
+wait 600
+expect pcs 1453
+expect us_n 1
 # MIDI in, QUANT BASIC: as played
 midi 90 3D 64
 wait 20

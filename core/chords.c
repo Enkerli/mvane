@@ -3,15 +3,31 @@
 
 #include "port.h"
 
+/* bright to dark (Alex, 2026-11-22): the diatonic modes, Lydian to Locrian (MAJOR, Ionian, the default); the
+ * pentatonics; the blues; the other minors; the symmetric scales; Alex's own; the chromatic. Each a pitch-class set's
+ * number, bit 0 the tonic (music-suite's: C major 2741) */
 const chord_scale CHORD_SCALES[] = {
-    {"MAJOR", 0xAB5u},     /* 0 2 4 5 7 9 11 */
-    {"MINOR", 0x5ADu},     /* 0 2 3 5 7 8 10 */
-    {"DORIAN", 0x6ADu},    /* 0 2 3 5 7 9 10 */
-    {"HARM MIN", 0x9ADu},  /* 0 2 3 5 7 8 11 */
-    {"PENTA", 0x295u},     /* 0 2 4 7 9 */
-    {"PCO", 0x6BBu},       /* Alex's pentatonic-compatible octatonic: 0 1 3 4 5 7 9 10 */
-    {"NOODLING", 0x4F3u},  /* Alex's: 0 1 4 5 6 7 10 */
-    {"OCTATONIC", 0xB6Du}, /* whole-half: 0 2 3 5 6 8 9 11 */
+    {"LYDIAN", 2773u},     /* 0 2 4 6 7 9 11 */
+    {"MAJOR", 2741u},      /* 0 2 4 5 7 9 11: Ionian */
+    {"MIXOLYDIAN", 1717u}, /* 0 2 4 5 7 9 10 */
+    {"DORIAN", 1709u},     /* 0 2 3 5 7 9 10 */
+    {"MINOR", 1453u},      /* 0 2 3 5 7 8 10: Aeolian */
+    {"PHRYGIAN", 1451u},   /* 0 1 3 5 7 8 10 */
+    {"LOCRIAN", 1387u},    /* 0 1 3 5 6 8 10 */
+    {"MAJ PENTA", 661u},   /* 0 2 4 7 9 */
+    {"SUS PENTA", 1189u},  /* 0 2 5 7 10 */
+    {"MIN PENTA", 1193u},  /* 0 3 5 7 10 */
+    {"MAJ BLUES", 669u},   /* 0 2 3 4 7 9 */
+    {"MIN BLUES", 1257u},  /* 0 3 5 6 7 10 */
+    {"MEL MIN", 2733u},    /* 0 2 3 5 7 9 11 */
+    {"HARM MIN", 2477u},   /* 0 2 3 5 7 8 11 */
+    {"WHOLE TONE", 1365u}, /* 0 2 4 6 8 10 */
+    {"OCT H-W", 1755u},    /* half-whole: 0 1 3 4 6 7 9 10 */
+    {"OCT W-H", 2925u},    /* whole-half: 0 2 3 5 6 8 9 11 */
+    {"AUGMENTED", 2457u},  /* 0 3 4 7 8 11 */
+    {"PCO", 1723u},        /* Alex's pentatonic-compatible octatonic: 0 1 3 4 5 7 9 10 */
+    {"NOODLING", 1267u},   /* Alex's: 0 1 4 5 6 7 10 */
+    {"CHROMATIC", 4095u},
 };
 const unsigned CHORD_NSCALES = sizeof CHORD_SCALES / sizeof CHORD_SCALES[0];
 

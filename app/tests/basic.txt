@@ -56,7 +56,7 @@ turn K3 1
 turn K3 1
 turn K3 1
 wait 30
-expect scale 5
+expect scale 6
 expect play 0
 press EDIT
 turn K1 1
@@ -104,7 +104,7 @@ turn K3 -1
 turn K3 -1
 turn K3 -1
 wait 30
-expect scale 0
+expect scale 1
 # a glide gesture on K4 (the PLAY page), recorded with the notes
 turn K4 5
 wait 30
