@@ -60,6 +60,13 @@ The JieLi toolchain only runs on Linux x86-64. Three ways to get the `.fwsc`:
 Install with M-Patcher, or `python3 base/tools/fm1_install.py app/build/mvane-yard.fwsc`. Back up the current firmware
 first.
 
+## Releases
+
+Tag `vX.Y` (or `vX.Y-beta` for a pre-release) and push the tag: `.github/workflows/release.yml` (fm1-base's, through
+the shared FM-1 builder `zvenson/fm1-build`) builds the package from source, runs `tests/run_tests.sh`, attests the
+build's provenance (which the FM-1 Firmware Hub checks) and publishes the release with `mvane-yard-X.Y.fwsc`,
+`firmware.json` and the `.rfm1`.
+
 ## Licence
 
 GPL-3.0-only (see `LICENSE`), so code from Clipper and Coral Flower (both GPL-3.0) can come in. fm1-base and

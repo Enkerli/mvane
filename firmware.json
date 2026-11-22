@@ -4,15 +4,17 @@
   "name": "mvane yard",
   "author": "Alexandre Enkerli",
   "license": "GPL-3.0-only",
-  "tagline": "chords, MPE and a recorder that never stops",
-  "description": "A performance firmware for the M-VAVE FM-1: notes or diatonic chords with smooth voice leading, MPE out over USB, and an always-on history you capture after the fact and replay.",
+  "tagline": "chords from any scale, Clipper's sounds, MPE, and a recorder that keeps everything",
+  "description": "A performance firmware for the M-VAVE FM-1. Play notes, or chords from any of eight pitch-class sets (Coral Flower-style qualities or the scale's own types, close, open, wide or paired voicings, a separate bass, smooth voice leading, HOLD), through Clipper's 337 factory sounds or a simple saw, with MPE in and out, breath and mono legato. A recorder that never stops keeps what you played: capture it after the fact, replay it through other sounds, save eight takes, take them to a DAW as MIDI.",
   "tags": ["synth", "chords", "sequencer", "midi"],
+  "install": "https://github.com/Enkerli/mvane-yard/releases",
   "site": "https://enkerli.github.io/mvane-yard/",
   "source": "https://github.com/Enkerli/mvane-yard",
+  "screenshot": "docs/media/screen.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],
     "features": ["usb-audio-in", "usb-audio-out", "usb-midi-host", "second-core", "velocity", "pressure", "screen-reader", "companion"]
   },
-  "credits": "Built on fm1-base (MPL-2.0) and felucca-bsp."
+  "credits": "Built on fm1-base (MPL-2.0) and felucca-bsp; the sounds are Clipper's synth (GPL-3.0, by 3dSam and contributors, after SLOOP and Felucca by Leo Kuroshita)."
 }
