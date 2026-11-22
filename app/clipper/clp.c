@@ -193,10 +193,11 @@ static const uint8_t CLP_EXPR_DST[NENGINES][2] = {
     {MT_CUT, MT_SHAPE},     /* DIGITAL  (splits) */
     {MT_CUT, MT_SHAPE},     /* PHASE    (splits) */
     {MT_OFF, MT_OFF},       /* LOFI     (not offered) */
-    {XE(5), XE(5)},         /* SAMPLE   CUT, CUT */
+    {MT_CUT, MT_CUT},       /* SAMPLE   (splits, since mvane yard's voice.c vs_ok) */
     {XE(5), XE(1)},         /* VOICE    BUZZ, VOWL */
     {MT_CUT, MT_SHAPE},     /* TRIO     (splits) */
-    {XE(7), XE(4)},         /* WHEEL    DRV, TOP */
+    {MT_OFF, MT_OFF},       /* WHEEL    (splits; its bars and drive are the part's, set once a block: no voice's
+                             * matrix reaches them; pressure to the level only) */
     {XE(8), XE(2)},         /* GRAIN    TONE, POS */
     {MT_CUT, MT_SHAPE},     /* FM6      (splits) */
     {XE(3), XE(5)},         /* PHYS     BRIT, POS */

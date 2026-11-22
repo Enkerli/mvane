@@ -97,8 +97,16 @@ on core 1 to none). Now an engine that splits takes the matrix's CUT or SHAPE, c
 voice) and the five engines Clipper keeps on one core: SAMPLE, VOICE, WHEEL, GRAIN, PHYS (72 sounds, among them the
 light polyphonic ones Alex likes). The screen shows x2 after CPU while the second core takes jobs, x1 lit when not.
 
-Next: whether SAMPLE and WHEEL could split (what their render shares: WHEEL's organ is set once a block, which suits
-splitting its voices); the load of quick successions (voice starts, release tails, stealing).
+**SAMPLE and WHEEL on both cores** (0.10-dev). Clipper kept them on one core without saying why; their renders
+write only their own voice (SAMPLE reads its zone and the flash's data; WHEEL's bars and rotors are set by
+`drawbar_block` before the voices, then only read), and fm1-base's second core may read the flash. Added to
+`voice.c vs_ok`. `make clp-race` (in CI) renders each sound with the second core's job on a real second thread under
+ThreadSanitizer: every one of the 337 sounds is the same bit for bit as on one core, and no race is reported (a
+planted one is). Their expression slots moved off EDIT values (SAMPLE: CUT; WHEEL: the level only, its drawbars
+being the part's). 202 of 337 sounds split now; SAW ENSEMBLE, SAMPLE CHOIR and the organs hand about half their
+voice-blocks to the second core. Still on one core: VOICE, GRAIN, PHYS, and mono sounds.
+
+Next: the load of quick successions (voice starts, release tails, stealing).
 
 ## Sequence
 

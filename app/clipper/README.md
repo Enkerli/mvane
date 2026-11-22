@@ -12,10 +12,13 @@ RAM: `engines.c` builds `eng_wave_off.c` (WAVE silent, no tables: 72 KB) unless 
 is `CLP_DLY_LEN` long (16384: 0.74 s, half Clipper's). `src/seq_ctl.c` is
 copied verbatim from Clipper's `seq.c` (the part's controllers and the standard CC map). `hal/fm1_xip.h` is mvane
 yard's stand-in (nothing reads the flash). `gen/` holds the tables Clipper's `tools/gen_*.py` make.
+`src/voice.c` `vs_ok` also lets SAMPLE and WHEEL split their voices between the cores (2026-11-22: each one's render
+writes its own voice only; `make clp-race` renders every sound on two threads under ThreadSanitizer, bit for bit
+against one core). `src/fx.c` has the effect gate's hook (`CLP_FX_GATE`).
 
 `clp.c` is the glue: the power-on, a sound loaded, MIDI in (notes, bend, pressure, MPE, the controllers), the block
 render, and stand-ins for what Clipper's UI, sequencer, USB and HAL gave the synth. It is its own unit (fm1.toml
 `o2`), so Clipper's names stay inside it; `clp.h` is all mvane yard sees.
 
 Not here: Clipper's UI, sequencer, arpeggiator, song mode, projects, user presets, the editor protocol, its USB and
-second-core code. One core only for now (Clipper splits the voices over two).
+second-core code: fm1-base's `plat_cpu2_*` takes its place (`clp.c`), and Clipper's voice split runs on it.

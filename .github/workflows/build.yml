@@ -40,6 +40,7 @@ jobs:
           make check
           make synth-cmp
           make clp-split
+          make clp-race
 
       - name: Host simulator checks
         run: |

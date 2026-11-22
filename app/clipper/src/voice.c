@@ -1225,7 +1225,11 @@ static int vs_ok(const engine_t *e)                 /* its render may run on two
 {
     return e == &ENG_HYBRID || e == &ENG_FMX || e == &ENG_WAVE || e == &ENG_ANALOG || e == &ENG_FM6 || e == &ENG_VPS ||
            e == &ENG_TERRAIN || e == &ENG_WSEQ || e == &ENG_MACRO || e == &ENG_STRINGS || e == &ENG_TRIO ||
-           e == &ENG_PHASE || e == &ENG_DIGITAL || e == &ENG_LOFI || e == &ENG_ACID || e == &ENG_JUNO || e == &ENG_VECTOR;
+           e == &ENG_PHASE || e == &ENG_DIGITAL || e == &ENG_LOFI || e == &ENG_ACID || e == &ENG_JUNO || e == &ENG_VECTOR ||
+           /* (mvane yard, 2026-11-22) SAMPLE: its render reads the zone and the flash's data, writes its voice only;
+            * WHEEL: drawbar_block sets the part's bars and rotors before the voices (e->block), each voice's render
+            * reads them and writes its own drw_v (tools/clp_race.c: two threads, ThreadSanitizer, bit for bit) */
+           e == &ENG_SAMPLE || e == &ENG_DRAWBAR;
 }
 static void vs_finish(track_t *t, const engine_t *e, int32_t *out, uint32_t n)
 {

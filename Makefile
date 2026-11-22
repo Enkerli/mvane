@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -53,3 +53,9 @@ clp-split:   # the expression slots must leave each Clipper sound's voices split
 	@mkdir -p $(B)
 	$(CC) -O1 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_split.c -o $(B)/clp_split -lm
 	$(B)/clp_split
+
+ENGINES ?= SAMPLE,WHEEL
+clp-race:   # Clipper's voices on two threads under ThreadSanitizer, bit for bit against one core
+	@mkdir -p $(B)
+	$(CC) -O1 -g -std=gnu99 -w -fsanitize=thread -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_race.c -o $(B)/clp_race -lm -lpthread
+	TSAN_OPTIONS=halt_on_error=1 $(B)/clp_race $(ENGINES)
