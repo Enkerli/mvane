@@ -15,8 +15,8 @@ const char *clp_sound_kind(uint32_t i);
 int clp_sound_mono(uint32_t i);              /* 1: a mono sound (legato) */
 uint32_t clp_sound_key(uint32_t i);           /* engine << 8 | preset (tools) */
 uint32_t clp_sound_cost(uint32_t i);
-/* the families (by how each sound behaves: tools/clp_bank.c): 0 CHORDS LIGHT, 1 CHORDS, 2 HITS LIGHT, 3 HITS, 4 LEADS,
- * 5 OTHER; the list runs through them in that order */
+/* the families (by how each sound behaves: tools/clp_bank.c; its load: tools/clp_cost.c): 0 CHORDS EZ, 1 LEADS EZ,
+ * 2 HITS EZ, 3 CHORDS HRD, 4 LEADS HRD, 5 HITS HRD, 6 OTHER; the list runs through them in that order */
 uint32_t clp_sound_family(uint32_t i);
 const char *clp_family_name(uint32_t f);
 uint32_t clp_sound_kind_id(uint32_t i);       /* Clipper's kind: 0 BASS 1 KEYS 2 ORGAN 3 PAD 4 LEAD 5 PLUCK 6 STAB 7 FX 8 none */

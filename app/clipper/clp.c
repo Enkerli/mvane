@@ -358,7 +358,10 @@ static const uint8_t CLP_FAM[NENGINES][40];
 static const uint8_t CLP_COST[NENGINES][40];
 #endif
 static const char *const CLP_KIND_N[CK_NONE + 1] = {"BASS", "KEYS", "ORGAN", "PAD", "LEAD", "PLUCK", "STAB", "FX", ""};
-static const char *const CLP_FAM_N[6] = {"CHORDS LIGHT", "CHORDS", "HITS LIGHT", "HITS", "LEADS", "OTHER"};
+/* the families PRESETS runs through (Alex, 2026-11-22): the light ones first, by use, then the same for the heavy;
+ * EZ and HRD say the load, not the sound's size */
+static const char *const CLP_FAM_N[7] = {"CHORDS EZ", "LEADS EZ", "HITS EZ", "CHORDS HRD", "LEADS HRD", "HITS HRD",
+                                         "OTHER"};
 static uint16_t clp_list0[CLP_NSOUNDS];         /* as made */
 static uint8_t clp_bank_wanted = 1;
 static uint32_t clp_kind_of(uint32_t key)
@@ -375,10 +378,11 @@ static uint32_t clp_cost_of(uint32_t key)
     uint32_t e = key >> 8, p = key & 0xFFu;
     return e < NENGINES && p < 40u ? CLP_COST[e][p] : 0u;
 }
-static uint32_t clp_fam_of(uint32_t key)        /* 0 CHORDS LIGHT .. 5 OTHER */
+static uint32_t clp_fam_of(uint32_t key)        /* 0 CHORDS EZ .. 6 OTHER (CLP_FAM_N) */
 {
+    static const uint8_t AT[3] = {0, 2, 1};      /* clp_bank.h's CHORDS, HITS, LEADS: their places among the EZ */
     uint32_t e = key >> 8, p = key & 0xFFu, f = e < NENGINES && p < 40u ? CLP_FAM[e][p] : 3u;
-    return f == 0u ? (clp_cost_of(key) ? 1u : 0u) : f == 1u ? (clp_cost_of(key) ? 3u : 2u) : f + 2u;
+    return f >= 3u ? 6u : AT[f] + (clp_cost_of(key) ? 3u : 0u);
 }
 static uint32_t clp_rank(uint32_t key, uint32_t at)   /* the banked order's sort key */
 {
@@ -419,7 +423,7 @@ void clp_bank_on(int on)                        /* 1 (default): by family; 0: as
         clp_order();
 }
 uint32_t clp_sound_family(uint32_t i) { return i < clp_n ? (clp_bank_wanted ? clp_fam_of(clp_list[i]) : 0u) : 0u; }
-const char *clp_family_name(uint32_t f) { return f < 6u ? CLP_FAM_N[f] : ""; }
+const char *clp_family_name(uint32_t f) { return f < 7u ? CLP_FAM_N[f] : ""; }
 uint32_t clp_sound_kind_id(uint32_t i) { return i < clp_n ? clp_kind_of(clp_list[i]) : CK_NONE; }
 uint32_t clp_sound_old_key(uint32_t i) { return i < clp_n ? clp_list0[i] : 0xFFFFu; }   /* (before 0.10: as made) */
 uint32_t clp_sound_of_key(uint32_t key)         /* its place in the list now, or clp_sounds() */
@@ -438,7 +442,7 @@ const char *clp_sound_name(uint32_t i)
 const char *clp_sound_engine(uint32_t i) { return i < clp_n ? ENGINES[clp_list[i] >> 8]->name : 0; }
 const char *clp_sound_kind(uint32_t i) { return i < clp_n ? CLP_KIND_N[clp_kind_of(clp_list[i])] : ""; }
 uint32_t clp_sound_key(uint32_t i) { return i < clp_n ? clp_list[i] : 0xFFFFu; }   /* engine << 8 | preset */
-uint32_t clp_sound_cost(uint32_t i)             /* 0 LIGHT, 1 MID, 2 HEAVY (measured: tools/clp_cost.c) */
+uint32_t clp_sound_cost(uint32_t i)             /* 0 EZ, 1 HRD (measured: tools/clp_cost.c) */
 {
     uint32_t e, p;
     if (i >= clp_n)

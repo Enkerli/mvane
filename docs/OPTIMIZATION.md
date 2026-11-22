@@ -113,6 +113,18 @@ cost about 15% of a light sound and their sends little more; the gate only acts 
 playing: the audit's "finer effect gate". Alex's taste, for the defaults: a little chorus (2 to 4), SPACE rather than
 the REVERB send, usually no DRIVE or DELAY.
 
+**0.10's cost analysis, again** (Alex: some LIGHT sounds were close to MID or HEAVY). `make clp-cost` now plays
+a chord of six with each sound's trim and expression slots, its second core's half timed apart (the FM-1 runs it
+alongside): a block's cost is about the longer half. Fit to Alex's readings: about 1.25% of the FM-1 a microsecond
+here, plus 22%. Two tiers: EZ (15 us or less, about 40% with such a chord: 116 sounds) and HRD (221).
+
+**Xruns at a change of sound.** On this computer the block a sound loads in costs no more than its others (median
+of five: +3 us), nor does a chord's first block. What the FM-1 adds is its instruction cache: a new engine's code
+comes from the flash on its first blocks. To tell, the bottom line now shows PK (the worst block since the latest
+change of sound, past its first second) and SW (the worst in that first second), and XR counts the xruns within a
+second of a change (n AT SW). If SW runs well over PK, the change is it: the engine's hot code in RAM
+(`.c1_text`), or a shorter crossfade of the old sound, are the ways out.
+
 **The regression, found and fixed.** Clipper splits a sound's voices between the cores only for voices whose EDIT
 values the matrix leaves alone (voice.c: such a voice writes the part's values for its call, so it renders on this
 core after the other's). The expression slots of 5f48553 pointed HYBRID's pressure at its CUT (E1) and JUNO's slide

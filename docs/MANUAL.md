@@ -23,7 +23,7 @@ start from their defaults after an update that changes their layout (0.6 and 0.7
 | Knob row | K1 to K4: tone, release, glide, attack |
 | HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a take not yet saved |
 | TAKE n/8 | The take in the current slot, its length, PLAYING or NOT SAVED |
-| Bottom | CPU load (then x2 while the second core renders half of a Clipper sound's voices, x1 lit when it does not run) and XR (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (larger, on the left; the play mode, the sound's cost and HOST on the right, each where it fits) (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (LIGHT, MID, HEAVY), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
+| Bottom | CPU load (then x2 while the second core renders half the voices, x1 lit when it does not run) and XR (with how many came within a second of a change of sound: n AT SW), PK and SW (the worst single block since the latest change of sound, and in the second after it, in % of a block's time: 100 misses it) (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (larger, on the left; the play mode, the sound's cost and HOST on the right, each where it fits) (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (EZ, HRD), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
 
 ## Controls
 
@@ -143,18 +143,21 @@ nine values), add or remove, send back, or save as JSON to share; `tools/yard.py
 
 | Family | What | For |
 | --- | --- | --- |
-| **CHORDS LIGHT** (14) | Sustained, polyphonic, light on the CPU: SAMPLE's pads, the WHEEL organs, PHASE's organ and keys | Chords, with CPU to spare |
-| **CHORDS** (119) | Sustained, polyphonic: pads, strings, organs, keys that hold | Chords |
-| **HITS LIGHT** (24), **HITS** (72) | Short, polyphonic: plucks, bells, stabs | Stabs, hits, bursts, arpeggios |
-| **LEADS** (79) | Mono, sustained: leads and basses | A wind controller |
+| **CHORDS EZ** (20) | Sustained, polyphonic, light: YARD's SAW, PAD, ENSEMBLE, BRASS; SAMPLE's pads, the WHEEL organs, PHASE's keys | Chords, with CPU to spare |
+| **LEADS EZ** (72) | Mono, sustained, light: YARD's LEAD, BASS, WIND; most mono leads and basses | A wind controller |
+| **HITS EZ** (18) | Short, polyphonic, light: YARD's KEYS, PLUCK; light plucks, bells, stabs | Stabs, hits, bursts, arpeggios |
+| **CHORDS HRD** (109), **LEADS HRD** (10), **HITS HRD** (88) | The same, heavier on the CPU | |
 | **OTHER** (29) | Mono and short, percussion, noises | |
 
-The screen names the family as the sound changes (CHORDS LIGHT, SAMPLE CHOIR). A fast turn of PRESETS, or SELECT on
-the play pages, goes to the next family's first sound (back: this family's first, then the one before). Within a
-family, sounds of a kind are together, in Clipper's own filing: pads, organs, keys, stabs, plucks, leads, basses.
+**EZ** and **HRD** say the load on the FM-1 (a chord of six on its two cores: EZ about 40% or less), not the size
+of the sound. In each family YARD's own sounds come first, then yours (FX and SAVE), then Clipper's. The screen
+names the family as the sound changes (CHORDS EZ, SAMPLE CHOIR). A fast turn of PRESETS, or SELECT on the play
+pages, goes to the next family's first sound (back: this family's first, then the one before). Within a family,
+Clipper's sounds of a kind are together, in Clipper's own filing: pads, organs, keys, stabs, plucks, leads, basses.
 Each of Clipper's sounds is trimmed so that a chord of six (the bass and five voices) stays under its master
 limiter: Clipper's levels suit a few notes, and a limiter working hard on a held chord is heard as grit (`make
-clp-trim`). Chord sounds are quieter than in Clipper (MASTER makes it up); none is limited more than 1.5 dB.
+clp-trim`), played hard: velocity 127, full pressure, chords struck in quick succession. Chord sounds are quieter
+than in Clipper (MASTER makes it up); none is limited more than about 2 dB.
 WAVE is left out for now (RAM); ACID, NOISE and LOFI are out of the list. A sound saved in the settings stays the
 same across the reordering (it is kept by name, not by place). Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
 aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (71 resonance, 72 release, 73 attack,
@@ -166,13 +169,11 @@ PLAY page's GLIDE is yours, not the sound's: it applies to every sound as it loa
 **Mono sounds** (89 of them, as Clipper's presets say) show MONO when you pick them, and MONO SOUND on the bottom line
 while POLY is set: they play one note of a chord.
 
-**Cost.** Each sound is tagged LIGHT, MID or HEAVY (shown when you pick it, and on the bottom line), from its render
-time measured on a computer (`make clp-cost`, `tools/clp_cost.c`); the FM-1 is much slower, the ranking holds.
-Engines, lightest first, by their sounds' mean: SAMPLE, PHASE, DIGITAL, WHEEL, WSEQ, TRIO, ANALOG, VOICE, GRAIN, VPS,
-TERRAIN, VECTOR, FM6, FMX, HYBRID, PHYS, JUNO, MACRO, STRINGS; the heaviest sounds are some HYBRID and FMX ones.
-About half of a typical sound's cost is Clipper's chain with nothing playing (its chorus, delay and reverb buses,
-master stage and limiter). Its effect buses stop once every send has been silent for 20 s: turning the CHORUS send
-to 0 (FX, K2) on a sound that has one saves a good share of the CPU.
+**Cost.** Each sound is tagged EZ or HRD (on the bottom line), measured on a computer as the FM-1 plays it: a chord
+of six, its voices over the two cores (`make clp-cost`, `tools/clp_cost.c`; fit to Alex's readings on the FM-1).
+Engines, lightest first, by their sounds' mean: SAMPLE, PHASE, DIGITAL, ANALOG, WSEQ, WHEEL, TRIO, VOICE, VPS,
+TERRAIN, VECTOR, FM6, FMX, HYBRID, GRAIN, MACRO, STRINGS, PHYS, JUNO. YARD's sounds are lighter than any. About 15%
+of a light sound is Clipper's effect buses, which stop only once every send has been silent for 20 s.
 
 ## The recorder
 

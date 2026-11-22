@@ -174,43 +174,86 @@ static void yard_bank_load(void)
     ybank.magic = YB_MAGIC, ybank.version = 1, ybank.n = YB_N;
     yard_bank_index();
 }
-#define NYARD ((uint32_t)SYNTH_NSOUNDS + nyuser)
-static int clp_on(void) { return set.sound >= NYARD; }             /* a Clipper sound plays */
-static uint32_t clp_at(void) { return set.sound - NYARD; }         /* .. its index in clp's list */
-static uint32_t yard_at(void) { return set.sound < NYARD ? set.sound : 0u; }
-static const synth_sound_t *ysound(uint32_t i)                     /* YARD's i-th: its own, then the user's */
+/* PRESETS's list (0.10, Alex 2026-11-22): the families CHORDS EZ, LEADS EZ, HITS EZ, CHORDS HRD, LEADS HRD, HITS HRD,
+ * OTHER (clp.h), each YARD's own sounds first, then the user's, then Clipper's. An entry: PL_YARD | YARD's own,
+ * PL_USER | the user's (its place in yuser), PL_CLP | Clipper's (its place in clp's list); set.sound its place here */
+#define PL_YARD 0x0000u
+#define PL_USER 0x4000u
+#define PL_CLP 0x8000u
+#define PL_KIND 0xC000u
+#define PL_MAX (SYNTH_NSOUNDS_MAX + YB_N + 512u)
+#define SYNTH_NSOUNDS_MAX 32u
+static uint16_t plist[PL_MAX];
+static uint8_t pfam[PL_MAX];
+static uint32_t plist_n;
+static uint32_t yard_fam(const synth_sound_t *y)   /* YARD's: mono a lead, PLUCK up a hit, else chords (all EZ) */
 {
-    return i < SYNTH_NSOUNDS ? &SYNTH_SOUNDS[i] : &yuser[(i - SYNTH_NSOUNDS) % YB_N];
+    return y->mono ? 1u : y->p[SP_PLUCK] >= 64u ? 2u : 0u;
 }
-#define YARD_NOW (*ysound(yard_at()))
+static void plist_build(void)
+{
+    uint32_t f, i, n = 0;
+    for (f = 0; f < 7u; f++) {
+        for (i = 0; i < SYNTH_NSOUNDS && n < PL_MAX; i++)
+            if (yard_fam(&SYNTH_SOUNDS[i]) == f)
+                pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_YARD | i);
+        for (i = 0; i < nyuser && n < PL_MAX; i++)
+            if (yard_fam(&yuser[i]) == f)
+                pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_USER | i);
+        for (i = 0; i < clp_sounds() && n < PL_MAX; i++)
+            if (clp_sound_family(i) == f)
+                pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_CLP | i);
+    }
+    plist_n = n;
+}
+static uint32_t plist_find(uint16_t code)       /* its place, or 0 (the first: SAW) */
+{
+    uint32_t i;
+    for (i = 0; i < plist_n && plist[i] != code; i++)
+        ;
+    return i < plist_n ? i : 0u;
+}
+static uint16_t pl_now(void) { return set.sound < plist_n ? plist[set.sound] : (uint16_t)PL_YARD; }
+static int clp_on(void) { return (pl_now() & PL_KIND) == PL_CLP; }        /* a Clipper sound plays */
+static uint32_t clp_at(void) { return pl_now() & 0x0FFFu; }                /* .. its index in clp's list */
+static int user_on(void) { return (pl_now() & PL_KIND) == PL_USER; }      /* a user's YARD sound */
+static const synth_sound_t *ycur(void)          /* the YARD sound playing (a Clipper one: SAW's) */
+{
+    uint16_t c = pl_now();
+    return (c & PL_KIND) == PL_USER ? &yuser[(c & 0x0FFFu) % YB_N]
+                                    : &SYNTH_SOUNDS[(c & PL_KIND) == PL_YARD ? (c & 0x0FFFu) % SYNTH_NSOUNDS : 0u];
+}
+#define YARD_NOW (*ycur())
 
 /* the sound as stored to its place in the list (after clp_init), and back (to store): 0x8000 | Clipper's key;
  * 0x4000 | YARD's own; 0x4100 | a user sound's slot */
 static void sound_from_store(void)
 {
     uint32_t key, i, v = set.sound;
-    if (v < 0x4000u && v)                /* before 0.10: 1.. a Clipper sound, its place in the order as made */
+    uint16_t code = PL_YARD;
+    if (v < 0x4000u && v) {              /* before 0.10: 1.. a Clipper sound, its place in the order as made */
         key = clp_sound_old_key(v - 1u);
-    else if (v & 0x8000u)                /* 0.10: 0x8000 | its key */
-        key = v & 0x7FFFu;
-    else if ((v & 0xFF00u) == 0x4100u) { /* a user sound, by its slot (gone: SAW) */
+        i = clp_sound_of_key(key);
+        code = (uint16_t)(i < clp_sounds() ? PL_CLP | i : PL_YARD);
+    } else if (v & 0x8000u) {            /* 0.10: 0x8000 | its key */
+        i = clp_sound_of_key(v & 0x7FFFu);
+        code = (uint16_t)(i < clp_sounds() ? PL_CLP | i : PL_YARD);
+    } else if ((v & 0xFF00u) == 0x4100u) {   /* a user sound, by its slot (gone: SAW) */
         for (i = 0; i < nyuser && yuser_slot[i] != (v & 0xFFu); i++)
             ;
-        set.sound = (uint16_t)(i < nyuser ? SYNTH_NSOUNDS + i : 0u);
-        return;
-    } else {                             /* 0 (the saw), or 0x4000 | a YARD sound */
-        set.sound = (uint16_t)((v & 0x3FFFu) < SYNTH_NSOUNDS ? v & 0x3FFFu : 0u);
-        return;
-    }
-    i = clp_sound_of_key(key);
-    set.sound = (uint16_t)(i < clp_sounds() ? i + NYARD : 0u);
+        code = (uint16_t)(i < nyuser ? PL_USER | i : PL_YARD);
+    } else                               /* 0 (the saw), or 0x4000 | a YARD sound */
+        code = (uint16_t)(PL_YARD | ((v & 0x3FFFu) < SYNTH_NSOUNDS ? v & 0x3FFFu : 0u));
+    set.sound = (uint16_t)plist_find(code);
 }
 static uint16_t sound_to_store(void)
 {
-    if (clp_on())
-        return (uint16_t)(0x8000u | (clp_sound_key(clp_at()) & 0x7FFFu));
-    return (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound
-                                                : 0x4100u | yuser_slot[(set.sound - SYNTH_NSOUNDS) % YB_N]);
+    uint16_t c = pl_now();
+    if ((c & PL_KIND) == PL_CLP)
+        return (uint16_t)(0x8000u | (clp_sound_key(c & 0x0FFFu) & 0x7FFFu));
+    if ((c & PL_KIND) == PL_USER)
+        return (uint16_t)(0x4100u | yuser_slot[(c & 0x0FFFu) % YB_N]);
+    return (uint16_t)(0x4000u | (c & 0x0FFFu));
 }
 
 /* ------------------------------------------------------------- the render --- */
@@ -297,7 +340,42 @@ static void sq_recover(void)             /* main loop: after a loss, once the qu
 
 /* the engine the render plays: 0 mvane yard's synth (synth.c), 1 Clipper's (clp.c); a change silences the other first */
 static volatile uint8_t eng_want, eng_now;
+/* the render's own timing (0.10, Alex 2026-11-22: xruns that seem to come with a change of sound): each block's time
+ * against its budget; the worst since the latest change of sound past its first second (rt_pk), the worst in that
+ * first second (rt_sw), in % of the budget. The main loop marks the change (rt_mark) */
+static volatile uint32_t rt_pk, rt_sw, rt_blocks, rt_mark_at;
+static volatile uint8_t rt_marked;
+static uint32_t rt_sw_ms, xr_prev, xr_sw;        /* (main loop) the latest change of sound; xruns within its second */
+static void rt_mark(void) { rt_marked = 1, rt_sw_ms = plat_ms(); }
+static void xr_watch(void)               /* main loop: the xruns that came within a second of a change of sound */
+{
+    uint32_t x = plat_xruns();
+    if (x != xr_prev) {
+        if (plat_ms() - rt_sw_ms < 1000u)
+            xr_sw += x - xr_prev;
+        xr_prev = x;
+    }
+}
+static void app_render_(int32_t *lr, uint32_t n, uint32_t master_q12);
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
+{
+    uint32_t t0 = plat_ticks24(), us, pct, budget = n * 1000000u / 44100u;
+    app_render_(lr, n, master_q12);
+    us = (plat_ticks24() - t0) / PLAT_TICKS_PER_US;
+    pct = budget ? us * 100u / budget : 0u;
+    if (rt_marked) {                     /* a change of sound: both start over */
+        rt_marked = 0;
+        rt_mark_at = rt_blocks;
+        rt_pk = rt_sw = 0;
+    }
+    if (rt_blocks - rt_mark_at < 172u) { /* (172 blocks: a second) */
+        if (pct > rt_sw)
+            rt_sw = pct;
+    } else if (pct > rt_pk)
+        rt_pk = pct;
+    rt_blocks++;
+}
+static void app_render_(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     if (eng_want != eng_now) {
         synth_panic();
@@ -331,7 +409,7 @@ static void yard_mode(void)              /* YARD's mono: PLAY's MONO, or the sou
 }
 static void sound_apply(void)            /* the sound setting to the engines (main loop) */
 {
-    if (set.sound >= NYARD + clp_sounds())
+    if (set.sound >= plist_n)
         set.sound = 0;
     if (clp_on())
         clp_select(clp_at());
@@ -412,6 +490,24 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
         bus(0xB0u | c, 6u, BEND_RANGES[set.bend & 3u], TO_OUT);
     }
 }
+
+/* ------------------------------------------------------------- VIBE FM --- */
+/* VIBE FM's converter (TheFirmwareHub) builds the firmware to WebAssembly on a platform of its own, which may lack
+ * what mvane yard took up after 0.4 (the hub's newest that converts, 2026-11-22): the second core, the USB host, a
+ * lost USB, the microsecond ticks. Weak stand-ins for that build only (a WebAssembly build that is not fm1-base's
+ * emulator): where the converter's platform has them, its own win; where not, one core, no USB host */
+#if defined(__wasm__) && !defined(PLAT_HOST)
+__attribute__((weak)) int plat_cpu2_set(int on) { (void)on; return -1; }
+__attribute__((weak)) int plat_cpu2_on(void) { return 0; }
+__attribute__((weak)) int plat_cpu2_run(void (*fn)(uint32_t), uint32_t arg) { (void)fn, (void)arg; return 0; }
+__attribute__((weak)) int plat_cpu2_wait(void) { return -1; }
+__attribute__((weak)) uint32_t plat_ticks24(void) { return plat_ms() * 24000u; }
+__attribute__((weak)) void plat_usb_host(int on) { (void)on; }
+__attribute__((weak)) int plat_usb_host_msg(void) { return 0; }
+__attribute__((weak)) const char *plat_usb_host_name(void) { return ""; }
+__attribute__((weak)) int plat_usb_host_state(void) { return 0; }
+__attribute__((weak)) int plat_usb_lost(void) { return 0; }
+#endif
 
 /* -------------------------------------------------------------- the takes --- */
 /* Takes kept in the flash: TAKE_SLOTS slots (takes.c). A WebAssembly build that is not fm1-base's own emulator
@@ -515,6 +611,7 @@ void app_init(void)
     synth_mode(set.play & 1u, set.play >> 1);
     clp_init();
     yard_bank_load();
+    plist_build();
     sound_from_store();
     if (plat_cpu2_set(1) == 0) {         /* the second core renders half the voices, Clipper's or YARD's */
         clp_cores(2u);
@@ -877,6 +974,7 @@ static const char *sound_name(void) { return clp_on() ? clp_sound_name(clp_at())
  * only four notes wait meanwhile) */
 static void sound_change_hold(void)
 {
+    rt_mark();
     int keep = set.mode && ui.chord_n && ui.chord_key >= 0 && (ui.hold || (ui.keys >> ui.chord_key & 1u));
     int32_t ck = ui.chord_key;
     all_off();
@@ -891,10 +989,10 @@ static void sound_change_hold(void)
 
 /* PRESETS turned: a sound on or back; a fast turn, the next family's first sound (or this one's, then the one before):
  * YARD (mvane yard's own), CHORDS LIGHT, CHORDS, HITS LIGHT, HITS, LEADS, OTHER (clp_sound_family) */
-static int32_t sound_fam(uint32_t s) { return s >= NYARD ? (int32_t)clp_sound_family(s - NYARD) : -1; }
+static int32_t sound_fam(uint32_t s) { return s < plist_n ? (int32_t)pfam[s] : 0; }
 static void sound_step(int32_t e)
 {
-    uint32_t ns = NYARD + clp_sounds(), s = set.sound;
+    uint32_t ns = plist_n, s = set.sound;
     if (e > 4) {
         int32_t f = sound_fam(s);
         while (s + 1u < ns && sound_fam(s) == f)
@@ -924,10 +1022,10 @@ static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the 
     if (!clp_on())
         for (i = 0; i < SP_N; i++)
             if (i != SP_GLIDE)
-                synth_set(i, ysound(set.sound)->p[i]), knob[i] = ysound(set.sound)->p[i];
+                synth_set(i, ycur()->p[i]), knob[i] = ycur()->p[i];
     set_dirty = 1;
     sound_change_hold();
-    app_say(clp_on() ? clp_family_name(clp_sound_family(clp_at())) : "YARD", sound_name());
+    app_say(clp_family_name(pfam[set.sound < plist_n ? set.sound : 0u]), sound_name());
 }
 
 /* FX held, SAVE: the YARD sound as the knobs have it into the user's bank: over itself if it is a user sound, else
@@ -936,9 +1034,9 @@ static void yard_store(void)
 {
     uint32_t i, slot = YB_N, k;
     char t[16];
-    const synth_sound_t *src = ysound(yard_at());
-    if (set.sound >= SYNTH_NSOUNDS && set.sound < NYARD)
-        slot = yuser_slot[set.sound - SYNTH_NSOUNDS];
+    const synth_sound_t *src = ycur();
+    if (user_on())
+        slot = yuser_slot[(pl_now() & 0x0FFFu) % YB_N];
     else
         for (i = 0; i < YB_N && slot == YB_N; i++)
             if (!(ybank.s[i].flags & 1u))
@@ -963,9 +1061,10 @@ static void yard_store(void)
         return;
     }
     yard_bank_index();
+    plist_build();
     for (i = 0; i < nyuser && yuser_slot[i] != slot; i++)
         ;
-    set.sound = (uint16_t)(SYNTH_NSOUNDS + i);
+    set.sound = (uint16_t)plist_find((uint16_t)(PL_USER | i));
     set_dirty = 1;
     for (k = 0; k < 12u && ybank.s[slot].name[k]; k++)
         t[k] = ybank.s[slot].name[k];
@@ -1196,6 +1295,7 @@ static void input(void)
     int port;
     int32_t e;
     sq_recover();                        /* a lost event: the engine set right, once the render has caught up */
+    xr_watch();
     if (plat_midi_out_link() != ui.link) {   /* a new USB connection: tell it this is MPE */
         ui.link = plat_midi_out_link();
         mpe_config();
@@ -1502,7 +1602,7 @@ static void draw(void)
     {                                    /* the bottom line: the render's load, missed deadlines and lost events on
                                           * the left, larger; the play mode, the sound's cost and the USB host on the
                                           * right, each only where it fits (none overlaps) */
-        static const char *const COST_N[3] = {"LIGHT", "MID", "HEAVY"};
+        static const char *const COST_N[2] = {"EZ", "HRD"};
         static const char *const PLAY_S[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
         const char *ps = sound_mono() && !(set.play & 1u) ? "MONO SOUND" : PLAY_S[set.play];
         char x[12];
@@ -1521,13 +1621,31 @@ static void draw(void)
         text_cat(t, "XR ");
         int_text((int32_t)plat_xruns(), x);
         text_cat(t, x);
-        l = cv_text(l, 81, &FONT_S, t, plat_xruns() ? C_HI : C_GRAY) + 10;
+        l = cv_text(l, 81, &FONT_S, t, plat_xruns() ? C_HI : C_GRAY) + 4;
+        if (xr_sw) {                     /* of them, within a second of a change of sound */
+            t[0] = 0;
+            int_text((int32_t)xr_sw, t);
+            text_cat(t, " AT SW");
+            l = cv_text(l, 82, &FONT_XS, t, C_HI) + 4;
+        }
+        l += 6;
         if (sq_lost) {                   /* events the render's queue lost (each recovered) */
             t[0] = 0;
             text_cat(t, "Q ");
             int_text((int32_t)sq_lost, x);
             text_cat(t, x);
             l = cv_text(l, 81, &FONT_S, t, C_HI) + 10;
+        }
+        {                                /* the worst block since the latest change of sound past its first second, and
+                                          * in that second (% of the block's time: 100 misses it) */
+            t[0] = 0;
+            text_cat(t, "PK ");
+            int_text((int32_t)rt_pk, x);
+            text_cat(t, x);
+            text_cat(t, " SW ");
+            int_text((int32_t)rt_sw, x);
+            text_cat(t, x);
+            l = cv_text(l, 82, &FONT_XS, t, rt_pk >= 90u || rt_sw >= 90u ? C_HI : C_GRAY) + 8;
         }
         w = text_w(&FONT_XS, ps);
         if (r - w >= l) {
@@ -1536,9 +1654,9 @@ static void draw(void)
         }
         {                                /* the sound's measured cost (tools/clp_cost.c); the saw: LIGHT (about 12%
                                           * on the FM-1 with a chord, under any of Clipper's: Alex 2026-11-22) */
-            w = text_w(&FONT_XS, COST_N[c]);
+            w = text_w(&FONT_XS, COST_N[c & 1u]);
             if (r - w >= l) {
-                cv_text(r - w, 82, &FONT_XS, COST_N[c], c == 2u ? C_HI : C_GRAY);
+                cv_text(r - w, 82, &FONT_XS, COST_N[c & 1u], C_GRAY);
                 r -= w + 8;
             }
         }
@@ -1683,6 +1801,7 @@ void app_file_changed(uint32_t obj)
                                           * one (a user sound gone: SAW) */
         set.sound = sound_to_store();
         yard_bank_load();
+        plist_build();
         sound_from_store();
         sound_change_hold();
         ui.redraw = 1;
@@ -1705,6 +1824,30 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
 {
     uint32_t i, n;
     (void)c, (void)d;
+    if (!strcmp(cmd, "sound")) {         /* sound NAME (one word: _ for a space): the first of that name on PRESETS,
+                                          * picked as PRESETS picks */
+        uint32_t k, j;
+        char want[24];
+        for (j = 0; j < 23u && a[j]; j++)
+            want[j] = a[j] == '_' ? ' ' : a[j];
+        want[j] = 0;
+        for (k = 0; k < plist_n; k++) {
+            uint16_t c = plist[k];
+            const char *nm = (c & PL_KIND) == PL_CLP ? clp_sound_name(c & 0x0FFFu)
+                             : (c & PL_KIND) == PL_USER ? yuser[(c & 0x0FFFu) % YB_N].name
+                                                        : SYNTH_SOUNDS[(c & 0x0FFFu) % SYNTH_NSOUNDS].name;
+            if (!strcmp(nm, want))
+                break;
+        }
+        if (k == plist_n) {
+            printf("fail no sound %s\n", want);
+            return 1;
+        }
+        set.sound = (uint16_t)(k ? k - 1u : plist_n - 1u);
+        sound_pick(1);
+        printf("ok\n");
+        return 1;
+    }
     if (!strcmp(cmd, "stored_sound")) {  /* the sound as a settings record holds it (before 0.10: a place in the old
                                           * order; 0x8000 | key since), read as at the start */
         set.sound = (uint16_t)strtoul(a, 0, 0);
@@ -1790,8 +1933,12 @@ int app_expect(const char *what, int *got)
         *got = sound_to_store();
     else if (!strcmp(what, "mono"))     /* the sound is a mono one */
         *got = sound_mono();
-    else if (!strcmp(what, "family"))   /* its family: -1 the saw, 0 CHORDS LIGHT .. 5 OTHER */
+    else if (!strcmp(what, "family"))   /* its family: 0 CHORDS EZ .. 6 OTHER */
         *got = sound_fam(set.sound);
+    else if (!strcmp(what, "yard_i"))   /* YARD's own sound playing (its place in SYNTH_SOUNDS), -1 another */
+        *got = (pl_now() & PL_KIND) == PL_YARD ? (int)(pl_now() & 0x0FFFu) : -1;
+    else if (!strcmp(what, "user"))     /* a user's YARD sound plays */
+        *got = user_on();
     else if (!strcmp(what, "chord_sum")) {   /* the notes sounding, summed (a voicing's fingerprint) */
         uint32_t i;
         *got = 0;

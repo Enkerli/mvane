@@ -20,10 +20,11 @@ $(B)/chords_test: core/chords.c core/chords.h core/port.h core/chords_test.c
 	@mkdir -p $(B)
 	$(CC) $(CFLAGS) core/chords.c core/chords_test.c -o $@
 
-clp-cost:   # each Clipper sound's cost tier (app/clipper/gen/clp_cost.h), measured here
+clp-cost:   # each Clipper sound's cost tier, EZ or HRD, as the FM-1's two cores play a chord (app/clipper/gen/clp_cost.h)
 	@mkdir -p $(B)
-	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_cost.c -o $(B)/clp_cost -lm
-	$(B)/clp_cost app/clipper/gen/clp_cost.h
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_cost.c -o $(B)/clp_cost -lm
+	$(B)/clp_cost app/clipper/gen/clp_cost.h > $(B)/clp_cost.txt
+	tail -22 $(B)/clp_cost.txt
 
 host:   # the firmware in the host simulator, and its scripted checks
 	./build.sh --host

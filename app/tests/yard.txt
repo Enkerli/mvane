@@ -2,7 +2,7 @@
 # FX layer as its second page, a 0.9 settings record moved on. app/build/host/mvane-yard_host app/tests/yard.txt app/build/host
 wait 600
 expect sound 0
-expect family -1
+expect yard_i 0
 expect res 0
 expect pluck 0
 # a chord on SAW: its voices over both cores
@@ -13,20 +13,23 @@ expect yard_split >0
 shot yard_saw.png
 key 0 up
 wait 100
-# the next YARD sound, PAD: its parameters; GLIDE stays the PLAY page's
+# the next on PRESETS, YARD's PAD (CHORDS EZ: SAW, PAD, ENSEMBLE, BRASS first): its parameters; GLIDE stays
 turn PRESET 1
 wait 100
-expect sound 1
+expect yard_i 1
+expect family 0
 expect detune 72
 expect glide 30
-# PLUCK, then LEAD: mono, whatever PLAY says
-turn PRESET 3
+# PLUCK, a hit (HITS EZ), then LEAD, mono (LEADS EZ), whatever PLAY says
+sound PLUCK
 wait 100
-expect sound 4
+expect yard_i 4
+expect family 2
 expect pluck 112
-turn PRESET 2
+sound LEAD
 wait 100
-expect sound 6
+expect yard_i 6
+expect family 1
 expect mono 1
 key 0 down 100
 wait 100
@@ -41,13 +44,13 @@ wait 50
 expect res 62
 shot yard_fx.png
 # back to SAW
-turn PRESET -6
+sound SAW
 wait 100
 expect sound 0
 expect res 0
 expect mono 0
-# the user's sounds: FX held and SAVE keeps this one (SAW, RES turned) as USER 1, after YARD's nine; SAVE and a
-# restart keep it, and it is the sound
+# the user's sounds: FX held and SAVE keeps this one (SAW, RES turned) as USER 1, among the CHORDS EZ after YARD's
+# own; SAVE and a restart keep it, and it is the sound
 expect nyuser 0
 press FX
 turn K3 10
@@ -56,7 +59,8 @@ release SAVE
 release FX
 wait 50
 expect nyuser 1
-expect sound 9
+expect user 1
+expect family 0
 expect res 20
 shot yard_user.png
 tap SAVE
@@ -64,15 +68,8 @@ wait 50
 reboot
 wait 600
 expect nyuser 1
-expect sound 9
+expect user 1
 expect res 20
-# the next on PRESETS after it: Clipper's first
-turn PRESET 1
-wait 100
-expect family 0
-turn PRESET -1
-wait 100
-expect sound 9
 # FX and SAVE again on a user sound: over itself
 press FX
 turn K3 5
@@ -81,8 +78,9 @@ release SAVE
 release FX
 wait 50
 expect nyuser 1
+expect user 1
 expect res 30
-turn PRESET -9
+sound SAW
 wait 100
 expect sound 0
 # a 0.9 settings record: moved on (tone, release, glide, attack kept; the sound, Clipper's first as 0.9 had it)

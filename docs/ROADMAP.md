@@ -293,6 +293,30 @@ master and the limiters (`make clp-trim`, gen/clp_trim.h, fx.c CLP_TRIM): 295 so
 Also from Alex: Clipper's default reverb sounds too metallic (FX held, SELECT changes the model); choose a warmer
 default. YARD's sounds have no effects of their own: their character is different, which is interesting.
 
+### Toward the Firmware Hub (Alex, 2026-11-22)
+
+"Getting close to submitting." Before that:
+- **VIBE FM converts the newest release.** The hub says 0.9-beta does not ("you get 0.4"). Since 0.4 mvane yard
+  took up the second core, the USB host, a lost USB and the microsecond ticks; the converter's platform may lack
+  them. 0.10-dev gives weak stand-ins in the WebAssembly build (app.c, VIBE FM): one core and no USB host where the
+  platform has none. To check with a release the hub can try.
+- **Clipping, deeper**: GOSPEL still clipped. Trims measured played hard (velocity 127, full pressure: the expression
+  slots' level swell; chords in quick succession): none over about 2 dB.
+- **Xruns at a change of sound**: PK, SW and n AT SW on the bottom line, to read on the FM-1 (OPTIMIZATION.md).
+- **The costs again**: EZ and HRD, measured on two cores; the families CHORDS EZ, LEADS EZ, HITS EZ, CHORDS HRD,
+  LEADS HRD, HITS HRD, OTHER, YARD's sounds among them.
+- **The page**: every action says what it did, in view wherever the page is scrolled.
+
+Then, from Alex's list:
+- **YARD's sound itself editable**: its oscillators (today one saw for every sound, a second detuned, a sub square:
+  BRASS and WIND differ only by the nine values), so a waveform (saw, pulse with PWM, triangle), noise for breath, a
+  filter mode, an envelope's shape, as patch parameters; the bank's format grows (a version 2).
+- **Clipper's sounds as patch files**: a sound as edited (engine, preset, the parameters changed, the matrix, macros,
+  sends), saved on the device and moved as files like YARD's.
+- **A demo take in the firmware**: a short MIDI phrase showing it off (MPE chords, glide, combined qualities, a lead),
+  1980s-demo cheesy is fine; in a slot at the first start.
+- **Review the roadmap**, then submit to the hub.
+
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
   weights (`packages/proggen/src/curation.js` in music-suite). Phrases come out as chord events that

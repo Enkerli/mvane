@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Each Clipper sound's trim (clp.c, fx.c CLP_TRIM): a chord of six (mvane yard's bass and five upper voices, velocity
- * 110) held two seconds, a mono sound's single note, at MASTER all the way up (as USB AUDIO FULL records it); the
- * master limiter's deepest gain reduction (fx.c lim_dac) gives the trim that keeps it under, less 1 dB, never above
- * 1. Writes app/clipper/gen/clp_trim.h, then plays every sound again with its trim: what limiting is left.
+/* Each Clipper sound's trim (clp.c, fx.c CLP_TRIM): played hard (reduction(): velocity 127, full pressure, chords of
+ * six in quick succession; a mono sound, notes) at MASTER all the way up (as USB AUDIO FULL records it); the master
+ * limiter's deepest gain reduction (fx.c lim_dac) gives the trim that keeps it under, less 1 dB, never above 1. Writes app/clipper/gen/clp_trim.h, then plays every sound again with its trim: what limiting is left.
  *   make clp-trim */
 #include <math.h>
 #include <stdio.h>
@@ -13,24 +12,46 @@ int plat_cpu2_run(void (*f)(uint32_t), uint32_t a) { (void)f, (void)a; return 0;
 int plat_cpu2_wait(void) { return 0; }
 static int32_t lr[512];
 
-static double reduction(unsigned s)              /* dB the limiter took off, at its deepest */
+/* dB the limiter took off, at its deepest, played hard (0.10): velocity 127 and full pressure on every note (the
+ * FM-1's keys send it all the time; the expression slots raise some sounds' level with it), chords of six struck
+ * every quarter second over a held bass, eight of them; a mono sound, eight notes */
+static double reduction(unsigned s)
 {
-    static const uint8_t CH[6] = {36, 52, 55, 59, 64, 67};
-    unsigned b, c, mono = (unsigned)clp_sound_mono(s), nn = mono ? 1u : 6u;
+    static const uint8_t CH[4][5] = {{52, 55, 59, 64, 67}, {57, 60, 64, 67, 72}, {53, 57, 60, 62, 65}, {55, 59, 62, 65, 67}};
+    unsigned b, c, k, r, mono = (unsigned)clp_sound_mono(s);
     int32_t gmin = 32768;
     clp_panic();
     clp_select(s);
     for (b = 0; b < 40; b++)
         clp_render(lr, 256, 4096);
-    for (c = 0; c < nn; c++)
-        clp_event(0x91u + c, mono ? 60u : CH[c], 110);
-    for (b = 0; b < 344; b++) {
-        clp_render(lr, 256, 4096);
-        if (lim_dac.g < gmin)
-            gmin = lim_dac.g;
+    for (c = 0; c < 6u; c++)
+        clp_event(0xD1u + c, 127, 0);
+    if (mono)
+        for (r = 0; r < 8u; r++) {
+            clp_event(0x91, 60u + (r % 4u) * 3u, 127);
+            for (b = 0; b < 40; b++) {
+                clp_render(lr, 256, 4096);
+                gmin = lim_dac.g < gmin ? lim_dac.g : gmin;
+            }
+            clp_event(0x81, 60u + (r % 4u) * 3u, 0);
+        }
+    else {
+        clp_event(0x91, 36, 127);
+        for (r = 0; r < 8u; r++) {
+            k = r % 4u;
+            for (c = 0; c < 5u; c++)
+                clp_event(0x92u + c, CH[k][c], 127);
+            for (b = 0; b < 43; b++) {
+                clp_render(lr, 256, 4096);
+                gmin = lim_dac.g < gmin ? lim_dac.g : gmin;
+            }
+            for (c = 0; c < 5u; c++)
+                clp_event(0x82u + c, CH[k][c], 0);
+        }
+        clp_event(0x81, 36, 0);
     }
-    for (c = 0; c < nn; c++)
-        clp_event(0x81u + c, mono ? 60u : CH[c], 0);
+    for (c = 0; c < 6u; c++)
+        clp_event(0xD1u + c, 0, 0);
     for (b = 0; b < 150; b++)
         clp_render(lr, 256, 4096);
     return -20.0 * log10((double)gmin / 32768.0);
