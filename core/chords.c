@@ -90,6 +90,56 @@ chord_pcs chord_build(uint16_t mask, uint8_t tonic, unsigned degree, unsigned ty
     return c;
 }
 
+/* qualities held together (Coral Flower's merge, its cf_chord.c): each quality is a third (major, minor) or a sus
+ * (2nd, 4th) with an added degree (6, 7, b7, 9). The third held most wins, on a tie the one pressed last; a quality
+ * with the other third is left out; the added degrees join; a sus held with a third adds its 2nd or 4th (Madd4,
+ * m(add2)); sus2 with sus4 is sus2 add4. M6 + M9: 6/9. One quality alone: its own tones, as chord_build gives them. */
+static const uint8_t Q_THIRD[10] = {4, 4, 4, 0, 0, 3, 3, 3, 4, 3};   /* 0: a sus */
+static const uint8_t Q_ADD[10] = {9, 11, 2, 2, 5, 9, 10, 2, 0, 0};  /* the sus' own 2nd or 4th for S2 S4 */
+chord_pcs chord_build_qualities(uint16_t mask, uint8_t tonic, unsigned degree, const uint8_t *q, unsigned nq,
+                                unsigned n)
+{
+    chord_pcs c;
+    unsigned i, k, nmaj = 0, nmin = 0, lastmaj = 0, lastmin = 0, third = 0, have[12] = {0}, nl = 0;
+    uint8_t list[12];
+    static const uint8_t ORDER[] = {11, 10, 2, 9, 5};                /* the added degrees, by importance */
+    if (nq <= 1u)
+        return chord_build(mask, tonic, degree, CHORD_BANK + (nq ? q[0] % CHORD_BANK : 0u), n);
+    c = chord_build(mask, tonic, degree, CHORD_BANK + q[nq - 1u] % CHORD_BANK, n);   /* its root and size */
+    for (i = 0; i < nq; i++) {
+        unsigned t = Q_THIRD[q[i] % CHORD_BANK];
+        if (t == 4u)
+            nmaj++, lastmaj = i + 1u;
+        else if (t == 3u)
+            nmin++, lastmin = i + 1u;
+    }
+    if (nmaj || nmin)
+        third = nmaj > nmin || (nmaj == nmin && lastmaj > lastmin) ? 4u : 3u;
+    for (i = 0; i < nq; i++) {
+        unsigned qi = q[i] % CHORD_BANK, t = Q_THIRD[qi];
+        if (t && t != third)
+            continue;                    /* the other third: left out */
+        if (Q_ADD[qi])
+            have[Q_ADD[qi]] = 1;
+    }
+    if (third)
+        list[nl++] = (uint8_t)third;
+    else {                               /* sus: its 2nd and 4th first */
+        if (have[2])
+            list[nl++] = 2, have[2] = 0;
+        if (have[5])
+            list[nl++] = 5, have[5] = 0;
+    }
+    for (k = 0; k < sizeof ORDER; k++)
+        if (have[ORDER[k]])
+            list[nl++] = ORDER[k];
+    list[nl++] = 7;
+    list[nl++] = 0;
+    for (i = 0; i < CHORD_MAX; i++)      /* then doublings, from the most important */
+        c.pc[i] = (uint8_t)((c.root + list[i < nl ? i : (i - nl) % (nl - 1u)]) % 12u);
+    return c;
+}
+
 /* ------------------------------------------------------------ voicing --- */
 typedef struct {
     int lo, hi, span_min, span_max, gap_min, center;

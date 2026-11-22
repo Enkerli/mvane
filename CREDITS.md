@@ -19,9 +19,10 @@ asked to keep that joy. What comes from it:
 - The separate **bass** under the chords, and the sense that a chord's sound matters as much as its notes (its VA
   pads with chorus and reverb).
 - Its looper's lesson: what was played should be kept, and replayed through other sounds.
-
-Still to bring over (roadmap M2): qualities **combined** by holding one top-row key while pressing another, and a
-**single note** when no quality is latched, so a phrase can open from single notes into chords.
+- Its **Lock**: qualities pressed together latch together and **combine** by its merge (the third held most wins,
+  added degrees join, a sus with a third adds its 2nd or 4th: `cf_merge_forms` in its `cf_chord.c`, reimplemented in
+  `core/chords.c chord_build_qualities`); the only latched quality tapped again unlatches, and the keys play **single
+  notes**, so a phrase can open from a note into chords.
 
 No Coral Flower code is in mvane yard; its source was read for its design. Coral Flower's own inspiration is
 Telepathic Instruments' Orchid; ChoralRoot's engine (`cr_engine`) is Quixotic7's.

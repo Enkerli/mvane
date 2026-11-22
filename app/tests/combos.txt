@@ -1,0 +1,55 @@
+# the black keys as Coral Flower's Lock (docs/MANUAL.md): keys pressed together latch together, the qualities merged
+# (M6 + M9: 6/9); the only latched key tapped again unlatches, and the white keys play single notes; a quality
+# latched while a single note sounds opens it into a chord. app/build/host/mvane-yard_host app/tests/combos.txt app/build/host
+# black keys, the qualities bank: 1 M6, 3 M7, 5 M9, 8 S2, 10 S4, 13 m6, 15 m7, 17 m9, 20 M, 22 m
+wait 600
+expect qlatch 2
+# M6 and M9 pressed together: both latch
+key 1 down 90
+key 5 down 90
+wait 20
+key 1 up
+key 5 up
+wait 20
+expect qlatch 5
+key 0 down 100
+wait 50
+expect chord_n 6
+shot combo.png
+key 0 up
+wait 50
+# M6 alone: it replaces the pair
+tapkey 1 90
+expect qlatch 1
+# M6 again: unlatched, single notes
+tapkey 1 90
+expect qlatch 0
+key 0 down 100
+wait 50
+expect chord_n 1
+expect voices 1
+shot single.png
+# a quality while the note sounds: the chord opens from it
+tapkey 3 90
+wait 50
+expect qlatch 2
+expect chord_n 6
+key 0 up
+wait 50
+expect chord_n 0
+# a major and a minor quality with a sus, held while a chord sounds: the chord follows the keys as they go down
+key 2 down 100
+wait 20
+key 20 down 90
+key 15 down 90
+key 10 down 90
+wait 20
+expect qlatch 2
+expect chord_n 6
+key 20 up
+key 15 up
+key 10 up
+wait 20
+expect qlatch 336
+key 2 up
+wait 50

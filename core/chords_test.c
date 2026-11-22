@@ -84,6 +84,27 @@ int main(void)
         printf("chords: PAIRS Cmaj7 %u %u | %u %u  -> Dm7 %u %u | %u %u\n", a.upper[0], a.upper[1], a.upper[2], a.upper[3],
                b.upper[0], b.upper[1], b.upper[2], b.upper[3]);
     }
+    {   /* qualities held together (Coral Flower's merge): M6 + M9 on C = C6/9; M + m7 + m: minor wins two to one;
+         * M7 + S4: Cmaj7 with an added 4th; S2 + S4: sus2 add4; one alone: as chord_build */
+        static const uint8_t A[2] = {0, 2}, B[3] = {8, 6, 9}, C[2] = {1, 4}, D[2] = {3, 4}, E[1] = {6};
+        char nm[16];
+        chord_pcs x = chord_build_qualities(0xAB5u, 0, 0, A, 2, 5);
+        assert(x.pc[0] == 4 && x.pc[1] == 2 && x.pc[2] == 9 && x.pc[3] == 7 && x.pc[4] == 0);
+        chord_name(x, nm);
+        printf("chords: M6 + M9 on C: %s (%u %u %u %u %u)\n", nm, x.pc[0], x.pc[1], x.pc[2], x.pc[3], x.pc[4]);
+        x = chord_build_qualities(0xAB5u, 0, 1, B, 3, 4);           /* on D */
+        assert(x.root == 2 && x.pc[0] == 5 && x.pc[1] == 0 && x.pc[2] == 9 && x.pc[3] == 2);
+        x = chord_build_qualities(0xAB5u, 0, 0, C, 2, 5);
+        assert(x.pc[0] == 4 && x.pc[1] == 11 && x.pc[2] == 5 && x.pc[3] == 7 && x.pc[4] == 0);
+        x = chord_build_qualities(0xAB5u, 0, 0, D, 2, 4);
+        assert(x.pc[0] == 2 && x.pc[1] == 5 && x.pc[2] == 7 && x.pc[3] == 0);
+        {
+            chord_pcs y = chord_build(0xAB5u, 0, 3, CHORD_BANK + 6u, 5);
+            x = chord_build_qualities(0xAB5u, 0, 3, E, 1, 5);
+            for (unsigned i = 0; i < CHORD_MAX; i++)
+                assert(x.pc[i] == y.pc[i]);
+        }
+    }
     printf("chords: %u voicings (3 to 6 voices), mean voice motion %.2f semitones, %.0f us each on this machine\n",
            voiced, (double)total_motion / moves, 1e6 * (double)(clock() - t0) / CLOCKS_PER_SEC / voiced);
     return 0;

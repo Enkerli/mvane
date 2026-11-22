@@ -74,7 +74,15 @@ pressure apart).
 ### CHORDS
 
 - **White keys** are the scale's degrees, climbing the keyboard; higher keys are voiced higher.
-- **Black keys** pick the chord type and stay latched. A chord that is sounding takes the new type at once.
+- **Black keys** pick the chord type and stay latched (lit). A chord that is sounding takes the new type at once.
+  - **Combine** (as Coral Flower): press black keys together, and they latch together. In the qualities bank they
+    merge: the third held most wins (on a tie, the last pressed), a quality with the other third is left out, the
+    added degrees join, and a sus with a third adds its 2nd or 4th. M6 + M9 is 6/9, M7 + S4 is maj7 add4, S2 + S4 is
+    sus2 add4. The screen shows them as M6+M9. (In the scale bank the last one pressed counts.) A combination lasts
+    until you change it; after a power cycle the last quality pressed comes back alone.
+  - **Single notes**: tap the only latched key again, and it unlatches. The white keys then play the degree's root
+    alone (NOTE on screen). Latch a quality while a note sounds, and it opens into the chord; the chord's voices glide
+    from the note.
   - Qualities bank (the default, as Coral Flower's top row): **M6 M7 M9 S2 S4 m6 m7 m9 M m**, on the white key's root
     whatever the scale says.
   - Scale bank (ENV): **STACK** (thirds of the scale: 7th, 9th, then 13th and 11th), **7**, **TRIAD**, **ADD9**,

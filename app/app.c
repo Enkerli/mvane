@@ -450,6 +450,12 @@ static struct {
     uint32_t prs_at[NKEYS];
     uint8_t key_ch[NKEYS], key_note[NKEYS];
     int32_t chord_key;                   /* the key whose chord sounds (-1 none; held by HOLD: still set) */
+    /* the black keys as Coral Flower's Lock: keys pressed together latch together (the qualities bank merges them:
+     * chord_build_qualities; the other bank takes the last); the only latched key tapped again unlatches, and the
+     * white keys play single notes. qheld the keys down, qgest the press under way, qlatch the latched set */
+    uint16_t qheld, qgest, qlatch;
+    uint8_t qtoggle;
+    uint32_t qstamp[CHORD_BANK], qclock;
     uint8_t chord_degree, chord_vel, hold;
     int8_t chord_lift;
     uint8_t chord_n, chord_note[CHORD_MAX + 1u], chord_ch[CHORD_MAX + 1u];
@@ -517,6 +523,79 @@ static uint32_t scale_snap(uint32_t note)
     return note;
 }
 
+/* the black keys' qualities in effect: those of the press under way while keys are down, else the latched set */
+static uint16_t qual_eff(void) { return ui.qheld ? ui.qgest : ui.qlatch; }
+static uint32_t qual_order(uint16_t eff, uint8_t *q)   /* eff's keys, oldest pressed first */
+{
+    uint32_t n = 0, i, j;
+    for (i = 0; i < CHORD_BANK; i++)
+        if (eff >> i & 1u)
+            q[n++] = (uint8_t)i;
+    for (i = 1; i < n; i++)
+        for (j = i; j > 0 && ui.qstamp[q[j - 1u]] > ui.qstamp[q[j]]; j--) {
+            uint8_t t = q[j];
+            q[j] = q[j - 1u], q[j - 1u] = t;
+        }
+    return n;
+}
+static void qual_label(char *t)          /* M7, M6+M9, m7+S4 ..., NOTE (none latched) */
+{
+    uint8_t q[CHORD_BANK];
+    uint32_t i, n = qual_order(qual_eff(), q);
+    t[0] = 0;
+    if (!n || !set.bank) {
+        text_cat(t, n ? CHORD_TYPE_NAMES[set.type] : "NOTE");
+        return;
+    }
+    for (i = 0; i < n && i < 3u; i++) {
+        if (i)
+            text_cat(t, "+");
+        text_cat(t, CHORD_TYPE_NAMES[CHORD_BANK + q[i]]);
+    }
+}
+static uint32_t qual_leds(void)          /* the qualities in effect, lit on their black keys */
+{
+    static const uint8_t BK[11] = PLAT_BLACK_KEYS;
+    uint32_t i, m = 0;
+    uint16_t eff = qual_eff();
+    for (i = 0; i < CHORD_BANK; i++)
+        if (eff >> i & 1u)
+            m |= 1u << BK[i];
+    return m;
+}
+static void chord_sound(void);
+static void qual_key(uint32_t i, int down)   /* a black key (quality i) down or up: Coral Flower's Lock */
+{
+    uint16_t bit = (uint16_t)(1u << i), was = qual_eff();
+    char t[24];
+    if (down) {
+        if (!ui.qheld) {                 /* a new press: it replaces the latch when let go */
+            ui.qtoggle = (uint8_t)(ui.qlatch == bit);
+            ui.qgest = bit;
+        } else {
+            ui.qgest |= bit;
+            ui.qtoggle = 0;
+        }
+        ui.qheld |= bit;
+        ui.qstamp[i] = ++ui.qclock;
+        set.type = (uint8_t)(set.bank * CHORD_BANK + i);   /* (the last pressed: the other bank's, and the settings') */
+        set_dirty = 1;
+    } else {
+        ui.qheld &= (uint16_t)~bit;
+        if (!ui.qheld) {
+            ui.qlatch = ui.qtoggle ? 0 : ui.qgest;
+            ui.qgest = 0;
+            ui.qtoggle = 0;
+        }
+    }
+    if (qual_eff() != was || down) {
+        if (ui.chord_n)
+            chord_sound();
+        qual_label(t);
+        app_say("TYPE", t);
+    }
+}
+
 /* the chord on ui.chord_degree with the current type, scale and voicing, from what sounds now */
 static void chord_sound(void)
 {
@@ -524,20 +603,30 @@ static void chord_sound(void)
     uint8_t notes[CHORD_MAX + 1u], chs[CHORD_MAX + 1u];
     /* QUANT (as Coral Flower's): OFF, the roots chromatic from the tonic (a semitone a key); BASIC, the roots the
      * scale's degrees; FULL, the chord's tones too, each to the nearest tone of the scale (the qualities diatonic) */
-    uint16_t mask = CHORD_SCALES[set.scale].mask;
-    chord_pcs c = chord_build(set.quant ? mask : 0xFFFu, set.tonic, ui.chord_degree, set.type, set.voices);
+    uint16_t mask = CHORD_SCALES[set.scale].mask, eff = qual_eff();
+    uint8_t q[CHORD_BANK];
+    uint32_t nq = qual_order(eff, q);
+    chord_pcs c = set.bank && nq ? chord_build_qualities(set.quant ? mask : 0xFFFu, set.tonic, ui.chord_degree, q, nq,
+                                                         set.voices)
+                                 : chord_build(set.quant ? mask : 0xFFFu, set.tonic, ui.chord_degree, set.type, set.voices);
     chord_voicing v;
     if (set.quant == 2u)
         for (i = 0; i < c.n; i++)
             c.pc[i] = (uint8_t)scale_snap(c.pc[i]);
-    if (!chord_voice(c, set.style, ui.chord_lift, ui.have_prev ? &ui.prev : 0, &v))
-        return;
-    ui.prev = v;
-    ui.have_prev = 1;
-    if (set.bass)
-        notes[nn++] = (uint8_t)out_note(v.bass);
-    for (i = 0; i < v.n; i++)
-        notes[nn++] = (uint8_t)out_note(v.upper[i]);
+    if (!eff) {                          /* no quality latched: the degree's root alone, rising with the keys from the
+                                          * tonic near middle C (Coral Flower's single notes); what sounded glides to it */
+        int32_t tn = 60 + (int32_t)set.tonic - (set.tonic > 6u ? 12 : 0);
+        notes[nn++] = (uint8_t)out_note(tn + (int32_t)((c.root + 12u - set.tonic) % 12u) + ui.chord_lift);
+    } else {
+        if (!chord_voice(c, set.style, ui.chord_lift, ui.have_prev ? &ui.prev : 0, &v))
+            return;
+        ui.prev = v;
+        ui.have_prev = 1;
+        if (set.bass)
+            notes[nn++] = (uint8_t)out_note(v.bass);
+        for (i = 0; i < v.n; i++)
+            notes[nn++] = (uint8_t)out_note(v.upper[i]);
+    }
     /* common tones hold; the voices that leave are released first, so the new ones glide from them */
     for (i = 0; i < ui.chord_n; i++) {
         int keep = 0;
@@ -561,7 +650,13 @@ static void chord_sound(void)
     for (j = 0; j < nn; j++)
         ui.chord_note[j] = notes[j], ui.chord_ch[j] = chs[j];
     ui.chord_n = (uint8_t)nn;
-    chord_name(c, ui.chord_name);
+    if (eff)
+        chord_name(c, ui.chord_name);
+    else {
+        static const char *const NN[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+        ui.chord_name[0] = 0;
+        text_cat(ui.chord_name, NN[c.root % 12u]);
+    }
     ui.redraw = 1;
 }
 
@@ -576,13 +671,9 @@ static void chord_key_down(uint32_t k, uint32_t vel)
         app_say("HOLD", ui.hold ? "ON" : "OFF");
         return;
     }
-    for (i = 0; i < 11u; i++)            /* a black key: the chord type, latched; what sounds takes it at once */
+    for (i = 0; i < CHORD_BANK; i++)     /* a black key: the chord's quality (qual_key); what sounds takes it at once */
         if (BK[i] == k) {
-            set.type = (uint8_t)(set.bank * CHORD_BANK + (i < CHORD_BANK ? i : 0u));
-            set_dirty = 1;
-            if (ui.chord_n)
-                chord_sound();
-            app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
+            qual_key(i, 1);
             return;
         }
     for (i = 0; i < 16u; i++)            /* a white key: a degree (QUANT OFF: a semitone), higher up the keyboard */
@@ -878,6 +969,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
     int32_t l = layer_now(), d = e > 0 ? 1 : -1;
     if (l == B_EDIT) {                   /* the chord type, in its bank */
         set.type = (uint8_t)(set.bank * CHORD_BANK + (set.type % CHORD_BANK + CHORD_BANK + (uint32_t)d) % CHORD_BANK);
+        ui.qlatch = (uint16_t)(1u << (set.type % CHORD_BANK));   /* (one quality: SELECT steps through them alone) */
         set_dirty = 1;
         if (ui.chord_n)
             chord_sound();
@@ -956,6 +1048,11 @@ static void input(void)
             }
         } else if (releasing) {
             if (set.mode) {
+                static const uint8_t BKQ[11] = PLAT_BLACK_KEYS;
+                uint32_t q;
+                for (q = 0; q < CHORD_BANK; q++)
+                    if (BKQ[q] == k)
+                        qual_key(q, 0);
                 if (ui.chord_key == (int32_t)k && !ui.hold)
                     chord_release();
             } else
@@ -1081,7 +1178,7 @@ static void input(void)
     plat_glow(1);
     plat_leds(btn | (set_dirty || take_dirty ? 1u << B_SAVE : 0u) | (player.playing ? 1u << B_PLAY : 0u)
                   | (layer_now() >= 0 ? 1u << layer_now() : 0u) | (set.page ? 1u << B_HOME : 0u),
-              keys | (ui.hold && set.mode ? 1u << HOLD_KEY : 0u));
+              keys | (ui.hold && set.mode ? 1u << HOLD_KEY : 0u) | (set.mode ? qual_leds() : 0u));
     plat_play_red(0);
 }
 
@@ -1128,7 +1225,7 @@ static void draw(void)
         int32_t x = 10;
         for (i = 0; i < CHORD_BANK; i++) {
             uint32_t ty = set.bank * CHORD_BANK + i;
-            x = cv_text(x, i < 5u ? 4 : 22, &FONT_S, CHORD_TYPE_NAMES[ty], ty == set.type ? C_WHITE : C_GRAY) + 10;
+            x = cv_text(x, i < 5u ? 4 : 22, &FONT_S, CHORD_TYPE_NAMES[ty], qual_eff() >> i & 1u ? C_WHITE : C_GRAY) + 10;
             if (i == 4u)
                 x = 10;
         }
@@ -1143,7 +1240,11 @@ static void draw(void)
         text_cat(t, " ");
         text_cat(t, CHORD_SCALES[set.scale].name);
         text_cat(t, "  ");
-        text_cat(t, CHORD_TYPE_NAMES[set.type]);
+        {
+            char ql[24];
+            qual_label(ql);
+            text_cat(t, ql);
+        }
         text_cat(t, " ");
         text_cat(t, CHORD_STYLE_NAMES[set.style]);
         {
@@ -1277,6 +1378,8 @@ void app_ui_init(void)
     lcd_fill(0, 0, 240, 240, C_BLACK);
     ui.chord_key = -1;
     ui.held = ui.latched = -1;
+    ui.qlatch = (uint16_t)(1u << (set.type % CHORD_BANK));   /* the last quality, latched (a combination is the
+                                                             * moment's: not kept across a power cycle) */
     ui.link = ~plat_midi_out_link();     /* the first frame sends the MPE configuration */
     ui.redraw = 1;
 }
@@ -1442,6 +1545,8 @@ int app_expect(const char *what, int *got)
         *got = set.voices;
     else if (!strcmp(what, "hold"))
         *got = ui.hold;
+    else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
+        *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */
         *got = (int)sq_lost;
     else if (!strcmp(what, "sq_recoveries"))

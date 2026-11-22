@@ -180,12 +180,10 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   files (`<SCALE ... m2="1" .../>`). 0.4 shows the current set's number on screen. More voicing styles
   (spread over three octaves, drop-2-and-4, bass an octave lower), strum and arpeggio from pressure or a knob.
 - Study Coral Flower's source (GPL-3.0) for what else to keep.
-- **Chord qualities combined** (Alex, 2026-11-22): in Coral Flower, holding one top-row quality key while pressing
-  another combines them (a 7th and a 9th, a sus and a 7th ...). Read how its source merges the two, then do the same
-  on the black keys.
-- **A single note when no quality is chosen** (Alex, 2026-11-22): Coral Flower plays one note until a quality is
-  latched, so a phrase can start on single notes and open into chords. Here a quality is always latched; let the
-  latched key, pressed again, unlatch it (single notes), as there.
+- **Chord qualities combined** and **single notes** (Alex, 2026-11-22). Done in 0.10-dev, as Coral Flower's Lock:
+  keys pressed together latch together, merged by its rule (`chord_build_qualities`, tested in `core/chords_test.c`
+  and `app/tests/combos.txt`); the only latched key tapped again unlatches, and the white keys play single notes.
+  Not yet: the combination kept in the settings (a new settings record), and Coral Flower's held (non-Lock) mode.
 
 ### M2b: chord memory and pads (Alex, second session)
 - A progression made and voiced on the device (smooth voice leading, drop voicings, any style), saved, then played

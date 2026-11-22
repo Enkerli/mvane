@@ -41,6 +41,11 @@ typedef struct {
 unsigned chord_scale_size(uint16_t mask);
 /* the chord on degree (0 = tonic; past the scale's size wraps) of the scale on tonic, of type t, with n upper voices */
 chord_pcs chord_build(uint16_t mask, uint8_t tonic, unsigned degree, unsigned type, unsigned n);
+/* the qualities (second bank, 0..CHORD_BANK-1) held together, oldest first, merged as Coral Flower merges them (the
+ * third held most wins, added degrees join, a sus with a third adds its 2nd or 4th: M6 + M9 = 6/9); one alone: as
+ * chord_build */
+chord_pcs chord_build_qualities(uint16_t mask, uint8_t tonic, unsigned degree, const uint8_t *q, unsigned nq,
+                                unsigned n);
 /* voice it: style CHORD_*, lift semitones added to the register (an upper key plays higher), prev the voicing to
  * lead from (0: none). Returns 1 with out set */
 int chord_voice(chord_pcs c, unsigned style, int lift, const chord_voicing *prev, chord_voicing *out);
