@@ -35,8 +35,9 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564138u            /* "MVA8" (0.11: YARD's thirteen parameters); 0.10's "MVA7" and 0.9's "MVA6"
-                                          * are read and moved on */
+#define SET_MAGIC 0x4D564139u            /* "MVA9" (0.11: PHONES MAX); MVA8 (YARD's thirteen, a 0.11 build), 0.10's MVA7
+                                          * and 0.9's MVA6 are read and moved on */
+#define SET_MAGIC_11 0x4D564138u
 #define SET_MAGIC_10 0x4D564137u
 #define SET_MAGIC_09 0x4D564136u
 typedef struct {
@@ -59,7 +60,17 @@ typedef struct {
     uint8_t mpe_out;                     /* 1: a channel a note (MPE); 0: everything on channel 1 */
     uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
     uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
+    uint8_t phones;                      /* PHONES MAX: MASTER's top, 2..20 in 5% (20: 100%, as MASTER was) */
 } settings_t;
+typedef struct {                         /* (MVA8, a 0.11 build's: the same without PHONES MAX) */
+    uint32_t magic;
+    uint8_t mode, tonic, scale;
+    int8_t octave;
+    uint8_t p[SP_N];
+    uint8_t type, style, bass, usb_full, voices, bank, play, slot;
+    uint16_t sound;
+    uint8_t quant, mpe_out, bend, page;
+} settings_11_t;
 typedef struct {                         /* 0.10's record (MVA7): the same, YARD's first nine parameters only */
     uint32_t magic;
     uint8_t mode, tonic, scale;
@@ -104,6 +115,7 @@ static void settings_defaults(void)
     set.mpe_out = 1;
     set.bend = 2;                        /* 48 */
     set.page = 0;
+    set.phones = 20;
 }
 
 static void settings_load(void)
@@ -111,12 +123,18 @@ static void settings_load(void)
     uint32_t i, bad = 0;
     union {
         settings_t now;
+        settings_11_t v11;
         settings_10_t v10;
         settings_09_t old;
     } r;
     int n = plat_store_load(OBJ_SETTINGS, &r, sizeof r);
     if (n == (int)sizeof r.now && r.now.magic == SET_MAGIC)
         set = r.now;
+    else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
+        settings_defaults();
+        mvane_copy(&set, &r.v11, sizeof r.v11);
+        set.magic = SET_MAGIC, set.phones = 20;
+    }
     else if (n == (int)sizeof r.v10 && r.v10.magic == SET_MAGIC_10) {   /* 0.10's: moved on, the new four at 0 */
         settings_10_t o = r.v10;
         settings_defaults();
@@ -143,7 +161,7 @@ static void settings_load(void)
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
-        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u)
+        || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u)
         settings_defaults();
 }
 
@@ -342,6 +360,11 @@ static uint16_t sound_to_store(void)
 }
 
 /* ------------------------------------------------------------- the render --- */
+/* MASTER's curve times PHONES MAX (app.h APP_GAIN: the audio interrupt's) */
+static volatile uint32_t phones_q12 = 4096u;
+uint32_t app_gain(uint32_t pos) { return ((pos * pos) >> 12) * phones_q12 >> 12; }
+static void phones_apply(void) { phones_q12 = set.phones * 4096u / 20u; }
+
 /* the main loop sends the render its events through a single-producer, single-consumer queue. When it is full
  * (the render held up: a flash write, a burst of controllers) an event is lost and counted; once the render has caught
  * up, sq_recover silences the engine and plays again what should sound, from what the queue last carried per channel
@@ -679,6 +702,7 @@ void app_init(void)
 {
     uint32_t i;
     settings_load();
+    phones_apply();
     sq_forget();
     synth_init(set.p);
     for (i = 0; i < SP_N; i++)
@@ -781,6 +805,7 @@ static struct {
      * white keys play single notes. qheld the keys down, qgest the press under way, qlatch the latched set */
     uint16_t qheld, qgest, qlatch;
     uint8_t yfx;                         /* YARD's FX layer: 0 DETUNE SUB RES PLUCK, 1 WAVE PW NOISE FILTER (SELECT) */
+    uint8_t cedit;                       /* a Clipper sound's editing: 0 ENGINE 1-4, 1 ENGINE 5-8, 2 ENVELOPE (SELECT) */
     uint8_t qtoggle;
     uint32_t qstamp[CHORD_BANK], qclock;
     uint8_t chord_degree, chord_vel, hold;
@@ -1267,11 +1292,19 @@ static int32_t layer_now(void) { return ui.held >= 0 ? ui.held : ui.latched; }
 static int clp_on(void);
 /* EDIT follows the knobs' page (Alex, 2026-11-22): on PLAY the chords' layer, on SOUND the sound's own editing (a
  * YARD sound: its two pages, SELECT between; FX shows them too). The layer the knobs answer to */
-static int sound_edit(void) { return layer_now() == B_EDIT && set.page && !clp_on(); }
-static int32_t layer_knobs(void) { return sound_edit() ? B_FX : layer_now(); }
+static int sound_edit(void) { return layer_now() == B_EDIT && set.page; }
+#define L_CEDIT 100                      /* (the knobs on a Clipper sound's editing: clp_edit_*) */
+#define L_OUT 101                        /* (GLO on the SOUND page: the output, PHONES MAX) */
+static int32_t layer_knobs(void)
+{
+    if (sound_edit())
+        return clp_on() ? L_CEDIT : B_FX;
+    return layer_now() == B_GLO && set.page ? L_OUT : layer_now();
+}
 static const char *layer_name(int32_t l)
 {
-    return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX" : l == B_GLO ? "SETTINGS"
+    return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX"
+           : l == B_GLO ? (set.page ? "OUTPUT" : "SETTINGS")
            : l == B_SEQ ? "TAKES" : 0;
 }
 
@@ -1287,7 +1320,21 @@ static void knob_info(uint32_t i, const char **label, char *val)
     int32_t l = layer_knobs();
     val[0] = 0;
     *label = "";
-    if (l == B_EDIT) {
+    if (l == L_CEDIT) {                  /* a Clipper sound's editing: its engine's values, its envelope */
+        *label = clp_edit_label(ui.cedit, i);
+        clp_edit_text(ui.cedit, i, val);
+    } else if (l == L_OUT) {             /* GLO on SOUND: the output */
+        if (i == 0) {
+            static const char *const DB[21] = {"", "", "-20 DB", "-16", "-14", "-12", "-10", "-9", "-8", "-7", "-6",
+                                               "-5", "-4.4", "-3.7", "-3.1", "-2.5", "-1.9", "-1.4", "-0.9", "-0.4",
+                                               "0 DB"};
+            *label = "PHONES MAX";
+            int_text((int32_t)set.phones * 5, val);
+            text_cat(val, "% ");
+            text_cat(val, DB[set.phones % 21u]);
+        } else
+            *label = "-";
+    } else if (l == B_EDIT) {
         static const char *const N[4] = {"VOICING", "VOICES", "BASS", "BANK"};
         *label = N[i];
         if (i == 0)
@@ -1369,6 +1416,23 @@ static void knob_turn(uint32_t i, int32_t e)
     int32_t l = layer_knobs(), d = e > 0 ? 1 : -1;
     const char *label;
     char val[16];
+    if (l == L_OUT) {
+        if (i == 0) {
+            set.phones = (uint8_t)clamp(set.phones + d, 2, 20);
+            phones_apply();
+            set_dirty = 1;
+        }
+        knob_info(i, &label, val);
+        app_say(label, val);
+        return;
+    }
+    if (l == L_CEDIT) {
+        clp_edit_turn(ui.cedit, i, e);
+        set_dirty = 1;
+        knob_info(i, &label, val);
+        app_say(label, val);
+        return;
+    }
     if (l == B_EDIT) {
         if (i == 0)
             set.style = (uint8_t)((set.style + CHORD_STYLES + (uint32_t)d) % CHORD_STYLES);
@@ -1454,6 +1518,13 @@ static void knob_turn(uint32_t i, int32_t e)
 static void select_turn(int32_t e)       /* SELECT: what the context lists */
 {
     int32_t l = layer_knobs(), d = e > 0 ? 1 : -1;
+    if (l == L_CEDIT) {                  /* a Clipper sound's editing: the next page */
+        static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
+        ui.cedit = (uint8_t)((ui.cedit + CLP_EDIT_PAGES + (uint32_t)d) % CLP_EDIT_PAGES);
+        app_say("EDIT", PG[ui.cedit]);
+        ui.redraw = 1;
+        return;
+    }
     if (l == B_EDIT) {                   /* the chord type, in its bank */
         set.type = (uint8_t)(set.bank * CHORD_BANK + (set.type % CHORD_BANK + CHORD_BANK + (uint32_t)d) % CHORD_BANK);
         ui.qlatch = (uint16_t)(1u << (set.type % CHORD_BANK));   /* (one quality: SELECT steps through them alone) */
@@ -1707,6 +1778,12 @@ static void draw(void)
             cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
         cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   REC, PLAY, SAVE AS EVER", C_GRAY);
+    } else if (lay == B_EDIT && sound_edit() && clp_on()) {   /* SOUND: a Clipper sound's three pages */
+        static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
+        int32_t x = 10;
+        for (i = 0; i < CLP_EDIT_PAGES; i++)
+            x = cv_text(x, 4, &FONT_S, PG[i], i == ui.cedit ? C_WHITE : C_GRAY) + 12;
+        cv_text(10, 44, &FONT_XS, "SELECT: THE NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's two pages */
         cv_text(10, 4, &FONT_S, ui.yfx ? "WAVE  PW  NOISE  FILTER" : "DETUNE  SUB  RES  PLUCK", C_WHITE);
         cv_text(10, 22, &FONT_S, ui.yfx ? "DETUNE  SUB  RES  PLUCK" : "WAVE  PW  NOISE  FILTER", C_GRAY);
@@ -2020,6 +2097,7 @@ void app_file_changed(uint32_t obj)
     if (obj != OBJ_SETTINGS)
         return;
     settings_load();
+    phones_apply();
     sound_from_store();
     for (i = 0; i < SP_N; i++)
         synth_set(i, set.p[i]), knob[i] = set.p[i];
@@ -2234,6 +2312,16 @@ int app_expect(const char *what, int *got)
         *got = (int)synth_param(SP_NOISE);
     else if (!strcmp(what, "fmode"))
         *got = (int)synth_param(SP_FMODE);
+    else if (!strcmp(what, "clp_e1"))    /* Clipper's sound: its first EDIT value, its attack */
+        *got = (int)clp_param_get(118);
+    else if (!strcmp(what, "clp_atk"))
+        *got = (int)clp_param_get(1);
+    else if (!strcmp(what, "phones"))    /* PHONES MAX, 2..20 (5% each) */
+        *got = set.phones;
+    else if (!strcmp(what, "gain"))      /* the render's gain at MASTER's top (4096 MASTER all the way) */
+        *got = (int)app_gain(4096u);
+    else if (!strcmp(what, "cedit"))     /* a Clipper sound's editing page */
+        *got = ui.cedit;
     else if (!strcmp(what, "yfx"))       /* YARD's FX page */
         *got = ui.yfx;
     else if (!strcmp(what, "yard_split"))   /* YARD's blocks the second core took part in */

@@ -7,6 +7,13 @@
 
 #define MVANE_INT_MAX 0x7FFFFFFF
 static inline int mvane_abs(int v) { return v < 0 ? -v : v; }
+static inline void mvane_copy(void *d, const void *src, unsigned n)
+{
+    unsigned char *p = (unsigned char *)d;
+    const unsigned char *q = (const unsigned char *)src;
+    while (n--)
+        *p++ = *q++;
+}
 static inline void mvane_zero(void *d, unsigned n)
 {
     unsigned char *p = (unsigned char *)d;

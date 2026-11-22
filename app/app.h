@@ -15,6 +15,11 @@
 #endif
 #define APP_SPLASH_RGB RGB(120, 200, 170)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
+/* MASTER's curve (fm1-base: its position 0..4096 to the render's gain, the square by default), times PHONES MAX
+ * (0.11, Alex: the headphones clip on the FM-1's analog side at a level the digital signal has clean); with USB
+ * AUDIO FULL it is the speaker's and the headphones' only. Called from the audio interrupt: reads one value */
+uint32_t app_gain(uint32_t pos);
+#define APP_GAIN(m) app_gain(m)
 #define APP_TOUCH                        /* velocity and pressure from the keys (lib/touch.h) */
 #define APP_USB_HOST_NAME                /* the USB host's device by name (plat_usb_host_name): the Diosynth */
 

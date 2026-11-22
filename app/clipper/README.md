@@ -14,7 +14,10 @@ copied verbatim from Clipper's `seq.c` (the part's controllers and the standard 
 yard's stand-in (nothing reads the flash). `gen/` holds the tables Clipper's `tools/gen_*.py` make.
 `src/voice.c` `vs_ok` also lets SAMPLE and WHEEL split their voices between the cores (2026-11-22: each one's render
 writes its own voice only; `make clp-race` renders every sound on two threads under ThreadSanitizer, bit for bit
-against one core). `src/fx.c` has the effect gate's hook (`CLP_FX_GATE`).
+against one core). `src/fx.c` has the effect gate's hook (`CLP_FX_GATE`) and the sounds' trim (`CLP_TRIM`).
+`gen/felucca_samples.h` keeps only Clipper's own synthesized sample sets (the `CLIPPER_SYNTH` build's, from its
+`tools/gen_clipper_sets.py`); Felucca's recorded sets, for builds that are not Clipper's synth, are left out: no
+recording ships in mvane yard.
 
 `clp.c` is the glue: the power-on, a sound loaded, MIDI in (notes, bend, pressure, MPE, the controllers), the block
 render, and stand-ins for what Clipper's UI, sequencer, USB and HAL gave the synth. It is its own unit (fm1.toml

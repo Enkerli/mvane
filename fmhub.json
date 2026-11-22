@@ -1,0 +1,10 @@
+{
+  "what": "Chords from any scale under your fingers, qualities latched on the black keys as on Coral Flower, a history that is always recording so a phrase becomes a take after the fact, and expressive sounds: its own light synth and Clipper's, with MPE in and out.",
+  "author": "Enkerli",
+  "kinds": ["chords"],
+  "editor": "https://enkerli.github.io/mvane-yard/",
+  "cheat": "https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md",
+  "image": "docs/media/card.png",
+  "color": "#2f8f78",
+  "sounds": "none – all synthesised"
+}

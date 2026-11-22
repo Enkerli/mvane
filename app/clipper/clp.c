@@ -540,6 +540,64 @@ const char *clp_param_name(uint32_t i, uint32_t engine)   /* a parameter's label
     return i < P_COUNT && TP[i].label ? TP[i].label : "";
 }
 uint32_t clp_param_count(void) { return P_COUNT; }
+int32_t clp_param_get(uint32_t id) { return id < P_COUNT ? trk[0].p[id] : 0; }   /* (host checks) */
+/* (0.11) Clipper's sound edited on the panel (app.c: EDIT on the SOUND page): page 0 its engine's first four EDIT
+ * values, 1 the other four, 2 the envelope (ATK DEC SUS REL); a value's label, its text (an enum's name, else the
+ * number), a turn of e detents (a step of about 1/64 of its range, at least 1). Main loop: the part's values, which
+ * the render reads */
+static uint32_t clp_edit_id(uint32_t page, uint32_t k)
+{
+    static const uint8_t ENV[4] = {P_ATK, P_DEC, P_SUS, P_REL};
+    return page < 2u ? P_E0 + page * 4u + (k & 3u) : ENV[k & 3u];
+}
+static const param_desc_t *clp_edit_desc(uint32_t id)
+{
+    const track_t *t = &trk[0];
+    return id >= P_E0 ? &ENGINES[t->eng_req % NENGINES]->edit[id - P_E0] : &TP[id];
+}
+const char *clp_edit_label(uint32_t page, uint32_t k)
+{
+    const param_desc_t *d = clp_edit_desc(clp_edit_id(page, k));
+    return d->label && d->max > d->min ? d->label : "-";
+}
+void clp_edit_text(uint32_t page, uint32_t k, char *out)   /* (at most 11 characters) */
+{
+    uint32_t id = clp_edit_id(page, k), j = 0;
+    const param_desc_t *d = clp_edit_desc(id);
+    int32_t v = trk[0].p[id], a;
+    char t[12];
+    if (d->max <= d->min) {
+        out[0] = '-', out[1] = 0;
+        return;
+    }
+    if (d->fmt == F_ENUM && d->names && v >= d->min && v <= d->max) {
+        const char *nm = d->names[v - d->min];
+        for (; nm && nm[j] && j < 11u; j++)
+            out[j] = nm[j];
+        out[j] = 0;
+        return;
+    }
+    a = v < 0 ? -v : v, j = 0;
+    do
+        t[j++] = (char)('0' + a % 10), a /= 10;
+    while (a && j < 10u);
+    if (v < 0)
+        t[j++] = '-';
+    for (a = 0; a < (int32_t)j; a++)
+        out[a] = t[j - 1u - (uint32_t)a];
+    out[j] = 0;
+}
+int32_t clp_edit_turn(uint32_t page, uint32_t k, int32_t e)
+{
+    uint32_t id = clp_edit_id(page, k);
+    const param_desc_t *d = clp_edit_desc(id);
+    int32_t step, span = d->max - d->min;
+    if (span <= 0)
+        return trk[0].p[id];
+    step = d->fmt == F_ENUM || span < 64 ? 1 : span / 64;
+    trk[0].p[id] = (int16_t)clamp(trk[0].p[id] + e * step, d->min, d->max);
+    return trk[0].p[id];
+}
 
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block: MIDI in, for part 1) */
 {

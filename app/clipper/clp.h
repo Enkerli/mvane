@@ -32,7 +32,14 @@ void clp_select_with(uint32_t i, const uint8_t *id, const int16_t *v, uint32_t n
 uint32_t clp_changes(uint8_t *id, int16_t *v, uint32_t max);
 int32_t clp_reverb_type(void);
 const char *clp_param_name(uint32_t i, uint32_t engine);
-uint32_t clp_param_count(void);                  /* play sound i (main loop: the part switches at its next block) */
+uint32_t clp_param_count(void);
+int32_t clp_param_get(uint32_t id);
+/* (0.11) the sound edited on the panel: pages 0 and 1 its engine's eight EDIT values, 2 its envelope; a value's
+ * label, its text (an enum's name or the number), a turn of e detents (its new value) */
+#define CLP_EDIT_PAGES 3u
+const char *clp_edit_label(uint32_t page, uint32_t k);
+void clp_edit_text(uint32_t page, uint32_t k, char *out);
+int32_t clp_edit_turn(uint32_t page, uint32_t k, int32_t e);                  /* play sound i (main loop: the part switches at its next block) */
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2);   /* a MIDI message (render: before clp_render) */
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12);   /* n stereo frames, 24-bit, MASTER as the render has it */
 void clp_panic(void);

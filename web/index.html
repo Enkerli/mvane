@@ -5,17 +5,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mvane yard</title>
+<meta name="description" content="mvane yard: a firmware for the M-VAVE FM-1. Chords from any scale, a history that is always recording, expressive sounds; free and open source.">
 <style>
 :root {
   --bg: #f6f5f1; --card: #ffffff; --ink: #1d1f1e; --dim: #6a6f6c; --line: #dedbd3; --accent: #2f8f78;
   --accent-ink: #ffffff; --note: #2f8f78; --note-hi: #e08a3c; --err: #b3412e; --roll: #f1efe9;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #141615; --card: #1d201f; --ink: #e9ebe8; --dim: #9aa19d; --line: #333836; --accent: #5ec2a8;
-    --accent-ink: #0d1110; --note: #5ec2a8; --note-hi: #f0a35e; --err: #ef7a64; --roll: #171a19;
-  }
-}
+/* light by default (Alex); dark on request, the footer's switch */
 :root[data-theme="dark"] {
   --bg: #141615; --card: #1d201f; --ink: #e9ebe8; --dim: #9aa19d; --line: #333836; --accent: #5ec2a8;
   --accent-ink: #0d1110; --note: #5ec2a8; --note-hi: #f0a35e; --err: #ef7a64; --roll: #171a19;
@@ -63,14 +59,96 @@ canvas { width: 100%; height: 180px; display: block; background: var(--roll); bo
 .ytab select { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; max-width: 12em; }
 .ytab input.chg { width: 16em; text-transform: uppercase; }
 h3.sub { font-size: 14px; margin: 12px 0 4px; color: var(--dim); font-weight: 600; }
+.hero { padding: 8px 0 4px; }
+.hero h1 { font-size: 34px; }
+.hero .pitch { font-size: 17px; margin: 6px 0 16px; max-width: 36em; }
+a.btn { display: inline-block; text-decoration: none; font-weight: 600; border-radius: 8px; padding: 9px 16px;
+  border: 1px solid var(--line); color: var(--ink); background: var(--card); }
+a.btn.go { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+a { color: var(--accent); }
+.small { font-size: 13px; color: var(--dim); }
+details { margin: 8px 0 0; }
+details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
+details[open] summary { margin-bottom: 6px; }
+.card ul { margin: 6px 0; padding-left: 20px; }
+.card li { margin: 2px 0; }
+h2.part { font-size: 20px; margin: 30px 0 4px; }
+footer { color: var(--dim); font-size: 13px; margin: 28px 0 0; border-top: 1px solid var(--line); padding-top: 12px; }
+footer button { font-size: 13px; padding: 3px 9px; }
 [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1>mvane <span>yard</span></h1>
-  <p class="lede">Your FM-1's takes, YARD sounds and settings, over USB. Chrome or Edge on a computer; the FM-1 plugged in with a data
-    cable, and PLAY stopped.</p>
+  <header class="hero">
+    <h1>mvane <span>yard</span></h1>
+    <p class="pitch">A firmware for the M-VAVE FM-1: chords from any scale under your fingers, a history that is always
+      recording, and expressive sounds, light enough to play. Free and open source.</p>
+    <div class="row">
+      <a class="btn go" id="dl" href="https://github.com/Enkerli/mvane-yard/releases">Download the latest release</a>
+      <a class="btn" href="https://github.com/Enkerli/mvane-yard">Source on GitHub</a>
+      <a class="btn" href="#usb">Your FM-1 over USB</a>
+    </div>
+    <p class="small" id="dlnote">Install it with M-Patcher (below). Back up your FM-1 first.</p>
+  </header>
+
+  <section class="card">
+    <h2>What it does</h2>
+    <p>Play chords on the white keys from any scale, their qualities latched on the black keys as on Coral Flower;
+      everything you play is kept, so a phrase becomes a take after the fact; play it through YARD, mvane yard's own
+      light synth, or any of Clipper's 337 sounds, with MPE in and out.</p>
+    <details><summary>Learn more</summary>
+      <ul>
+        <li><b>Chords</b>: any pitch-class set (by its number, as in the Music Suite), qualities combined by pressing black
+          keys together, single notes when none is latched, voicings (close, open, wide, pairs) led smoothly from one chord
+          to the next, a separate bass.</li>
+        <li><b>Takes</b>: a history that never stops (and sleeps when you do); REC keeps the last phrase, eight slots keep
+          takes, sent to a DAW as one MIDI clip.</li>
+        <li><b>Sounds</b>: families by use and by load (CHORDS, LEADS, HITS; EZ or HRD on the CPU); YARD (saw, pulse,
+          triangle, noise, a filter that follows the note) and Clipper's engines, on both of the FM-1's cores; your own
+          sounds saved on the panel and moved as files.</li>
+        <li><b>Expression</b>: MPE out and in (pressure, slide, bend per note), a wind controller's breath, pressure
+          routed on the sounds that ignored it.</li>
+      </ul>
+      <p><a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">The manual</a> ·
+        <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/SOUNDS.md">All the sounds</a> ·
+        <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/ROADMAP.md">The roadmap</a></p>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Install</h2>
+    <p>Download the <code>.fwsc</code> (above) and install it with M-Patcher. Back up your FM-1's current firmware first.</p>
+    <details><summary>Learn more</summary>
+      <ul>
+        <li>Releases are built from source on GitHub and signed with their provenance; each has the package (<code>.fwsc</code>),
+          its checksum and a <code>firmware.json</code>.</li>
+        <li>Between releases, every change is built too (Actions, <code>mvane-yard-0.11.N+commit</code>), for trying what is
+          new.</li>
+        <li>In a DAW: the VIBE FM plugin's converter (TheFirmwareHub) offers an older version for now; a newer one is being
+          worked out. On TheFirmwareHub itself: soon.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Play</h2>
+    <p>White keys play the chord on each degree; black keys pick its quality; F#5 holds it. ALGO switches chords and single
+      notes. PRESETS chooses the sound (a fast turn: the next family). REC keeps what you just played; PLAY plays it.</p>
+    <details><summary>Learn more</summary>
+      <ul>
+        <li>HOME switches the knobs between PLAY (QUANT, KEY, SCALE, GLIDE) and SOUND (the sound's own); on SOUND, EDIT edits
+          the sound (SAVE keeps it as yours) and GLO sets the output (PHONES MAX).</li>
+        <li>EDIT on PLAY: the voicing, how many voices, the bass, the quality bank; FX: a Clipper sound's sends; GLO: the
+          play mode, USB audio, MPE out, the bend range; SEQ: the take's slot.</li>
+        <li>The bottom line: the CPU's load, missed deadlines (XR), the sound's load (EZ, HRD).</li>
+      </ul>
+    </details>
+  </section>
+
+  <h2 class="part" id="usb">Your FM-1 over USB</h2>
+  <p class="lede">Takes, your own sounds and the settings: Chrome or Edge on a computer, the FM-1 plugged in with a
+    data cable, PLAY stopped.</p>
 
   <section class="card">
     <div class="row">
@@ -134,6 +212,24 @@ h3.sub { font-size: 14px; margin: 12px 0 4px; color: var(--dim); font-weight: 60
       <label class="btn">Restore settings<input id="putSet" type="file"></label>
     </div>
   </section>
+  <section class="card">
+    <h2>Credits and family</h2>
+    <p>mvane yard stands on <a href="https://github.com/FicusFicusov/CoralFlower">Coral Flower</a> (its chord mode's
+      design), <a href="https://github.com/isod89/clipper-fm1">Clipper</a> (its sounds and engines) and
+      <a href="https://github.com/charlesvestal/fm1-base">fm1-base</a> (the platform). It belongs with Enkerli's
+      <a href="https://github.com/Enkerli/music-suite">Music Suite</a>: theory, progressions and voice leading.</p>
+    <details><summary>Learn more</summary>
+      <p><a href="https://github.com/Enkerli/mvane-yard/blob/main/CREDITS.md">Everyone it builds on</a> ·
+        <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/CONTEXT.md">Where it fits in the Music Suite</a> ·
+        GPL-3.0.</p>
+    </details>
+  </section>
+
+  <footer>
+    <span>mvane yard · <a href="https://github.com/Enkerli/mvane-yard">github.com/Enkerli/mvane-yard</a> ·
+      <a href="https://github.com/Enkerli/mvane-yard/issues">Report a problem</a></span>
+    <button id="theme" type="button">Dark</button>
+  </footer>
   <p id="status" role="status" aria-live="polite"></p>
 </main>
 
@@ -145,6 +241,24 @@ let clpNames = null;
 fetch("./clp_names.json").then((r) => r.json()).then((j) => { clpNames = j; }).catch(() => {});
 
 const $ = (id) => document.getElementById(id);
+// the newest release (pre-releases too: GitHub's "latest" leaves them out): its .fwsc on the button
+fetch("https://api.github.com/repos/Enkerli/mvane-yard/releases?per_page=10").then((r) => r.ok ? r.json() : [])
+  .then((rel) => {
+    rel = rel.filter((x) => !x.draft).sort((x, y) => Date.parse(y.published_at) - Date.parse(x.published_at));   // (the API's
+    const r = rel[0], a = r && r.assets.find((x) => /\.fwsc$/.test(x.name));                                   // order is not by date)
+    if (!a) return;
+    $("dl").href = a.browser_download_url;
+    $("dl").textContent = `Download ${r.name || r.tag_name}`;
+    $("dlnote").innerHTML = `<code>${a.name}</code>${r.prerelease ? " · a pre-release" : ""} · ` +
+      `<a href="${r.html_url}">its notes</a> · install with M-Patcher, after backing up your FM-1.`;
+  }).catch(() => { /* (the button stays on the releases page) */ });
+$("theme").onclick = () => {
+  const dark = document.documentElement.dataset.theme !== "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  $("theme").textContent = dark ? "Light" : "Dark";
+  try { localStorage.setItem("yard-theme", dark ? "dark" : "light"); } catch (e) { /* (no storage) */ }
+};
+try { if (localStorage.getItem("yard-theme") === "dark") $("theme").click(); } catch (e) { /* (no storage) */ }
 const say = (msg, err = false) => { $("status").textContent = msg; $("status").classList.toggle("err", err); };
 let dev = null, files = [], take = null, takeBytes = null, slot = 1;
 const SLOTS = 8, slotName = (k) => `take${k}.mvt`;

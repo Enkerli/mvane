@@ -195,6 +195,74 @@ release EDIT
 wait 50
 sound SAW
 wait 100
+# a Clipper sound's editing on EDIT (SOUND page): its engine's values (K1: HYBRID's CUT), SELECT to its envelope
+# (K1: ATK); SAVE on EDIT keeps it; away and back, as edited
+sound PAD
+wait 100
+sound LADDER_PAD
+wait 300
+tap HOME
+wait 50
+expect clp_e1 0
+expect clp_atk 80
+press EDIT
+turn K1 -5
+release EDIT
+wait 50
+shot edit_clipper.png
+press EDIT
+turn SELECT 1
+turn SELECT 1
+release EDIT
+wait 50
+expect cedit 2
+press EDIT
+turn K1 5
+press SAVE
+release SAVE
+release EDIT
+wait 50
+expect cuser 1
+sound SAW
+wait 300
+sound LADDER_PAD+
+wait 300
+expect cuser 1
+expect clp_e1 -5
+expect clp_atk 85
+press EDIT
+turn SELECT 1
+release EDIT
+tap HOME
+wait 50
+sound SAW
+wait 300
+# GLO on the SOUND page: the output; PHONES MAX 100% down to 80%: MASTER's top 80%; SAVE and a restart keep it
+expect phones 20
+expect gain 4096
+tap HOME
+wait 50
+press GLO
+turn K1 -4
+release GLO
+wait 50
+expect phones 16
+expect gain 3276
+shot phones.png
+tap SAVE
+wait 50
+reboot
+wait 600
+expect phones 16
+expect gain 3276
+expect page 1
+press GLO
+turn K1 4
+release GLO
+wait 50
+expect phones 20
+tap HOME
+wait 50
 # a Clipper sound from the computer (its changes over GLASS PAD, the reverb HALL): picked, they are there
 cbank_glassy
 wait 50

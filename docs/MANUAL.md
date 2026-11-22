@@ -47,7 +47,9 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **EDIT** on the PLAY page: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
 | **EDIT** on the SOUND page, a YARD sound (FX shows the same) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
-| **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
+| **GLO** on the PLAY page: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
+| **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
+| **GLO** on the SOUND page: OUTPUT | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | | | | |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
 ### Encoders and buttons
@@ -143,9 +145,10 @@ Every knob is recorded in the history as a CC on channel 1 (TONE 74, ATTACK 73, 
 already one of yours), up to 32 of each, kept across a restart.
 - A **YARD** sound is its thirteen values (oscillator, filter, envelope, noise): saved as USER n,
   listed after YARD's nine in their family (mono: LEADS EZ; PLUCK 64 or more: HITS EZ; else CHORDS EZ).
-- A **Clipper** sound is a factory sound and what was changed on it: up to 14 parameters (on the panel, its four
-  macros on the SOUND page and its four sends on FX) and the reverb's model (FX, SELECT); saved as its sound's name
-  and a + (GLASS PAD+), listed first in that sound's family.
+- A **Clipper** sound is a factory sound and what was changed on it: up to 14 parameters (on the panel: its four
+  macros on the SOUND page; on EDIT (SOUND page) its engine's eight values over two pages and its envelope, SELECT
+  between; its four sends on FX) and the reverb's model (FX, SELECT); saved as its sound's name and a + (GLASS PAD+),
+  listed first in that sound's family. EDIT and SAVE (or FX and SAVE) keeps it.
 On the computer they are one file, `yard.ysb`: the page's **Your sounds** card lists them to edit (a Clipper sound:
 its sound, reverb and changes as `name=value`, any of Clipper's 126 parameters by name or `#number`), add or remove,
 send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and `tools/yard.py sounds --put

@@ -9,14 +9,49 @@ The one principle behind the layout: **musical logic lives in `core/`, portable 
 firmware (`app/`), the desktop tools and a future plugin all compile the same files, so a take or a patch behaves
 the same everywhere.
 
-## Where things stand (0.6, 2026-11-21)
+## Where things stand (0.11, 2026-11-22)
 
-What 0.6 does, control by control: [MANUAL.md](MANUAL.md). In short: notes or chords (any of eight pitch-class sets,
-two chord banks, three voicing styles, 3 to 6 voices plus a bass, smooth voice leading, HOLD), mvane yard's saw or
-Clipper's 379 factory sounds (22 engines, vendored in `app/clipper/`), MPE in and out, breath and mono legato, an
-always-on history captured after the fact (never copied), eight take slots in the flash, the takes as MIDI files on a
-page and from the command line, and a VIBE FM plugin build (TheFirmwareHub's converter). Device build: 370 KB of
-flash, 61 of 96 KB RAM, 327 of 344 KB pool.
+What it does, control by control: [MANUAL.md](MANUAL.md); every sound: [SOUNDS.md](SOUNDS.md). In short: chords from
+any pitch-class set on the white keys, qualities latched (and combined) on the black keys as on Coral Flower, single
+notes, four voicing styles led smoothly, a separate bass; an always-on history captured after the fact, eight take
+slots, takes as MIDI on the page and the command line; YARD (mvane yard's own light synth: saw, pulse, triangle,
+noise, three filter modes, PLUCK) and Clipper's 337 sounds, in families by use and load (CHORDS, LEADS, HITS; EZ,
+HRD), on both cores, trimmed under the limiter; your own YARD and Clipper sounds saved on the panel (EDIT on the
+SOUND page) and moved as files; MPE in and out, breath, PHONES MAX for the headphones; a landing page with the USB
+tools (https://enkerli.github.io/mvane-yard/).
+
+## Submitting to the Firmware Hub (https://thefirmwarehub.com/submit/)
+
+| What the hub asks | Where it stands |
+| --- | --- |
+| Open source, the source at each release's tag | GPL-3.0, public |
+| A GitHub release with the `.fwsc` (pre-releases too) | v0.9-beta, v0.10-beta; built and signed from source (zvenson/fm1-build: "Built from source on GitHub") |
+| Its own identity (`FM-1_` number, not the one it started from) | `FM-1_17` + the version's six digits; none in the hub's catalogue starts with `FM-1_17` (2026-11-22) |
+| The update loader in the package | felucca-bsp's, in every fm1-base package |
+| Both flash chips (`0x856014`, the newer `0xB36014`) | fm1-base's `fm1_flash_ok.h` (Alex's unit is a newer one) |
+| `fmhub.json` in the root (what, kinds, image, sounds ...) | written: `chords`, `docs/media/card.png` (240 x 240), the page as its editor, the manual as its cheat sheet |
+| Sounds: what ships | `none – all synthesised`: Clipper's synthesized sets only; Felucca's recorded sets (never compiled here) taken out of the vendored copy |
+| Tested on a real FM-1: installed from V15 and from another firmware, and left again | **Alex**: with the release to submit |
+| The form: name, your name, an address (never shown), one line, how it was tested | **Alex** |
+
+To do: a release with `fmhub.json` in it (0.11), Alex's test of it (from V15, from another firmware, and back), then
+the form. VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
+
+## After the submission (proposed, 2026-11-22)
+
+In order, each to judge by ear on the FM-1:
+1. **What the hub's review and the first players say**: fixes first.
+2. **Bass, chords, lead (multitimbral)**: a sound and a MIDI channel each; generative basslines, comping, the lead
+   played; the EZ sounds and the second core make room for three.
+3. **mvane yard as its own plugin, app and AUv3** (`core/` is already portable; YARD is plain C), the same sounds and
+   takes as the FM-1, without VIBE FM.
+4. **The demo take** in the firmware: MPE chords and a wind-controller part, 1980s-demo cheesy.
+5. **Progressions on the device** (M3, ProgGenie) and music-suite's voice leading in C.
+6. **Chord memory and pads** (M2b), **parameter locks and gestures** (M4), **a compact take** (thinned controllers).
+7. **The sound list curated**: engines dropped or folded (Alex: variety over count), which frees flash and RAM.
+8. **CPU**: a per-bus effect gate (about 15% of a light sound back while playing), the hot engine code in RAM if the
+   xruns at a change of sound come back.
+9. **VIBE FM**, once the converter's log says why 0.10-beta does not convert.
 
 ## Alex's first session (0.1 on the FM-1, 2026-11-21)
 
