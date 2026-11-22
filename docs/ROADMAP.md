@@ -45,7 +45,10 @@ In order, each to judge by ear on the FM-1:
    played; the EZ sounds and the second core make room for three.
 3. **mvane yard as its own plugin, app and AUv3** (`core/` is already portable; YARD is plain C), the same sounds and
    takes as the FM-1, without VIBE FM.
-4. **The demo take** in the firmware: MPE chords and a wind-controller part, 1980s-demo cheesy.
+4. **The demo take** in the firmware: MPE chords and a wind-controller part, 1980s-demo cheesy; and takes that show
+   off MPE pitch bend (each note bent its own way), possibly as simplified MIDI files (Alex, 2026-11-22).
+   **MPE glide**: a different glide rate across a chord's voices (each voice its own time to its next note, so a
+   chord change blooms rather than moves as a block).
 5. **Progressions on the device** (M3, ProgGenie) and music-suite's voice leading in C.
 6. **Chord memory and pads** (M2b), **parameter locks and gestures** (M4), **a compact take** (thinned controllers).
 7. **The sound list curated**: engines dropped or folded (Alex: variety over count), which frees flash and RAM.
