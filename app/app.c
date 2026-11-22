@@ -68,7 +68,8 @@ typedef struct {
     uint16_t pcs;                        /* the scale: 0x8000 | its pitch-class set's number (0..4095, bit 0 the tonic,
                                           * always counted in: C major 2741); 0, a record from before 0.12: the named
                                           * scale's (set.scale) */
-    uint8_t room[12];                    /* (for settings to come: 0 their default, so no new record is needed) */
+    uint8_t loop;                        /* 1: the take plays again from its start at its end (SEQ's LOOP) */
+    uint8_t room[11];                    /* (for settings to come: 0 their default, so no new record is needed) */
 } settings_t;
 typedef char settings_same_size[sizeof(settings_t) == 52u ? 1 : -1];   /* (MVA: as 0.11 wrote it: pcs took room) */
 typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX) */
@@ -136,6 +137,7 @@ static void settings_defaults(void)
     set.phones = 20;
     set.spread = 0;
     set.pcs = 0;
+    set.loop = 0;
     mvane_zero(set.room, sizeof set.room);
 }
 
@@ -155,7 +157,7 @@ static void settings_load(void)
     else if (n == (int)sizeof r.v11b && r.v11b.magic == SET_MAGIC_11B) {   /* 0.11-beta's: SPREAD 0 */
         settings_defaults();
         mvane_copy(&set, &r.v11b, sizeof r.v11b);
-        set.magic = SET_MAGIC, set.spread = 0, set.pcs = 0;
+        set.magic = SET_MAGIC, set.spread = 0, set.pcs = 0, set.loop = 0;
         mvane_zero(set.room, sizeof set.room);
     } else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
         settings_defaults();
@@ -189,7 +191,7 @@ static void settings_load(void)
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
         || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u
-        || (set.pcs && (set.pcs & 0x7000u) != 0u))
+        || set.loop > 1u || (set.pcs && (set.pcs & 0x7000u) != 0u))
         settings_defaults();
     if (!(set.pcs & 0x8000u))            /* (before 0.12: the named scale's set) */
         set.pcs = (uint16_t)(0x8000u | CHORD_SCALES[set.scale].mask);
@@ -645,10 +647,60 @@ static void bus(uint32_t st, uint32_t d1, uint32_t d2, uint32_t to)
 }
 #define LIVE (TO_SYNTH | TO_OUT | TO_HIST)
 
+/* A take plays in the scale and key now set: its notes were played in those in force when PLAY started it (pl_mask,
+ * pl_tonic); after a change each goes to the same degree of the new scale (a scale of another size: the degree in
+ * proportion), the same octave, a note outside the scale kept as far from the degree below it, the key's move the
+ * shortest (-5 .. +6). A note's off and pressure follow its on (pl_map) */
+static uint16_t pl_mask;
+static uint8_t pl_tonic, pl_map[16][128];   /* 1 + the note sounding for the take's note; 0: none */
+static uint8_t pl_last;                  /* (the take's last note on, as it plays: the host's checks) */
+static uint16_t scale_mask(void);
+static uint32_t pcs_tone(uint16_t m, uint32_t j)   /* the j-th tone of a set, in semitones above its tonic */
+{
+    uint32_t k, n = 0;
+    for (k = 0; k < 12u; k++)
+        if (m >> k & 1u && n++ == j)
+            return k;
+    return 0;
+}
+static uint32_t take_note(uint32_t n)
+{
+    uint16_t mb = scale_mask();
+    uint32_t pc, k, i = 0, na = 0, nb = chord_scale_size(mb), ti = 0;
+    int32_t shift = ((int32_t)set.tonic - (int32_t)pl_tonic + 12) % 12, out;
+    if (mb == pl_mask && !shift)
+        return n;
+    if (shift > 6)
+        shift -= 12;
+    pc = (n + 12u - pl_tonic) % 12u;
+    for (k = 0; k < 12u; k++)            /* the degree at or below the note (the tonic always in) */
+        if (pl_mask >> k & 1u) {
+            if (k <= pc)
+                i = na, ti = k;
+            na++;
+        }
+    out = (int32_t)n - (int32_t)ti + (int32_t)pcs_tone(mb, i * nb / na) + shift;
+    return (uint32_t)(out < 0 ? 0 : out > 127 ? 127 : out);
+}
 static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)
 {
+    uint32_t ch = st & 15u, kind = st & 0xF0u, m = d1;
     (void)ctx;
-    bus(st, d1, d2, TO_SYNTH | TO_OUT);
+    if (kind == 0x90u && d2)
+        m = take_note(d1), pl_map[ch][d1] = (uint8_t)(m + 1u), pl_last = (uint8_t)m;
+    else if (kind == 0x80u || kind == 0x90u || kind == 0xA0u) {
+        if (pl_map[ch][d1])
+            m = pl_map[ch][d1] - 1u;
+        if (kind != 0xA0u)
+            pl_map[ch][d1] = 0;
+    }
+    bus(st, m, d2, TO_SYNTH | TO_OUT);
+}
+static void take_play(uint32_t at)       /* from its start, in the scale and key now set */
+{
+    pl_mask = scale_mask(), pl_tonic = set.tonic;
+    mvane_zero(pl_map, sizeof pl_map);
+    rec_play_start(&player, &take, at);
 }
 
 static uint32_t mpe_channel(void)        /* a member channel (MIDI 2..16): free longest, else the one with fewest notes;
@@ -1582,6 +1634,9 @@ static void knob_info(uint32_t i, const char **label, char *val)
         if (i == 0) {
             *label = "SLOT";
             int_text((int32_t)set.slot + 1, val);
+        } else if (i == 1) {
+            *label = "LOOP";
+            text_cat(val, set.loop ? "ON" : "OFF");
         }
     } else if (!set.page) {              /* PLAY: as Coral Flower's */
         static const char *const N[4] = {"QUANT", "KEY", "SCALE", "GLIDE"};
@@ -1716,6 +1771,11 @@ static void knob_turn(uint32_t i, int32_t e)
     } else if (l == B_SEQ) {
         if (i == 0)
             slot_step(d);
+        else if (i == 1) {
+            set.loop = (uint8_t)(e > 0);
+            set_dirty = 1;
+            app_say("LOOP", set.loop ? "ON" : "OFF");
+        }
         return;
     } else if (!set.page) {
         if (i == 0)
@@ -1924,7 +1984,7 @@ static void input(void)
                 rec_play_stop(&player, play_emit, 0);
                 app_say("TAKE", "STOPPED");
             } else if (take.count) {
-                rec_play_start(&player, &take, now);
+                take_play(now);
                 app_say("TAKE", "PLAYING");
             } else
                 app_say("TAKE", "EMPTY");
@@ -1996,8 +2056,16 @@ static void input(void)
         if (ui.chord_key >= 0 && !ui.chord_n)
             chord_sound();
     }
-    if (player.playing && !rec_play_poll(&player, now, play_emit, 0))
+    if (player.playing && !rec_play_poll(&player, now, play_emit, 0)) {
+        if (set.loop && take.duration_ms) {   /* LOOP: again, on the beat it ended (the scale it plays in kept) */
+            uint16_t m = pl_mask;
+            uint8_t t = pl_tonic;
+            take_play(player.start_ms + take.duration_ms);
+            pl_mask = m, pl_tonic = t;
+            rec_play_poll(&player, now, play_emit, 0);
+        }
         ui.redraw = 1;
+    }
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
@@ -2047,7 +2115,7 @@ static void draw(void)
                 cv_rect(x + 2, 8, 20, 26, C_BLACK);
             cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
-        cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   REC, PLAY, SAVE AS EVER", C_GRAY);
+        cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   K2: LOOP   REC, PLAY, SAVE", C_GRAY);
     } else if (lay == B_SEL) {           /* SCALE: the number, its name, its twelve pitch classes from the key */
         uint32_t m = scale_mask();
         char nb[16];
@@ -2155,7 +2223,7 @@ static void draw(void)
     if (player.playing) {
         time_text(now - player.start_ms, t);
         cv_text(80, 56, &FONT_S, t, C_WHITE);
-        cv_text(130, 58, &FONT_XS, "PLAYING", C_HI);
+        cv_text(130, 58, &FONT_XS, set.loop ? "LOOPING" : "PLAYING", C_HI);
     } else if (old_take)
         cv_text(80, 58, &FONT_XS, "0.4'S TAKE: SAVE KEEPS IT", C_HI);
     else if (take_dirty)
@@ -2496,6 +2564,12 @@ int app_expect(const char *what, int *got)
         *got = set.tonic;
     else if (!strcmp(what, "scale"))
         *got = set.scale;
+    else if (!strcmp(what, "pl_last"))   /* a take playing: its last note on, as it sounds */
+        *got = pl_last;
+    else if (!strcmp(what, "playing"))
+        *got = player.playing;
+    else if (!strcmp(what, "loop"))
+        *got = set.loop;
     else if (!strcmp(what, "pcs"))       /* the scale's number */
         *got = (int)scale_num();
     else if (!strcmp(what, "in_last"))   /* MIDI in: the last note on, as it plays */

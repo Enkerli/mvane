@@ -57,6 +57,20 @@ In order, each to judge by ear on the FM-1:
 8. **CPU**: a per-bus effect gate (about 15% of a light sound back while playing), the hot engine code in RAM if the
    xruns at a change of sound come back.
 9. **VIBE FM**, once the converter's log says why 0.10-beta does not convert.
+10. **Try it in the browser, from the landing page** (Alex, 2026-11-22): fm1-base's WebAssembly emulator (the host
+    build, as the VIBE route needs anyway) on the page, the panel and keys on screen, takes and sounds from the
+    computer. Not installing from the browser: with the bricked-module stories around, the page points to
+    **M-Flasher** (as M-VAVE did on its forum) with its backup first, and keeps the `.fwsc` a download.
+11. **Takes that loop and overdub** (Alex, 2026-11-22). **LOOP done in 0.12.2:** SEQ's K2, the take again on time
+    at its end; and a take follows the KEY and SCALE while it plays (each note to the same degree). Next:
+    - **Loop length**: to the beat, not to where REC was tapped (trim the tail to the last note's end, or snap it to
+      the bar the first notes suggest; a tap tempo).
+    - **Overdub**: while a take loops, what is played goes in as well. The history already records it with the time:
+      REC during a loop would merge the live events of the last pass (or passes) into the take, folded to its length,
+      a second layer on top (the RAM: the take's words and the new ones, at most the history's). UNDO the last layer;
+      layers each on their own channel set for MIDI out.
+    - **The take's own scale** stored with it (the take file's header), so a take saved in C major plays in C minor
+      from its first note when the scale has changed since.
 
 ## Alex's first session (0.1 on the FM-1, 2026-11-21)
 

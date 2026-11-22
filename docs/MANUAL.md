@@ -50,7 +50,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | **GLO** on the PLAY page: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
 | **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
-| **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
+| **SEQ**: TAKES | SLOT | LOOP (off, on) | | | the take slot (1 to 8); the screen shows the eight slots |
 | **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the named scales (MAJOR, MINOR, DORIAN, HARM MIN, PENTA, PCO, NOODLING, OCTATONIC) |
 
 **The scale is a pitch-class set's number**, 0 to 4095, as in the Music Suite: each of the twelve semitones above
@@ -216,6 +216,12 @@ of a light sound is Clipper's effect buses, which stop only once every send has 
   where it is in the history, protected until you save it (the history shows FULL: SAVE if you play on until it
   reaches it).
 - **PLAY** replays the take through the current sound: try a take through different sounds.
+- **In any scale:** while a take plays, change the KEY or the SCALE (the PLAY page, or SEL's number) and the take
+  follows: each note to the same degree of the new scale, in the same octave (from C major to C minor, E becomes Eb;
+  to D minor, F). A scale with fewer or more tones takes the degrees in proportion; a note outside the scale keeps its
+  distance from the degree below it. The scale in force when you pressed PLAY is the take's own.
+- **LOOP** (SEQ, K2): the take plays again from its start when it ends, on time, still in the scale you moved it to
+  (the screen: LOOPING). The loop is the take's length: from its first note to where you tapped REC.
 - **SAVE** writes the take into the current slot (the sound stops for a moment while the flash is written). Saved takes
   play from the flash.
 - **SEQ** (held or tapped) and SELECT pick one of eight slots. A take sent from the computer (the page, `yard.py put`)
