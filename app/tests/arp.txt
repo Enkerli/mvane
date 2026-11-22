@@ -1,4 +1,4 @@
-# The ARP (0.12): ARP tapped OFF, ON, LATCH; held, its layer (MODE RATE GATE OCTAVES, SELECT the tempo). It plays
+# The ARP (0.12): ARP tapped on, off; held, its layer: MODE RATE GATE OCTAVES, SELECT to TEMPO LATCH. It plays
 # what would sound, a step at a time. app/build/host/mvane-yard_host app/tests/arp.txt app/build/host
 wait 600
 spin ALGO -1
@@ -47,8 +47,12 @@ expect arp_note 64
 key 7 up
 key 11 up
 wait 50
-# LATCH: kept after letting go; a new press after that starts anew
-tap ARP
+# LATCH (the layer's second page, K2): kept after letting go; a new press after that starts anew
+press ARP
+spin SELECT 1
+spin K2 1
+spin SELECT 1
+release ARP
 wait 20
 expect arp 2
 key 7 down 100
@@ -78,10 +82,16 @@ expect arp_snd 3
 key 7 up
 key 11 up
 key 14 up
-# OFF: what it kept goes; keys sound again as themselves
+# OFF (a tap): what it kept goes; keys sound again as themselves; on again: LATCH still set
 tap ARP
 wait 20
 expect arp 0
 expect arp_n 0
 wait 200
 expect arp_snd 0
+tap ARP
+wait 20
+expect arp 2
+tap ARP
+wait 20
+expect arp 0

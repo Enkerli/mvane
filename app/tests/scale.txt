@@ -19,6 +19,22 @@ shot scale.png
 release SEL
 wait 50
 expect layer -1
+# a known name, not in the list: 397 is HIRAJOSHI; 398 has none
+press SEL
+spin K1 -4
+spin K2 3
+spin K4 2
+expect pcs 397
+expect pcs_named 1
+wait 50
+shot scale_known.png
+spin K4 1
+expect pcs 398
+expect pcs_named 0
+spin K1 4
+expect pcs 4095
+release SEL
+wait 50
 # SEL tapped: the layer stays; SELECT, the list from bright to dark: 4095 is CHROMATIC, the last; then LYDIAN (2773),
 # MAJOR (2741); back: LYDIAN
 tap SEL

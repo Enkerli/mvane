@@ -58,6 +58,10 @@ canvas { width: 100%; height: 180px; display: block; background: var(--roll); bo
 .ytab button { padding: 2px 8px; }
 .ytab select { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; max-width: 12em; }
 .ytab input.chg { width: 16em; text-transform: uppercase; }
+.ytab input.pcs { width: 5.2em; }
+.pcs-boxes { display: inline-flex; gap: 2px; }
+.pcs-boxes label { display: inline-flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--dim); min-width: 1.9em; }
+.pcs-boxes input { margin: 0 0 1px; }
 h3.sub { font-size: 14px; margin: 12px 0 4px; color: var(--dim); font-weight: 600; }
 .hero { padding: 8px 0 4px; }
 .hero h1 { font-size: 34px; }
@@ -205,7 +209,7 @@ footer button { font-size: 13px; padding: 3px 9px; }
       <tbody id="ysounds"></tbody></table></div>
     <h3 class="sub">Scales</h3>
     <p class="meta" id="scaleMeta"></p>
-    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th>Number</th><th>From C</th><th></th></tr></thead>
+    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th>Number</th><th>Its notes, from C (tick to add)</th><th>A known scale</th><th></th></tr></thead>
       <tbody id="scales"></tbody></table></div>
     <h3 class="sub">Clipper</h3>
     <p class="meta" id="clipMeta"></p>
@@ -222,7 +226,9 @@ footer button { font-size: 13px; padding: 3px 9px; }
     </div>
     <p class="note">Sending replaces the FM-1's own sounds and scales with these. Scales: a pitch-class set's number,
       0 to 4095 (each semitone above the key a bit: the key 1, a semitone 2, a whole tone 4 ... the major seventh 2048;
-      C major is 2741); the FM-1 lists them after its own, from LYDIAN to CHROMATIC, on SCALE and on SEL's layer
+      C major is 2741: <a href="https://ianring.com/musictheory/scales/">Ian Ring's list</a> has all 4096, each by
+      its number, and the number links to its page there; tick the notes, or pick a known scale, to set one); the
+      FM-1 lists them after its own, from LYDIAN to CHROMATIC, on SCALE and on SEL's layer
       (whose SAVE keeps the number set). A scale without a name shows as its number. YARD: values 0 to 127; GLIDE is kept with the
       sound, the FM-1 plays its own (the PLAY page's). Clipper: a factory sound and up to 14 of its parameters changed,
       by name or #number (BRITE, TIMBR, MOTN, SPACE: a HYBRID sound's M1..M4); on the FM-1, FX held and SAVE keeps a
@@ -262,6 +268,8 @@ import { Companion, findCompanions } from "./lib/companion.js";
 import { readTake, writeTake, writeMid, readMid, notesOf, flatten } from "./take.js";
 import { toJson as ysbToJson, fromJson as ysbFromJson, PARAMS as YP, DEFAULT as YDEF, N as YN, CN, SN, OV, label as clpLabel, paramOf } from "./ysb.js";
 import { zip } from "./zip.js";
+let knownScales = [];
+fetch("./scale_names.json").then((r) => r.json()).then((j) => { knownScales = j; if (scales.length) showScales(); }).catch(() => {});
 let clpNames = null;
 fetch("./clp_names.json").then((r) => r.json()).then((j) => { clpNames = j; }).catch(() => {});
 
@@ -480,22 +488,53 @@ function showSounds() {
   showScales();
 }
 const PC = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-const fromC = (p) => PC.filter((_, k) => k === 0 || (p >> k) & 1).join(" ");
+const knownName = (p) => (knownScales.find((k) => (k.pcs | 1) === (p | 1)) || {}).name || "";
 function showScales() {
   $("scaleMeta").textContent = scales.length ? `${scales.length} of ${SN}: after the FM-1's own on SCALE and SEL.`
     : "None yet: on the FM-1, SEL, set a number with K1 to K4, then SAVE; or Add one here.";
   $("sAdd").disabled = scales.length >= SN;
   $("scales").replaceChildren(...scales.map((c, i) => {
-    const tr = document.createElement("tr"), cell = (el) => { const td = document.createElement("td"); td.append(el); tr.append(td); };
+    const tr = document.createElement("tr"), cell = (el) => { const td = document.createElement("td"); td.append(el); tr.append(td); return td; };
     const num = document.createElement("span"); num.textContent = c.slot ?? "·"; cell(num);
-    const name = Object.assign(document.createElement("input"), { type: "text", maxLength: 12, value: c.name, placeholder: `PCS ${c.pcs}` });
+    const name = Object.assign(document.createElement("input"), { type: "text", maxLength: 12, value: c.name });
     name.oninput = () => { c.name = name.value.toUpperCase(); }; name.setAttribute("aria-label", "name"); cell(name);
-    const notes = document.createElement("span");
-    const n = Object.assign(document.createElement("input"), { type: "number", min: 0, max: 4095, step: 1, value: c.pcs });
-    n.onchange = () => { c.pcs = Math.max(0, Math.min(4095, Math.round(Number(n.value) || 0))); n.value = c.pcs; notes.textContent = fromC(c.pcs);
-      name.placeholder = `PCS ${c.pcs}`; };
-    n.setAttribute("aria-label", "number"); cell(n);
-    notes.textContent = fromC(c.pcs); cell(notes);
+    const n = Object.assign(document.createElement("input"), { type: "number", min: 0, max: 4095, step: 1, value: c.pcs, className: "pcs" });
+    n.setAttribute("aria-label", "number");
+    const link = Object.assign(document.createElement("a"), { target: "_blank", rel: "noopener", textContent: "↗", title: "On Ian Ring's site" });
+    const ntd = cell(n); ntd.append(" ", link); ntd.style.whiteSpace = "nowrap";
+    const boxes = document.createElement("span"); boxes.className = "pcs-boxes";
+    const ticks = PC.map((pc, k) => {
+      const l = document.createElement("label"), b = Object.assign(document.createElement("input"), { type: "checkbox" });
+      b.setAttribute("aria-label", pc);
+      if (k === 0) { b.checked = b.disabled = true; b.title = "The key: always in"; }
+      b.onchange = () => { c.pcs = b.checked ? c.pcs | (1 << k) : c.pcs & ~(1 << k); sync(); };
+      l.append(b, pc); boxes.append(l);
+      return b;
+    });
+    cell(boxes);
+    const pick = document.createElement("select");
+    pick.setAttribute("aria-label", "a known scale");
+    pick.append(Object.assign(document.createElement("option"), { value: "", textContent: "pick one…" }));
+    for (const k of knownScales) pick.append(Object.assign(document.createElement("option"), { value: k.pcs, textContent: `${k.name} (${k.pcs})` }));
+    pick.onchange = () => {
+      if (!pick.value) return;
+      const k = knownScales.find((x) => x.pcs === Number(pick.value));
+      c.pcs = k.pcs;
+      if (!c.name) { c.name = k.name; name.value = k.name; }
+      sync();
+    };
+    cell(pick);
+    function sync() {                             // the number, the ticks, the link and the picker, from c.pcs
+      c.pcs |= 1;                                 // (the key is always in: the FM-1 plays it so)
+      n.value = c.pcs;
+      ticks.forEach((b, k) => { b.checked = !!((c.pcs >> k) & 1); });
+      link.href = `https://ianring.com/musictheory/scales/${c.pcs}`;
+      const kn = knownName(c.pcs);
+      pick.value = kn ? String(knownScales.find((x) => x.name === kn).pcs) : "";
+      name.placeholder = kn || `PCS ${c.pcs}`;
+    }
+    n.onchange = () => { c.pcs = Math.max(0, Math.min(4095, Math.round(Number(n.value) || 0))); sync(); };
+    sync();
     const del = Object.assign(document.createElement("button"), { type: "button", textContent: "Remove" });
     del.onclick = () => { scales.splice(i, 1); showScales(); say(`Removed scale ${c.name || c.pcs}: Send to the FM-1 to remove it there too.`); };
     cell(del);
@@ -505,7 +544,7 @@ function showScales() {
 $("sAdd").onclick = () => {
   scales.push({ name: "", pcs: 2741 });
   showScales();
-  say("Added a scale (2741, C major's): set its number and name, then Send to the FM-1.");
+  say("Added a scale (2741, C major's): tick its notes or pick a known one, name it, then Send to the FM-1.");
 };
 const chgText = (c) => c.changes.map((x) => {      // M1=84, #34=6 when the label is not one parameter's
   let t = `#${x.id}`;

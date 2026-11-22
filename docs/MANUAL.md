@@ -51,7 +51,7 @@ Every knob move on these pages is kept in the recording (as CC 5, 16 to 19, 72 t
 | **EDIT** on the SOUND page, a Clipper sound | its engine's values 1-4 / 5-8 / ATTACK | ... / DECAY | ... / SUSTAIN | ... / RELEASE | the next page (ENGINE 1-4, ENGINE 5-8, ENVELOPE) |
 | **GLO** on the SOUND page: MORE | PHONES MAX (MASTER's top for the headphones and speaker, 100% down to 10%: the FM-1's analog side can clip at a level the digital signal has clean; with USB AUDIO FULL the USB recording keeps its level) | SPREAD (MPE glide: OFF, or how much longer the highest voice glides than the lowest, 100% to 400%) | | | |
 | **SEQ**: RECORDINGS | SLOT | LOOP (off, on) | | | the recording slot (1 to 8); the screen shows the eight slots |
-| **ARP** held: ARP (either page) | MODE (UP, DOWN, UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD) | RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32) | GATE (5% to 100%: legato) | OCTAVES (1 to 4) | the tempo (40 to 240 BPM) |
+| **ARP** held: ARP (either page) | MODE (UP, DOWN, UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD) / TEMPO (40 to 240 BPM) | RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32) / LATCH (off, on) | GATE (5% to 100%: legato) | OCTAVES (1 to 4) | the other page |
 | **SEL**: SCALE (either page) | the scale's number, thousands (0 to 4) | hundreds | tens | units (the number at most 4095) | the list (below), yours after it; SAVE: keep the number in your list |
 
 **The scale is a pitch-class set's number**, 0 to 4095, as in the Music Suite: each of the twelve semitones above
@@ -68,6 +68,11 @@ NOODLING; CHROMATIC. Then **your own**: on SEL's layer, set a number and SAVE (u
 not the settings). The page names them, renumbers them and removes them (Your sounds and scales); one without a name
 shows as its number.
 
+**Known names**: dial a number on SEL's layer and the screen names it when it is a known scale, in the list or not
+(HIRAJOSHI 397, PERSIAN 2419, the bebop scales, Messiaen's modes ...: about 60, `tools/scale_names.py`). All 4096 are
+on [Ian Ring's list](https://ianring.com/musictheory/scales/), by the same numbers. The page's scale editor: tick a
+scale's notes, or pick a known scale, or type its number; each number links to its page there.
+
 ### Encoders and buttons
 
 | Control | Does |
@@ -80,7 +85,7 @@ shows as its number.
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub (from the next pass; again, stop at its end); hold, undo the last layer |
 | **PLAY** | Play / stop the recording |
 | **SAVE** | Save the settings, and the recording into its slot |
-| **ARP** | Tap: ARP OFF, ON, LATCH. Hold: its layer |
+| **ARP** | Tap: the ARP on, off. Hold: its layer |
 
 **QUANT** as Coral Flower's: OFF, the chords' roots a semitone a white key; BASIC, the roots the scale's degrees; FULL, the chords' tones too, and the notes coming in over MIDI (USB, TRS, a hosted device), each to the nearest tone of the scale (down on a tie: C# to C in C major). A note's release finds the note it became, even after the scale or QUANT has changed.
 
@@ -138,8 +143,8 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 
 ### ARP
 
-**Tap ARP**: OFF, ON, LATCH (the screen says ARP or ARP LATCH beside NOTES or CHORDS; the button lights). **Hold
-ARP** and turn: its layer (above). It plays what would sound, a step at a time: in NOTES the keys you hold, in CHORDS
+**Tap ARP**: on, off (the screen says ARP, or ARP LATCH, beside NOTES or CHORDS; the button lights). **Hold ARP**
+and turn: its layer (above), two pages, SELECT between: MODE RATE GATE OCTAVES, then TEMPO and LATCH. It plays what would sound, a step at a time: in NOTES the keys you hold, in CHORDS
 the chord's voices (the bass too), and the notes coming in over MIDI. Each step is one of them by the MODE
 (UP-DOWN and DOWN-UP turn at the ends without repeating them, UP+DOWN repeats them; RANDOM never the same twice in a
 row; CHORD plays them all together, a comping rhythm), held for GATE of the step, over OCTAVES octaves. Each note

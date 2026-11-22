@@ -32,6 +32,9 @@ host:   # the firmware in the host simulator, and its scripted checks
 fwsc:   # the FM-1 package (JieLi toolchain: Linux x86-64, a container, or CI)
 	./build.sh
 
+scale-names:   # the known scales' names, for the screen and the page (core/scale_names.h, web/scale_names.json)
+	python3 tools/scale_names.py
+
 clean:
 	rm -rf build app/build
 

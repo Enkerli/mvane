@@ -72,7 +72,8 @@ typedef struct {
     uint8_t loop;                        /* 1: the take plays again from its start at its end (SEQ's LOOP) */
     uint8_t arp_mode, arp_rate, arp_gate, arp_oct;   /* the ARP's (ARP held): ARP_MODES, ARP_RATES, 5..100 %, 1..4 */
     uint8_t arp_bpm;                     /* its tempo, 40..240 (below 40: a record from before it, the defaults) */
-    uint8_t room[6];                    /* (for settings to come: 0 their default, so no new record is needed) */
+    uint8_t arp_latch;                   /* 1: ARP on keeps the notes let go (its LATCH, the layer's second page) */
+    uint8_t room[5];                    /* (for settings to come: 0 their default, so no new record is needed) */
 } settings_t;
 typedef char settings_same_size[sizeof(settings_t) == 52u ? 1 : -1];   /* (MVA: as 0.11 wrote it: pcs took room) */
 typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX) */
@@ -200,6 +201,8 @@ static void settings_load(void)
     if (set.arp_bpm < 40u || set.arp_bpm > 240u || set.arp_mode > 7u || set.arp_rate > 5u || set.arp_gate < 5u
         || set.arp_gate > 100u || set.arp_oct < 1u || set.arp_oct > 4u)   /* (before the ARP: its defaults) */
         set.arp_mode = 0, set.arp_rate = 3, set.arp_gate = 50, set.arp_oct = 1, set.arp_bpm = 120;
+    if (set.arp_latch > 1u)
+        set.arp_latch = 0;
     if (!(set.pcs & 0x8000u)) {          /* (before 0.12: the named scale's set, in 0.11's list) */
         static const uint16_t OLD[8] = {2741, 1453, 1709, 2477, 661, 1723, 1267, 2925};
         set.pcs = (uint16_t)(0x8000u | OLD[set.scale % 8u]);
@@ -243,13 +246,26 @@ static const char *scale_list_name(uint32_t i)   /* "" for a user's without a na
 {
     return i < CHORD_NSCALES ? CHORD_SCALES[i].name : us_name[(i - CHORD_NSCALES) % US_N];
 }
+#include "scale_names.h"
+/* its name: the list's (the user's own name first), else a known one (tools/scale_names.py), else 0 */
+static const char *scale_name_of(void)
+{
+    int32_t n = scale_named();
+    uint32_t i;
+    if (n >= 0)
+        return scale_list_name((uint32_t)n);
+    for (i = 0; i < SCALE_NNAMES; i++)
+        if ((SCALE_NAMES[i].pcs | 1u) == scale_mask())
+            return SCALE_NAMES[i].name;
+    return 0;
+}
 /* its name, or its number: "MAJOR", "PCS 1365" */
 static void scale_text(char *out)
 {
-    int32_t n = scale_named();
+    const char *nm = scale_name_of();
     out[0] = 0;
-    if (n >= 0)
-        text_cat(out, scale_list_name((uint32_t)n));
+    if (nm)
+        text_cat(out, nm);
     else {
         text_cat(out, "PCS ");
         int_text((int32_t)scale_num(), out + 4);
@@ -725,8 +741,9 @@ static void bus(uint32_t st, uint32_t d1, uint32_t d2, uint32_t to)
 /* The ARP plays what would sound (NOTES: the keys held; CHORDS: the chord's voices; MIDI in's notes) one step at a
  * time, at its tempo and rate: each step a note of them by its mode (CHORD: all of them), for GATE of the step, over
  * OCTAVES octaves, on the channel of the note it comes from (so that note's pressure and bend shape it), at its
- * velocity. ARP tapped: OFF, ON, LATCH (the notes kept after they are let go, until a new press after all were let
- * go); held: its layer (MODE RATE GATE OCTAVES, SELECT the tempo). What it plays is what is recorded; a recording
+ * velocity. ARP tapped: on, off (as most firmwares have it, Alex 2026-11-22); held: its layer, two pages (SELECT):
+ * MODE RATE GATE OCTAVES; TEMPO and LATCH (the notes kept after they are let go, until a new press after all were
+ * let go). What it plays is what is recorded; a recording
  * plays back as it was, not arpeggiated */
 #define ARP_MAX 16u
 #define ARP_SEQ (ARP_MAX * 4u)
@@ -873,9 +890,10 @@ static void arp_tick(uint32_t now)
     arp.next_ms += step;
 }
 static void all_off(void);
-static void arp_set(uint32_t on)         /* OFF / ON / LATCH */
+static uint8_t arp_pg;                   /* the ARP layer's page: 0 MODE RATE GATE OCTAVES, 1 TEMPO LATCH */
+static void arp_set(uint32_t on)         /* 0 off, 1 on, 2 on with LATCH */
 {
-    static const char *const N[3] = {"OFF", "ON", "LATCH"};
+    static const char *const N[3] = {"OFF", "ON", "ON, LATCH"};
     if (!arp.on || !on) {                /* in or out: what sounds stops first (its offs would not find it) */
         all_off();
         arp_clear();
@@ -1974,6 +1992,14 @@ static void knob_info(uint32_t i, const char **label, char *val)
             text_cat(val, set.mpe_out ? "ON" : "OFF");
         else
             int_text(BEND_RANGES[set.bend & 3u], val);
+    } else if (l == B_ARP && arp_pg) {   /* ARP's second page: TEMPO LATCH */
+        static const char *const N[4] = {"TEMPO", "LATCH", "-", "-"};
+        *label = N[i];
+        if (i == 0) {
+            int_text(set.arp_bpm, val);
+            text_cat(val, " BPM");
+        } else if (i == 1)
+            text_cat(val, set.arp_latch ? "ON" : "OFF");
     } else if (l == B_ARP) {             /* ARP: MODE RATE GATE OCTAVES */
         static const char *const N[4] = {"MODE", "RATE", "GATE", "OCTAVES"};
         *label = N[i];
@@ -2114,6 +2140,15 @@ static void knob_turn(uint32_t i, int32_t e)
             mpe_config();
         }
         set_dirty = 1;
+    } else if (l == B_ARP && arp_pg) {
+        if (i == 0)
+            set.arp_bpm = (uint8_t)clamp((int32_t)set.arp_bpm + e, 40, 240);
+        else if (i == 1) {
+            set.arp_latch = (uint8_t)(e > 0);
+            if (arp.on)
+                arp_set(set.arp_latch ? 2u : 1u);
+        }
+        set_dirty = 1;
     } else if (l == B_ARP) {
         if (i == 0)
             set.arp_mode = (uint8_t)((set.arp_mode + 8u + (uint32_t)d) % 8u), arp.pos = -1;
@@ -2133,9 +2168,9 @@ static void knob_turn(uint32_t i, int32_t e)
         set_dirty = 1;
         harmony_changed();
         int_text((int32_t)scale_num(), t);
-        if (scale_named() >= 0) {
+        if (scale_name_of()) {
             text_cat(t, " ");
-            text_cat(t, scale_list_name((uint32_t)scale_named()));
+            text_cat(t, scale_name_of());
         }
         app_say("SCALE", t);
         return;
@@ -2219,13 +2254,10 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
     } else if (l == B_SEQ)
         slot_step(d);
-    else if (l == B_ARP) {               /* ARP: the tempo */
-        char t[12];
-        set.arp_bpm = (uint8_t)clamp((int32_t)set.arp_bpm + e, 40, 240);
-        set_dirty = 1;
-        int_text(set.arp_bpm, t);
-        text_cat(t, " BPM");
-        app_say("TEMPO", t);
+    else if (l == B_ARP) {               /* ARP: its other page */
+        arp_pg ^= 1u;
+        app_say("ARP", arp_pg ? "TEMPO LATCH" : "MODE RATE GATE OCTAVES");
+        ui.redraw = 1;
     } else if (l == B_SEL) {             /* SCALE: the named scales */
         char t[16];
         scale_step(d);
@@ -2406,9 +2438,9 @@ static void input(void)
         }
     }
     if (ui.held >= 0 && !(btn >> ui.held & 1u)) {   /* a layer button let go: a tap opens or closes its page */
-        if (ui.held == B_ARP) {          /* ARP tapped: OFF, ON, LATCH (held: its layer) */
+        if (ui.held == B_ARP) {          /* ARP tapped: on, off (held: its layer) */
             if (!ui.held_used)
-                arp_set((arp.on + 1u) % 3u);
+                arp_set(arp.on ? 0u : set.arp_latch ? 2u : 1u);
         } else if (!ui.held_used)
             ui.latched = ui.latched == ui.held ? -1 : ui.held;
         ui.held = -1;
@@ -2529,20 +2561,25 @@ static void draw(void)
         }
         cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   K2: LOOP   REC, PLAY, SAVE", C_GRAY);
     } else if (lay == B_ARP) {           /* ARP: its modes, the one set lit; the tempo; on / latch */
-        static const char *const N[3] = {"OFF", "ON", "LATCH"};
         int32_t x = 10;
-        char bp[24];
+        char bp[32];
         for (i = 0; i < 8u; i++) {
             x = cv_text(x, i < 4u ? 2 : 18, &FONT_XS, ARP_MODES[i], i == set.arp_mode ? C_WHITE : C_GRAY) + 8;
             if (i == 3u)
                 x = 10;
         }
         bp[0] = 0;
-        int_text(set.arp_bpm, bp);
-        text_cat(bp, " BPM   ARP ");
-        text_cat(bp, N[arp.on % 3u]);
+        text_cat(bp, arp.on ? "ARP ON" : "ARP OFF");
+        text_cat(bp, set.arp_latch ? ", LATCH   " : "   ");
+        {
+            char n[8];
+            int_text(set.arp_bpm, n);
+            text_cat(bp, n);
+        }
+        text_cat(bp, " BPM");
         cv_text(10, 32, &FONT_S, bp, arp.on ? C_HI : C_GRAY);
-        cv_text(10, 50, &FONT_XS, "SELECT: TEMPO   TAP ARP: OFF, ON, LATCH", C_GRAY);
+        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE RATE GATE OCT   TAP ARP: ON/OFF" : "SELECT: TEMPO, LATCH   TAP ARP: ON/OFF",
+                C_GRAY);
     } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
         int h = plat_usb_host_state();
         cv_text(10, 4, &FONT_S, set.page ? "MORE: THE OUTPUT" : "SETTINGS: PLAYING, USB", C_WHITE);
@@ -2554,8 +2591,8 @@ static void draw(void)
         char nb[16];
         int_text((int32_t)scale_num(), nb);
         cv_text(10, 2, &FONT_L, nb, C_WHITE);
-        if (scale_named() >= 0)
-            cv_text(120, 4, &FONT_S, scale_list_name((uint32_t)scale_named()), C_HI);
+        if (scale_name_of())
+            cv_text(120, 4, &FONT_S, scale_name_of(), C_HI);
         else if (scale_listed() >= 0)
             cv_text(120, 4, &FONT_S, "SAVED", C_GRAY);
         for (i = 0; i < 12u; i++) {
@@ -2592,8 +2629,8 @@ static void draw(void)
         t[0] = 0;
         text_cat(t, NOTE_N[set.tonic]);
         text_cat(t, " ");
-        if (scale_named() >= 0)
-            text_cat(t, scale_list_name((uint32_t)scale_named()));
+        if (scale_name_of())
+            text_cat(t, scale_name_of());
         text_cat(t, "  ");
         {
             char ql[24];
@@ -3028,6 +3065,8 @@ int app_expect(const char *what, int *got)
         *got = arp.snd_n;
     else if (!strcmp(what, "arp_note"))  /* the last it played */
         *got = arp.snd_n ? arp.snd_note[0] : -1;
+    else if (!strcmp(what, "pcs_named")) /* the scale has a name (the list's, the user's, or a known one) */
+        *got = scale_name_of() != 0;
     else if (!strcmp(what, "us_n"))      /* the user's scales */
         *got = nus;
     else if (!strcmp(what, "pcs"))       /* the scale's number */
