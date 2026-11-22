@@ -11,7 +11,7 @@
 #include "build_id.h"
 #endif
 #ifndef APP_VERSION                      /* (a release build gives its own: tools/build.py --release) */
-#define APP_VERSION "0.11-dev"
+#define APP_VERSION "0.12-dev"
 #endif
 #define APP_SPLASH_RGB RGB(120, 200, 170)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
