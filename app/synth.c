@@ -10,6 +10,7 @@ typedef struct {
     float vel, level, phase, base, target, poly;
     float ic1, ic2, lp;                  /* the filter's state */
     float sp, ss, sb, sp1, ss1, sb1;     /* pressure, slide and bend, smoothed twice (no zipper) */
+    float br, br1;                       /* (POLY+BR, MONO+BR) its breath, smoothed twice */
     float lb, lb_of, mul, mul_of;        /* caches: log2 of the pitch in Hz (for base lb_of), the bend's ratio (for sb) */
     uint32_t nz;                         /* NOISE's generator */
     float phase2, phsub, cont;           /* DETUNE's second saw, SUB's square (two octaves down), PLUCK's contour (1 at
@@ -45,7 +46,12 @@ static volatile uint8_t prm[SP_N];
 static uint32_t clock_age;
 static float gain_now;
 static uint8_t mono, breath_on;          /* synth_mode */
-static float breath_in, bsm1, bsm;       /* breath (CC2 / CC11), 0..1, and smoothed twice */
+/* breath (CC2 / CC11), 0..1: per channel once a channel has sent it (a wind controller's notes follow their own
+ * breath, an overdub's and the recording's apart: Alex 2026-11-22); a voice on a channel that never has (the panel's
+ * keys with a breath controller) follows the latest from any */
+static float breath_in, ch_breath[16];
+static uint16_t ch_breathed;
+static float breath_of(uint32_t ch) { return ch_breathed >> (ch & 15u) & 1u ? ch_breath[ch & 15u] : breath_in; }
 #define NSTACK 16u
 static struct { uint8_t ch, note, vel; } stk[NSTACK];   /* mono: the notes held, the latest last */
 static uint32_t nstk;
@@ -155,6 +161,7 @@ static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
     v->sp = v->sp1 = fm_maxf(press[ch], press[0]);   /* the controls start where they are: no sweep from the last note */
     v->ss = v->ss1 = slide[ch];
     v->sb = v->sb1 = bend[ch] + (ch ? bend[0] : 0.0f);
+    v->br = v->br1 = breath_of(ch);
     v->cont = 1.0f;
     v->gate = 1;
     v->used = 1;
@@ -231,8 +238,10 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
                 slide[ch] = (float)d2 * (1.0f / 127.0f);   /* MPE slide: this note's brightness, 64 neutral */
             else
                 prm[SP_TONE] = (uint8_t)d2;
-        } else if (d1 == 2u || d1 == 11u)   /* breath (CC2), or expression (CC11) from a wind controller */
-            breath_in = (float)d2 * (1.0f / 127.0f);
+        } else if (d1 == 2u || d1 == 11u) {   /* breath (CC2), or expression (CC11) from a wind controller */
+            breath_in = ch_breath[ch] = (float)d2 * (1.0f / 127.0f);
+            ch_breathed |= (uint16_t)(1u << ch);
+        }
         else if (d1 == SYNTH_CC_REL && !ch)
             prm[SP_REL] = (uint8_t)d2;
         else if (d1 == SYNTH_CC_GLIDE && !ch)
@@ -280,7 +289,6 @@ static struct {
     uint32_t n;
     float rel, att, glide, tone, batt, k, rgain, dec, pluck, sus, sub, det, dmul, g2, pw, noise;
     uint32_t wave, fmode;
-    float bsub[16];
 } bk;
 
 /* a saw's step smoothed (polyBLEP: the division only next to the step) at phase t, increment inc */
@@ -331,7 +339,9 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
         for (i0 = 0; i0 < n; i0 += 16u) {
             float mul, fc, g, a1, a2, a3, c1, oct;
             uint32_t i, end = i0 + 16u < n ? i0 + 16u : n;
-            float br = bk.bsub[(i0 >> 4) & 15u], a = breath_on ? bk.batt : bk.att;
+            float bt = breath_of(v->ch), br, a = breath_on ? bk.batt : bk.att;
+            v->br1 += (bt - v->br1) * 0.15f, v->br += (v->br1 - v->br) * 0.15f;   /* (a gentle curve) */
+            br = v->br * (0.6f + 0.4f * v->br);
             float tv = breath_on ? v->vel * br : v->vel;
             v->sp1 += (p - v->sp1) * 0.04f, v->sp += (v->sp1 - v->sp) * 0.04f;   /* two stages, ~9 ms each */
             v->ss1 += (slide[v->ch] - v->ss1) * 0.04f, v->ss += (v->ss1 - v->ss) * 0.04f;
@@ -441,7 +451,7 @@ uint32_t synth_split_blocks(void) { return split_blocks; }
 
 void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
-    uint32_t i, k, handed = 0, j, busy = 0;
+    uint32_t i, handed = 0, j, busy = 0;
     /* each voice: a seven-note chord at full velocity peaks near -10 dBFS (the FM-1's output stage distorts well
      * before digital full scale: Alex, 2026-11-21) */
     float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.06f;
@@ -474,11 +484,6 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     bk.pw = 0.5f - 0.45f * (float)prm[SP_PW] * (1.0f / 127.0f);   /* 50% .. 5% */
     bk.noise = (float)prm[SP_NOISE] * (0.9f / 127.0f);
     bk.dmul = fm_exp2f(det * det * (0.3f / 12.0f) + 0.002f);   /* up to 30 cents sharp */
-    for (k = 0; k < 16u; k++) {          /* breath, smoothed twice, once every 16 samples; a gentle curve */
-        bsm1 += (breath_in - bsm1) * 0.15f;
-        bsm += (bsm1 - bsm) * 0.15f;
-        bk.bsub[k] = bsm * (0.6f + 0.4f * bsm);
-    }
     for (j = NVOICE / 2u; j < NVOICE; j++)   /* the upper half sounding: worth the second core */
         busy |= vc[j].gate || vc[j].level >= 1e-4f;
     if (busy && cpu2_run && cpu2_run(half_job, 0))

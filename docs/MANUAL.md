@@ -160,7 +160,14 @@ LATCH are not (it starts OFF).
   default on member channels), slide (CC74 on a member channel, centred on 64), channel and poly pressure. mvane yard
   sends an MPE configuration message when a computer connects.
 - **Breath** (GLO, K1: POLY+BREATH or MONO+BREATH): CC2 or CC11 from a wind controller sets the level and the brightness;
-  notes are silent until you blow. Tried with a Diosynth.
+  notes are silent until you blow. Tried with a Diosynth. Each channel's breath is its own: notes on a channel that
+  sent breath follow it; the others (the panel's keys with a breath controller) follow the latest from any. POLY+BREATH
+  plays the sound's voices (two wind lines, a recording's and yours, each their own); MONO+BREATH one, legato.
+- **While a recording plays**, MIDI in moves out of its way: what comes in on channel 1 (MPE's master, whose breath,
+  bend and pressure reach every voice) or on a channel the recording uses goes to a member channel it does not use,
+  the highest free first. So an overdub from a one-channel controller lands on a channel of its own, and the next
+  overdub on another; with all fifteen taken, it shares the first layer's. A note held when you stop ends where it
+  went.
 - **MONO** is legato: a note played over a held one slides to it without restarting the envelope (the glide time, or
   20 ms at GLIDE 0); letting it go returns to the note still held.
 

@@ -44,10 +44,13 @@ static uint8_t midi_breath;                             /* (1.0) GLO > MIDI 2 > 
  * its breath is the level: with EWI on, the instrument (and its LAYER) plays one note at a time, legato, whatever
  * the sound's VOICE (a note fingered over the last one moves it, no second voice); the notes' velocity is fixed
  * (seq.c), the breath alone shapes the level */
+static uint8_t breath_poly;                             /* (mvane yard) POLY+BR: breath the level, the voices as the
+                                                         * sound has them (two lines, a recording's and an overdub's,
+                                                         * each their own voices); MONO+BR: the EWI's one note */
 static inline uint32_t voice_mode(const track_t *t)
 {
-    return CLIPPER_SYNTH && midi_breath && (uint32_t)(t - trk) < NPART && ctl_part(t) == 0u ? (uint32_t)V_LEGATO
-                                                                                   : (uint32_t)t->p[P_VOICE];
+    return CLIPPER_SYNTH && midi_breath && !breath_poly && (uint32_t)(t - trk) < NPART && ctl_part(t) == 0u
+               ? (uint32_t)V_LEGATO : (uint32_t)t->p[P_VOICE];
 }
 static uint8_t midi_bend;                               /* (1.0) GLO > MIDI > BEND, or RPN 0 (seq.c): the pitch bend's
                                                          * range in semitones, 0 AUTO (the HYBRID patch's, else 2) */
@@ -63,6 +66,13 @@ static const uint8_t MPE_RANGE[MPE_MODES] = {0, 48, 2, 12, 24, 96};
 static int16_t mpe_bend[16];                            /* per channel: Q15, as part_ctl's */
 static uint8_t mpe_press[16];                           /* 0..127 */
 static int8_t mpe_slide[16];                            /* CC 74 - 64: 0 at rest */
+static uint8_t mpe_breath[16];                          /* (mvane yard) CC 2 on a member channel, with BREATH: its
+                                                         * voices' level, apart from the part's (an overdub's wind
+                                                         * part and the recording's each their own) */
+static uint16_t mpe_breathed;                           /* the channels that sent it */
+static uint8_t mpe_breath_last, mpe_breath_any;         /* the latest from any channel (a channel that never sent its
+                                                         * own follows it: the panel's keys with a breath controller);
+                                                         * none yet: the level as it is */
 static uint8_t mpe_cur_ch;                              /* the channel of the note being started (seq.c), 0 = none */
 static void mpe_reset(void)
 {
@@ -71,8 +81,11 @@ static void mpe_reset(void)
         mpe_bend[i] = 0;
         mpe_press[i] = 0;
         mpe_slide[i] = 0;
+        mpe_breath[i] = 0;
     }
     mpe_cur_ch = 0;
+    mpe_breathed = 0;
+    mpe_breath_last = mpe_breath_any = 0;
 }
 #endif
 
@@ -1481,6 +1494,11 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
                 env = e->amp(t, v, env);
             m.envq15 = e->ownenv ? 0 : env;
             m.amp1 = e->ownenv ? env : mulq15(env, v->vel * 258);
+#if CLIPPER_SYNTH
+            if (mpe_mode && midi_breath && mpe_breath_any)   /* (mvane yard) its channel's breath, or the latest */
+                m.amp1 = mulq15(m.amp1, (mpe_breathed >> (v->ch & 15u) & 1u ? mpe_breath[v->ch & 15u]
+                                                                             : mpe_breath_last) * 258);
+#endif
 #if CLIPPER_SYNTH
             if (e == &ENG_FMX && t->p[P_VOICE] >= V_UNISON)   /* (after Clipper 1.2) FMX: UNISON's level per voice */
                 m.amp1 = mulq15(m.amp1, uni_level(t));

@@ -1,0 +1,56 @@
+# Overdubs from MIDI in on their own channels (0.13): a wind controller on one channel (MIDI's 1) records; while
+# the recording plays, what comes in on channel 1 or on a channel it uses goes to a member channel it does not
+# use, highest first; a note held when it stops ends where it went.
+# app/build/host/mvane-yard_host app/tests/dub_ch.txt app/build/host
+wait 600
+spin ALGO -1
+# not playing: as it comes
+midi 90 3C 64
+wait 20
+expect in_ch 0
+midi B0 02 50
+wait 380
+midi 80 3C 00
+wait 50
+tap REC
+wait 50
+expect take >0
+press SEQ
+spin K2 1
+release SEQ
+tap PLAY
+wait 30
+# playing: channel 1 to the highest free member channel (MIDI's 16)
+midi 90 3E 64
+wait 20
+expect in_ch 15
+midi B0 02 40
+expect in_ch 15
+midi 80 3E 00
+wait 20
+# a channel the recording does not use: as it is
+midi 93 40 64
+expect in_ch 3
+midi 83 40 00
+# overdub a pass on channel 1: it lands on 16; the next layer's then goes to 15
+tap REC
+wait 450
+expect overdub 2
+midi 90 3E 64
+wait 20
+expect in_ch 15
+midi 80 3E 00
+wait 450
+expect layers 1
+midi 90 3E 64
+wait 20
+expect in_ch 14
+# stopped with it held: its off still goes to the channel it went to (MIDI's 15)
+tap PLAY
+wait 20
+expect playing 0
+midi 80 3E 00
+expect in_ch 14
+midi 90 3E 64
+expect in_ch 0
+midi 80 3E 00

@@ -57,6 +57,8 @@ jobs:
           app/build/host/mvane-yard_host app/tests/transpose.txt app/build/host | tee -a host.log
           app/build/host/mvane-yard_host app/tests/overdub.txt app/build/host | tee -a host.log
           app/build/host/mvane-yard_host app/tests/arp.txt app/build/host | tee -a host.log
+          app/build/host/mvane-yard_host app/tests/dub_ch.txt app/build/host | tee -a host.log
+          app/build/host/mvane-yard_host app/tests/breath.txt app/build/host | tee -a host.log
           ! grep -q '^FAIL' host.log
 
       - name: File transfer checks (the take as MIDI, a MIDI file in; the page's conversions)

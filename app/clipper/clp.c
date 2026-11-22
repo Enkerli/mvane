@@ -310,7 +310,8 @@ void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (C
 {
     clp_mono = (uint8_t)(mono != 0);
     clp_breath = (uint8_t)(breath != 0);
-    midi_breath = clp_breath;                    /* (voice.c: 1 VOL, the breath the level; and the part legato) */
+    midi_breath = clp_breath;                    /* (voice.c: 1 VOL, the breath the level; MONO+BR: the part legato) */
+    breath_poly = (uint8_t)!clp_mono;
     if (clp_mono)
         trk[0].p[P_VOICE] = V_LEGATO;
 }
@@ -605,6 +606,13 @@ void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block
     track_t *t = &trk[0];
     clp_pending();                               /* (the notes after a change are the new sound's) */
     d1 &= 0x7Fu, d2 &= 0x7Fu;
+    if (mpe_mode && midi_breath && kind == 0xB0u && d1 == 2u) {   /* (mvane yard) breath, under MPE: each channel's
+                                                                * voices their own level (voice.c), not the part's */
+        mpe_breath[ch] = mpe_breath_last = (uint8_t)d2;
+        mpe_breathed |= (uint16_t)(1u << ch);
+        mpe_breath_any = 1;
+        return;
+    }
     if (mpe_mode && ch && (kind == 0xE0u || kind == 0xD0u || (kind == 0xB0u && d1 == 74u))) {
         if (kind == 0xE0u)                       /* an MPE member channel's own controls */
             mpe_bend[ch] = (int16_t)((((int32_t)d2 << 7 | (int32_t)d1) - 8192) * 4);

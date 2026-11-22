@@ -2292,6 +2292,65 @@ static uint32_t midi_in_note(uint32_t st, uint32_t note, uint32_t vel)
     return m;
 }
 
+/* MIDI in while a recording plays (Alex, 2026-11-22: the Diosynth overdubbing on its one channel): what comes in on
+ * a channel the recording uses, or on channel 1 (MPE's master, whose breath, pressure and bend reach every voice),
+ * goes to a member channel it does not use, highest first; so each overdub is on a channel of its own, and the
+ * recording and the live part do not take each other's notes, breath or bend. None free: the first layer's channel.
+ * A channel moves only while none of its notes is held */
+static uint8_t in_remap[16], in_last_ch;
+static uint32_t in_plan_key[3];
+static int in_held(uint32_t c)           /* MIDI in's notes held on channel c */
+{
+    uint32_t k;
+    for (k = 0; k < 128u; k++)
+        if (in_map[c & 15u][k])
+            return 1;
+    return 0;
+}
+static void in_remap_plan(void)
+{
+    uint32_t i, used = 0, first = 16u, c, taken;
+    if (in_plan_key[0] == take.count && in_plan_key[1] == take.start && in_plan_key[2] == (uint32_t)(uintptr_t)take.flat)
+        return;                          /* (the same recording: as planned) */
+    in_plan_key[0] = take.count, in_plan_key[1] = take.start, in_plan_key[2] = (uint32_t)(uintptr_t)take.flat;
+    for (i = 0; i < take.count; i++) {
+        uint32_t w = rec_word(&take, i), st = (w >> 16) & 0xFFu;
+        if ((st & 0xF0u) == 0x90u && (w & 0x7Fu)) {
+            used |= 1u << (st & 15u);
+            if (first == 16u)
+                first = st & 15u;
+        }
+    }
+    taken = used | 1u;                   /* (never the master channel) */
+    for (c = 0; c < 16u; c++) {
+        uint32_t t;
+        if (in_held(c))
+            continue;                    /* (its notes are held where they went) */
+        if (c && !(used >> c & 1u)) {
+            in_remap[c] = (uint8_t)c;
+            continue;
+        }
+        for (t = 15u; t > 0u && taken >> t & 1u; t--)
+            ;
+        if (t)
+            taken |= 1u << t;
+        in_remap[c] = (uint8_t)(t ? t : first < 16u ? first : c);
+    }
+}
+static uint32_t midi_in_ch(uint32_t st)  /* the channel it plays on: its own, or its overdub's */
+{
+    uint32_t c = st & 15u;
+    if (player.playing) {
+        in_remap_plan();
+        c = in_remap[c];
+    } else if (in_held(c))               /* (stopped with its notes held: they end where they went) */
+        c = in_remap[c];
+    else
+        in_remap[c] = (uint8_t)c;
+    in_last_ch = (uint8_t)c;
+    return (st & 0xF0u) | c;
+}
+
 static void input(void)
 {
     uint32_t keys, btn = plat_buttons(), k, pass, now = plat_ms(), pkt;
@@ -2315,8 +2374,10 @@ static void input(void)
     }
     while (plat_midi_in(&pkt, &port)) {  /* MIDI in plays the synth and goes into the history (not echoed) */
         uint32_t st = (pkt >> 8) & 0xFFu;
-        if (st >= 0x80u && st < 0xF0u)
-            bus(st, midi_in_note(st, (pkt >> 16) & 0x7Fu, pkt >> 24), pkt >> 24, TO_SYNTH | TO_HIST);
+        if (st >= 0x80u && st < 0xF0u) {
+            uint32_t out = midi_in_ch(st);   /* (first: its channel, while its note is still held) */
+            bus(out, midi_in_note(st, (pkt >> 16) & 0x7Fu, pkt >> 24), pkt >> 24, TO_SYNTH | TO_HIST);
+        }
     }
     touch_poll();
     keys = touch_keys();
@@ -3067,6 +3128,8 @@ int app_expect(const char *what, int *got)
         *got = arp.snd_n ? arp.snd_note[0] : -1;
     else if (!strcmp(what, "pcs_named")) /* the scale has a name (the list's, the user's, or a known one) */
         *got = scale_name_of() != 0;
+    else if (!strcmp(what, "in_ch"))     /* MIDI in: the channel its last message played on (0: MIDI's 1) */
+        *got = in_last_ch;
     else if (!strcmp(what, "us_n"))      /* the user's scales */
         *got = nus;
     else if (!strcmp(what, "pcs"))       /* the scale's number */

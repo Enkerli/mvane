@@ -65,6 +65,10 @@ In order, each to judge by ear on the FM-1:
     at its end; and a take follows the KEY and SCALE while it plays (each note to the same degree). Next:
     - **Loop length**: to the beat, not to where REC was tapped (trim the tail to the last note's end, or snap it to
       the bar the first notes suggest; a tap tempo).
+    - **Overdub from a wind controller** (Alex, 2026-11-22, the Diosynth in POLY+BR: "a channel conflict"). 0.13.N:
+      breath per channel in YARD and Clipper (a voice follows its channel's, else the latest); MIDI in moved to a
+      free member channel while a recording plays, a new one each overdub (all fifteen taken: the first layer's);
+      Clipper's POLY+BR no longer forced to one legato voice (its EWI rule, kept for MONO+BR).
     - **Overdub. Done in 0.12.3:** REC during a loop; from the top of the next pass the take's own playing goes into
       the history with what is played over it, and each pass becomes the take (`rec_mark`, `rec_capture_from`), one
       undo (REC held). Next, by ear: starting at once (the pass under way, its first part rebuilt from the take);
