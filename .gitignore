@@ -6,3 +6,4 @@ docs/media/*.wav
 dist/
 web/emu/
 midi_out.txt
+app/build_id.h

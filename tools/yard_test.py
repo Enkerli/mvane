@@ -66,7 +66,9 @@ def main():
         link.cmd("buttons 0")
         link.run(60)
         tap(link, PLAY)                                                    # stop: no files while a take plays
-        assert yard.main(["put", own, "--slot", "5"], link) == 0          # another slot
+        assert yard.main(["put", own, "--slot", "5"], link) == 0          # another slot: it becomes the current one
+        link.run(50)
+        r = link.cmd("expect slot 4"); assert r[-1].strip().startswith("ok"), r
         assert yard.main(["takes", os.path.join(d, "all")], link) == 0
         assert sorted(os.listdir(os.path.join(d, "all"))) == ["take1.mid", "take5.mid"]
         assert yard.main(["settings", os.path.join(d, "settings.bin")], link) == 0

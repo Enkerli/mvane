@@ -105,6 +105,14 @@ HYBRID CLIPPER went from 33% to 25%, 80S HITS from up to 54% to about 40%: the s
 lightest sound by far (one core, no effect chain), a base to build on (roadmap). Q counts the phrase's 600 messages at
 one instant less what the render drained meanwhile (88 to 344 a run).
 
+**The effects and the CPU** (Alex, 2026-11-22: turning CHORUS off gains nothing, all four sends up costs nothing
+visible). Measured here on HYBRID CLIPPER with a chord, a block: 28.7 us with the effect buses gated off (every send
+0 for 20 s), 33.0 us with the sends just set to 0, 33.1 us with CHORUS 24, 34.4 us with all four at 127. So the buses
+cost about 15% of a light sound and their sends little more; the gate only acts after 20 s of silence. A per-bus gate
+(a bus off once its send is 0 and its tail has died, in well under a second) would give most of that 15% back while
+playing: the audit's "finer effect gate". Alex's taste, for the defaults: a little chorus (2 to 4), SPACE rather than
+the REVERB send, usually no DRIVE or DELAY.
+
 **The regression, found and fixed.** Clipper splits a sound's voices between the cores only for voices whose EDIT
 values the matrix leaves alone (voice.c: such a voice writes the part's values for its call, so it renders on this
 core after the other's). The expression slots of 5f48553 pointed HYBRID's pressure at its CUT (E1) and JUNO's slide

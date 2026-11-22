@@ -58,12 +58,17 @@ jobs:
           python3 tools/yard_test.py
           node web/take_test.mjs
 
-      - name: The FM-1 package
-        run: ./build.sh
+      - name: The FM-1 package (its version 0.10-dev+ the commit, on its screen, the page and the file's name)
+        run: |
+          VER="0.10-dev+${GITHUB_SHA::7}"
+          echo "#define APP_VERSION \"$VER\"" > app/build_id.h
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          ./build.sh
+          for f in app/build/*.fwsc; do mv "$f" "${f%.fwsc}-$VER.fwsc"; done
 
       - uses: actions/upload-artifact@v4   # (to pin by commit, as fm1-base does)
         with:
-          name: mvane-fwsc
+          name: mvane-yard-${{ env.VER }}
           path: |
             app/build/*.fwsc
             app/build/firmware.json

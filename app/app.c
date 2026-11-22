@@ -1537,7 +1537,21 @@ int app_file_commit(uint32_t i, uint32_t size, uint32_t crc)
     int rc = (int)i == write_slot ? takes_commit(crc) : -1;
     (void)size;
     write_slot = -1;
-    if (!rc && i == set.slot) {          /* the current slot from the computer: the take PLAY plays */
+    if (!rc && i != set.slot && i < TAKE_SLOTS && !player.playing) {
+        char t[12] = "TAKE ";
+        t[5] = (char)('1' + i), t[6] = 0;
+        if (take_dirty)                  /* (an unsaved take here: kept; the new one waits in its slot) */
+            app_say(t, "IN: SEQ TO PLAY");
+        else {                           /* a take from the computer: its slot is the current one, PLAY plays it (Alex,
+                                          * 2026-11-22: no more SEQ and SELECT after each transfer) */
+            set.slot = (uint8_t)i;
+            set_dirty = 1;
+            old_take = 0;
+            take_load();
+            app_say(t, "FROM THE COMPUTER");
+        }
+        ui.redraw = 1;
+    } else if (!rc && i == set.slot) {   /* the current slot from the computer: the take PLAY plays */
         take_load();
         ui.redraw = 1;
     }
@@ -1658,7 +1672,12 @@ int app_expect(const char *what, int *got)
         *got = sound_mono();
     else if (!strcmp(what, "family"))   /* its family: -1 the saw, 0 CHORDS LIGHT .. 5 OTHER */
         *got = sound_fam(set.sound);
-    else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
+    else if (!strcmp(what, "chord_sum")) {   /* the notes sounding, summed (a voicing's fingerprint) */
+        uint32_t i;
+        *got = 0;
+        for (i = 0; i < ui.chord_n; i++)
+            *got += ui.chord_note[i];
+    } else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
         *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */
         *got = (int)sq_lost;

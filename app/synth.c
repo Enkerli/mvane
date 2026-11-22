@@ -126,9 +126,14 @@ static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
             best = i;
             break;
         }
-        score = v->gate ? 1000.0f - (float)(clock_age - v->age) * 1e-3f
-                        : (v->used ? fm_fabsf((float)v->note - (float)note) : 200.0f) + v->level * 50.0f +
-                              (float)half[i >= NVOICE / 2u] * 0.01f;
+        /* the voice that last played this note, still releasing or not: it starts again, no glide (a repeated
+         * note or chord sounded smeared, its voices gliding in from others': Alex, 2026-11-22) */
+        if (!v->gate && v->used && v->note == note)
+            score = -1.0f + v->level * 1e-3f;
+        else
+            score = v->gate ? 1000.0f - (float)(clock_age - v->age) * 1e-3f
+                            : (v->used ? fm_fabsf((float)v->note - (float)note) : 200.0f) + v->level * 50.0f +
+                                  (float)half[i >= NVOICE / 2u] * 0.01f;
         if (score < best_score)
             best_score = score, best = i;
     }

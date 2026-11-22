@@ -175,7 +175,9 @@ to 0 (FX, K2) on a sound that has one saves a good share of the CPU.
 - **PLAY** replays the take through the current sound: try a take through different sounds.
 - **SAVE** writes the take into the current slot (the sound stops for a moment while the flash is written). Saved takes
   play from the flash.
-- **SEQ** (held or tapped) and SELECT pick one of eight slots.
+- **SEQ** (held or tapped) and SELECT pick one of eight slots. A take sent from the computer (the page, `yard.py put`)
+  makes its slot the current one, ready for PLAY (unless the current slot holds a take not yet saved: then it waits in
+  its slot, and the screen says so).
 
 ## Your takes on the computer
 
