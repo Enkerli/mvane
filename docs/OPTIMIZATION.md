@@ -18,7 +18,7 @@ desktop, so each change needs a measurement on the device (CPU and XR on the scr
 | --- | --- | --- | --- |
 | High | `app/clipper/src/fx.c` | Map the effect buffers' lifetimes; share what never runs at once | Pool RAM |
 | High | `app/synth.c` | Table or interpolation for `tan(pi fc / SR)` and the cutoff's `exp2` | CPU |
-| High | `app/app.c` | Count overflows of the render's event queue; recover (all notes off, state resent) | Reliability |
+| Done | `app/app.c` | Count overflows of the render's event queue; recover (all notes off, state resent) | Reliability |
 | Medium | `app/clipper/clp.c` | A finer effect gate (per bus, a shorter quiet time once tails are measured) | Idle CPU |
 | Medium | `app/clipper/src/fx.c`, `voice.c` | Profile the split between the cores, the worst block not the mean | Latency |
 | Medium | `app/synth.c` | Cache envelope and glide coefficients between changes | CPU |
@@ -37,11 +37,31 @@ desktop, so each change needs a measurement on the device (CPU and XR on the scr
   coefficient is the safest; the bend wants pitch accuracy, to test with slow MPE bends on held notes.
 - **The event queue.** `synth_send` drops an event when the 256-entry ring is full (`app.c`, `if (w - sq_r >= 256u)
   return;`). A lost note-off leaves a note on, a lost bend or pressure leaves stale expression. Add a counter (on
-  screen beside XR), then recovery.
+  screen beside XR), then recovery. **Done (0.10-dev):** each lost event is counted (Q on the screen's bottom line);
+  `synth_send` keeps what each channel should have (notes on, velocity, bend, pressure, CC 1, 2, 11, 64, 74) whether
+  or not the event fits, and once the render has emptied the queue `sq_recover` silences the engine (status 0 in the
+  queue) and sends that state again, notes last. `app/tests/queue.txt` floods the queue (`flood N`, the app's own host
+  command) and checks that a chord let go during the overflow goes silent and one played during it sounds, on the saw
+  and on a Clipper sound; without the recovery the notes stick.
 - **The history.** 128 KiB (32,768 events), a choice: dense MPE (bend, slide, pressure) fills it faster than notes.
   Offer sizes and measure what a minute of dense playing keeps.
 - **Block length.** `synth_render` works in an `acc[256]` and renders at most 256 frames. fm1-base calls the render
-  with `APP_BLOCK` (256, `app.h`), so it holds today; make it explicit (a static assert on `APP_BLOCK`, or chunks).
+  with `APP_BLOCK` (256, `app.h`), so it holds today. **Done:** `SYNTH_BLOCK` in `synth.h`, and `app.c` fails to
+  compile if `APP_BLOCK` exceeds it.
+
+## The baseline, on the device
+
+`tests/baseline.mid` (made by `tools/baseline_mid.py`) is a fixed 30-second MPE phrase to play into the FM-1 over USB
+from a DAW, so that readings before and after a change compare:
+
+- 0-10 s: five six-note chords, each note on its own member channel, no expression;
+- 10-20 s: the same with each note's bend, pressure and slide every 10 ms (about 1,800 messages a second);
+- 20-30 s: a held chord with sixteenth-note arpeggios and expression on eight channels, then 600 pressure messages at
+  one instant (the queue at its busiest: Q may count, and nothing should stay stuck).
+
+For each sound (the saw, then STRINGS, HYBRID, FM6, JUNO and one LIGHT sound such as SAMPLE), from a fresh boot:
+CPU at rest, the highest CPU seen in each part, XR and Q at the end, and anything heard (crackle, stuck notes, steps
+in a bend). The screen shows the mean load, not the worst block, so XR is the stronger sign.
 
 ## Sequence
 

@@ -41,3 +41,6 @@ void app_say(const char *a, const char *b);
 /* the host simulator's checks (base/host/plat_host.c "expect") */
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);
+/* the app's own script commands: "flood N" sends the render N pressure events at once (the queue overflows) */
+#define APP_HOST_CMD
+int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d);

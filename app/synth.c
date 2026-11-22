@@ -212,7 +212,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     float att = 1.0f - fm_exp2f(-4.0f / (SR * att_s));
     float glide = prm[SP_GLIDE] ? 4.0f / (SR * 0.005f * fm_exp2f((float)prm[SP_GLIDE] * (8.6f / 127.0f))) : 1.0f;
     float tone = (float)prm[SP_TONE] * (1.0f / 127.0f);
-    float acc[256], bsub[16], batt = 1.0f - fm_exp2f(-4.0f / (SR * 0.004f));   /* breath: the level within 4 ms */
+    float acc[SYNTH_BLOCK], bsub[16], batt = 1.0f - fm_exp2f(-4.0f / (SR * 0.004f));   /* breath: the level within 4 ms */
     uint32_t k;
     if (glide > 1.0f)
         glide = 1.0f;
@@ -223,7 +223,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         bsm += (bsm1 - bsm) * 0.15f;
         bsub[k] = bsm * (0.6f + 0.4f * bsm);
     }
-    for (i = 0; i < n && i < 256u; i++)
+    for (i = 0; i < n && i < SYNTH_BLOCK; i++)
         acc[i] = 0.0f;
     for (j = 0; j < NVOICE; j++) {
         voice_t *v = &vc[j];
@@ -235,7 +235,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         b = bend[v->ch] + (v->ch ? bend[0] : 0.0f);
         /* every 16 samples: the controls glide toward where MIDI left them (two stages of about 9 ms), and the filter
          * follows: a control arriving 50 times a second in steps moves the sound smoothly */
-        for (i0 = 0; i0 < n && i0 < 256u; i0 += 16u) {
+        for (i0 = 0; i0 < n && i0 < SYNTH_BLOCK; i0 += 16u) {
             float mul, fc, g, a1, a2, a3, c1, oct;
             uint32_t i, end = i0 + 16u < n ? i0 + 16u : n;
             float br = bsub[(i0 >> 4) & 15u], tv = breath_on ? v->vel * br : v->vel, a = breath_on ? batt : att;
@@ -278,7 +278,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         }
         v->ic1 = fm_flush(v->ic1), v->ic2 = fm_flush(v->ic2), v->lp = fm_flush(v->lp);
     }
-    for (i = 0; i < n && i < 256u; i++) {   /* MASTER, then a soft limiter: no hard clip at any volume */
+    for (i = 0; i < n && i < SYNTH_BLOCK; i++) {   /* MASTER, then a soft limiter: no hard clip at any volume */
         float s;
         gain_now += (gain - gain_now) * 0.004f;
         s = acc[i] * gain_now;

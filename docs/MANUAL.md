@@ -23,7 +23,7 @@ start from their defaults after an update that changes their layout (0.6 and 0.7
 | Knob row | K1 to K4: tone, release, glide, attack |
 | HISTORY | How much playing time the history holds; % FULL; ASLEEP when you have stopped playing; FULL: SAVE when it has reached a take not yet saved |
 | TAKE n/8 | The take in the current slot, its length, PLAYING or NOT SAVED |
-| Bottom | CPU load and XR (missed audio deadlines: should stay 0), the sound's cost (LIGHT, MID, HEAVY), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
+| Bottom | CPU load and XR (missed audio deadlines: should stay 0), then Q if the sound's event queue ever overflowed (the count of lost events; each loss is repaired: the sound is silenced and what should sound plays again), the sound's cost (LIGHT, MID, HEAVY), HOST while the USB port hosts a device, the play mode (MONO SOUND: a mono sound under POLY) |
 
 ## Controls
 

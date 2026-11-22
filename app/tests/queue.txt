@@ -1,0 +1,44 @@
+# the render's queue (256 events): a flood overflows it, the loss is counted, and once the render catches up the
+# engine is set right (docs/OPTIMIZATION.md). app/build/host/mvane-yard_host app/tests/queue.txt app/build/host
+wait 600
+expect sq_lost 0
+# a chord, then 300 events at once: 44 lost, the recovery leaves the chord sounding
+key 0 down 100
+wait 50
+expect voices 6
+flood 300
+expect sq_lost 44
+wait 50
+expect sq_recoveries 1
+expect voices 6
+# the chord let go while the queue is full: its note-offs are lost; recovery silences it all the same
+flood 300 off
+wait 50
+expect sq_recoveries 2
+expect chord_n 0
+expect voices 0
+key 0 up
+wait 50
+# a chord played while the queue is full: its notes are lost; recovery plays them
+flood 300 chord
+wait 50
+expect sq_recoveries 3
+expect voices 6
+flood 0 off
+wait 50
+expect voices 0
+# on a Clipper sound too
+turn PRESET 1
+wait 300
+expect sound 1
+key 0 down 100
+wait 100
+flood 300 off
+wait 100
+expect sq_recoveries 4
+expect voices 0
+key 0 up
+wait 50
+turn PRESET -1
+wait 100
+expect sound 0

@@ -26,6 +26,7 @@
 #include "rec.c"
 #include "synth.h"
 #include "clp.h"
+typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth_render's buffer holds a block */
 
 #define HIST_WORDS (1u << 15)            /* 128 KiB of history: 32,768 events, however long they took to play */
 #define TAKE_MAX (HIST_WORDS + REC_PRE)  /* the longest take: the whole history (a saved one: in the flash, read in place) */
@@ -96,16 +97,85 @@ static void settings_load(void)
 }
 
 /* ------------------------------------------------------------- the render --- */
-/* the main loop sends the render its events through a single-producer, single-consumer queue */
-static volatile uint32_t sq[256];
+/* the main loop sends the render its events through a single-producer, single-consumer queue. When it is full
+ * (the render held up: a flash write, a burst of controllers) an event is lost and counted; once the render has caught
+ * up, sq_recover silences the engine and plays again what should sound, from what the queue last carried per channel
+ * (sq_on, sq_vel, sq_bend, sq_press, sq_cc). Status 0 in the queue is that silence (no MIDI status is 0). */
+#define SQ_N 256u
+static volatile uint32_t sq[SQ_N];
 static volatile uint32_t sq_w, sq_r;
-static void synth_send(uint32_t st, uint32_t d1, uint32_t d2)
+static uint32_t sq_lost, sq_lost_seen, sq_recoveries;
+static uint32_t sq_on[16][4];            /* notes on, per channel, as the queue carried them */
+static uint8_t sq_vel[16], sq_press[16], sq_cc[16][5];
+static uint16_t sq_bend[16];
+static const uint8_t SQ_CCS[5] = {1, 2, 11, 64, 74};   /* the controllers recovery sends again: modulation, breath,
+                                                        * expression, sustain, slide */
+static void sq_forget(void)
+{
+    uint32_t c, k;
+    for (c = 0; c < 16u; c++) {
+        for (k = 0; k < 4u; k++)
+            sq_on[c][k] = 0;
+        sq_vel[c] = 100, sq_press[c] = 0, sq_bend[c] = 0x2000u;
+        for (k = 0; k < 5u; k++)
+            sq_cc[c][k] = SQ_CCS[k] == 11u ? 127u : 0u;
+    }
+}
+static void sq_note(uint32_t st, uint32_t d1, uint32_t d2)   /* what sounds, by what was sent */
+{
+    uint32_t kind = st & 0xF0u, ch = st & 0x0Fu, k;
+    if (kind == 0x90u && d2)
+        sq_on[ch][d1 >> 5] |= 1u << (d1 & 31u), sq_vel[ch] = (uint8_t)d2;
+    else if (kind == 0x80u || kind == 0x90u)
+        sq_on[ch][d1 >> 5] &= ~(1u << (d1 & 31u));
+    else if (kind == 0xE0u)
+        sq_bend[ch] = (uint16_t)(d1 | d2 << 7);
+    else if (kind == 0xD0u)
+        sq_press[ch] = (uint8_t)d1;
+    else if (kind == 0xB0u) {
+        if (d1 == 123u || d1 == 120u) {
+            for (k = 0; k < 4u; k++)
+                sq_on[ch][k] = 0;
+        }
+        for (k = 0; k < 5u; k++)
+            if (SQ_CCS[k] == d1)
+                sq_cc[ch][k] = (uint8_t)d2;
+    }
+}
+static void sq_put(uint32_t st, uint32_t d1, uint32_t d2)
 {
     uint32_t w = sq_w;
-    if (w - sq_r >= 256u)
-        return;                          /* full: dropped (the render is not running) */
-    sq[w & 255u] = st << 16 | d1 << 8 | d2;
+    sq[w & (SQ_N - 1u)] = st << 16 | d1 << 8 | d2;
     sq_w = w + 1u;
+}
+static void synth_send(uint32_t st, uint32_t d1, uint32_t d2)
+{
+    sq_note(st, d1, d2);                 /* (kept whether or not it fits: recovery plays the intended state) */
+    if (sq_w - sq_r >= SQ_N) {
+        sq_lost++;
+        return;
+    }
+    sq_put(st, d1, d2);
+}
+static void sq_recover(void)             /* main loop: after a loss, once the queue is empty */
+{
+    uint32_t c, k, b;
+    if (sq_lost == sq_lost_seen || sq_r != sq_w)
+        return;
+    sq_lost_seen = sq_lost;
+    sq_recoveries++;
+    sq_put(0, 0, 0);                     /* the engine silenced, then the state again, the notes last */
+    for (c = 0; c < 16u; c++) {
+        sq_put(0xE0u | c, sq_bend[c] & 0x7Fu, sq_bend[c] >> 7);
+        sq_put(0xD0u | c, sq_press[c], 0);
+        for (k = 0; k < 5u; k++)
+            sq_put(0xB0u | c, SQ_CCS[k], sq_cc[c][k]);
+    }                                    /* 1 + 16 * 7 = 113 events; the notes after them, while they fit */
+    for (c = 0; c < 16u; c++)
+        for (k = 0; k < 4u; k++)
+            for (b = 0; b < 32u; b++)
+                if (sq_on[c][k] >> b & 1u && sq_w - sq_r < SQ_N)
+                    sq_put(0x90u | c, k * 32u + b, sq_vel[c] ? sq_vel[c] : 100u);
 }
 
 /* the engine the render plays: 0 mvane yard's synth (synth.c), 1 Clipper's (clp.c); a change silences the other first */
@@ -118,8 +188,13 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         eng_now = eng_want;
     }
     while (sq_r != sq_w) {
-        uint32_t w = sq[sq_r & 255u];
-        if (eng_now)
+        uint32_t w = sq[sq_r & (SQ_N - 1u)];
+        if (!(w >> 16)) {                /* recovery's silence */
+            if (eng_now)
+                clp_panic();
+            else
+                synth_panic();
+        } else if (eng_now)
             clp_event(w >> 16, (w >> 8) & 0xFFu, w & 0xFFu);
         else
             synth_event(w >> 16, (w >> 8) & 0xFFu, w & 0xFFu);
@@ -282,6 +357,7 @@ void app_init(void)
 {
     uint32_t i;
     settings_load();
+    sq_forget();
     synth_init(set.p);
     for (i = 0; i < SP_N; i++)
         knob[i] = set.p[i];
@@ -836,6 +912,7 @@ static void input(void)
     uint32_t keys, btn = plat_buttons(), k, pass, now = plat_ms(), pkt;
     int port;
     int32_t e;
+    sq_recover();                        /* a lost event: the engine set right, once the render has caught up */
     if (plat_midi_out_link() != ui.link) {   /* a new USB connection: tell it this is MPE */
         ui.link = plat_midi_out_link();
         mpe_config();
@@ -1135,8 +1212,13 @@ static void draw(void)
         char x[12];
         int_text((int32_t)plat_xruns(), x);
         text_cat(t, x);
+        if (sq_lost) {                   /* events the render's queue lost (each recovered) */
+            text_cat(t, " Q");
+            int_text((int32_t)sq_lost, x);
+            text_cat(t, x);
+        }
     }
-    cv_text(10, 82, &FONT_XS, t, plat_xruns() ? C_HI : C_DIM);
+    cv_text(10, 82, &FONT_XS, t, plat_xruns() || sq_lost ? C_HI : C_DIM);
     if (set.sound) {                     /* the sound's measured cost (tools/clp_cost.c) */
         static const char *const COST_N[3] = {"LIGHT", "MID", "HEAVY"};
         uint32_t c = clp_sound_cost(set.sound - 1u);
@@ -1273,6 +1355,27 @@ void app_file_changed(uint32_t obj)
 }
 
 #ifdef PLAT_HOST
+#include <stdio.h>
+#include <stdlib.h>
+int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, const char *d)
+{
+    uint32_t i, n;
+    (void)c, (void)d;
+    if (strcmp(cmd, "flood"))
+        return 0;
+    n = (uint32_t)atoi(a);
+    for (i = 0; i < n; i++)              /* channel pressure on channel 2, straight to the render's queue */
+        bus(0xD1u, i & 0x7Fu, 0, TO_SYNTH);
+    if (!strcmp(b, "off"))               /* then, before the render runs: the chord let go, or the first degree's */
+        all_off();
+    else if (!strcmp(b, "chord")) {
+        ui.chord_key = 0;
+        chord_sound();
+    }
+    printf("ok\n");
+    return 1;
+}
+
 int app_expect(const char *what, int *got)
 {
     if (!strcmp(what, "mode"))
@@ -1317,6 +1420,10 @@ int app_expect(const char *what, int *got)
         *got = set.voices;
     else if (!strcmp(what, "hold"))
         *got = ui.hold;
+    else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */
+        *got = (int)sq_lost;
+    else if (!strcmp(what, "sq_recoveries"))
+        *got = (int)sq_recoveries;
     else if (!strcmp(what, "chord_n"))
         *got = ui.chord_n;
     else if (!strcmp(what, "voices"))   /* the engine's that plays */

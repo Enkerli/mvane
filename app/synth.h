@@ -15,6 +15,7 @@ enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_N };   /* the master channel's C
 void synth_init(const uint8_t p[SP_N]);
 void synth_event(uint32_t st, uint32_t d1, uint32_t d2);
 /* n stereo frames into lr (24-bit), at gain (MASTER as the render gets it, 0..4096) */
+#define SYNTH_BLOCK 256u                 /* frames synth_render renders at most (app.c checks APP_BLOCK against it) */
 void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12);
 void synth_panic(void);
 /* mono 1: one voice, legato (a note over a held one slides, the envelope goes on); breath 1: CC2 or CC11 (any
