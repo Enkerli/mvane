@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -41,3 +41,10 @@ synth-cmp:   # the saw's filter tables against the exact coefficients: the outpu
 	$(B)/synth_cmp_tab $(B)/saw_tab.raw
 	$(B)/synth_cmp_exact $(B)/saw_exact.raw
 	python3 tools/synth_cmp.py $(B)/saw_tab.raw $(B)/saw_exact.raw 35
+
+clp-expr:   # how each Clipper sound answers pressure and slide (build/desktop/clp_expr.tsv)
+	@mkdir -p $(B)
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_expr.c -o $(B)/clp_expr -lm
+	$(B)/clp_expr $(B)/clp_expr.tsv app/clipper/gen/clp_expr.h
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal app/clipper/clp.c tools/clp_expr.c -o $(B)/clp_expr -lm
+	$(B)/clp_expr $(B)/clp_expr.tsv $(B)/clp_expr_again.h check

@@ -180,6 +180,12 @@ include. Bluetooth here means fm1-base's own stack (`ble_stack = "own"`) or none
   files (`<SCALE ... m2="1" .../>`). 0.4 shows the current set's number on screen. More voicing styles
   (spread over three octaves, drop-2-and-4, bass an octave lower), strum and arpeggio from pressure or a knob.
 - Study Coral Flower's source (GPL-3.0) for what else to keep.
+- **Chord qualities combined** (Alex, 2026-11-22): in Coral Flower, holding one top-row quality key while pressing
+  another combines them (a 7th and a 9th, a sus and a 7th ...). Read how its source merges the two, then do the same
+  on the black keys.
+- **A single note when no quality is chosen** (Alex, 2026-11-22): Coral Flower plays one note until a quality is
+  latched, so a phrase can start on single notes and open into chords. Here a quality is always latched; let the
+  latched key, pressed again, unlatch it (single notes), as there.
 
 ### M2b: chord memory and pads (Alex, second session)
 - A progression made and voiced on the device (smooth voice leading, drop voicings, any style), saved, then played
@@ -218,8 +224,34 @@ keep the ones that suit chords, keys and leads, merge or drop the rest.
 | VPS, TERRAIN, PHASE | experimental timbres; a few sounds could join a "TEXTURES" list |
 | WSEQ, VECTOR | wave sequencing, vector: interesting, heavier to drive without their editor |
 
+Alex, after 0.9 on the device (2026-11-22): the most interesting **light polyphonic** sounds are in WHEEL, PHASE and
+SAMPLE; the other light ones are mono or semi-percussive. MID covers a wide variety: favour **variety of sound** over
+the number of sounds when choosing what stays. Removing engines makes room on the device (flash, RAM).
+
 Each sound's cost on screen (its CPU, measured, as a bar or a word) would make performance clear. A curated list of sounds by kind (pads, keys, strings, bells, leads, organs, choirs, basses) on PRESETS, the rest in
 an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (WAVE could come back).
+
+### M2e: expression on every sound (Alex, 2026-11-22)
+
+The FM-1's keys send pressure, and most sounds did not answer it. `make clp-expr` (tools/clp_expr.c) measures each
+of Clipper's sounds: a chord held with no pressure, full pressure, and slide at the top, compared by level and
+brightness. As the factory made them, **155 of 337 sounds ignore full pressure** and 145 ignore slide, mostly because
+Clipper sends both to the cutoff and those engines read none. In 0.10-dev, the sounds measured deaf get matrix slots
+when they load (`clp.c clp_expr_fill`, `gen/clp_expr.h`): pressure to the engine's tone (CUT, DCW, TIMB, MOD, MLVL,
+BRIT, BUZZ ...) and to the level (up to +3.5 dB), slide to its tone (CUT, VOWL, TOP, FB, X, D ...), each half its
+range, all at rest at 0. **Now 93 ignore pressure.** What is left needs each engine's own handling:
+
+- WHEEL (11 of 14): its drawbars and drive are set once a block for the whole organ, so no voice's matrix reaches
+  them. Pressure could switch the rotor to fast (the organist's habit), or the part's maximum pressure drive the
+  drawbars.
+- PHASE (10 of 16): the DCW is already at its top in most sounds (the cutoff adds to it); pressure could open it from
+  lower, or move WAVE2.
+- WSEQ (11 of 16), TERRAIN (8 of 10), GRAIN (10 of 10), SAMPLE (3 of 4), FMX's slide (16 of 16): to read engine by
+  engine.
+- The level slot is often flattened by the master chain (compressor, limiter): it works best with a timbre change.
+
+The amounts (32: half the range) are a first guess, to judge by ear; a batch edit in the web editor (M6) could set
+them per sound.
 
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
@@ -249,6 +281,10 @@ an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (W
   the device.
 - A web editor on WebMIDI and fm1-base's companion services: patches, takes (with MIDI export in the page), settings,
   backup. fm1-base's `web/companion` page is the starting point; Clipper's editor is the model for the UI.
+- **A compact take ("efficiency mode")** (Alex, 2026-11-22): the baseline phrase is 24,164 events for 123 notes.
+  Dense controller streams (bend, pressure, slide every few ms) could be thinned where a straight line between kept
+  points stays within a tolerance (as a line simplification), on capture or on export, keeping the gesture while
+  saving most events; offered as a mode beside the exact history.
 - **Batch operations** in the editor: "route MPE slide (CC74) to shape/timbre on every patch", "set glide on all",
   run against the whole library on the computer, then sent back. That is easier and safer on the computer than on
   the device.
@@ -297,9 +333,11 @@ an "ALL" list, is the likely shape. Dropping engines also frees flash and RAM (W
 
 ## Optimization
 
-A source-level audit of 0.9-beta, its candidates ranked and checked: [OPTIMIZATION.md](OPTIMIZATION.md). Next
-session (after Alex's usage resets): a baseline on the device, then the event queue, the saw's coefficient tables,
-the effect buffers' memory map.
+A source-level audit of 0.9-beta, its candidates ranked and checked: [OPTIMIZATION.md](OPTIMIZATION.md). Done
+in 0.10-dev: the event queue (lost events counted and repaired), the saw's coefficient tables. Next: the effect
+buffers' memory map. Alex's first readings (2026-11-22, the baseline phrase from a slot): about 9% at rest, a light
+poly sound (SAMPLE SAW ENSEMBLE) 37-38% while it plays and 12% for a few seconds after, a heavy one (HYBRID GLASS
+PAD) 48-54%. In line with 0.9; no gain yet where Clipper plays (the saw's tables only help the saw).
 
 ## Panel conventions
 
@@ -310,6 +348,10 @@ scale). Before 1.0, map controls the way FM-1 players expect from M-VAVE's firmw
 ## Name
 
 **mvane yard** (Alex, 2026-11-21): "mvane" alone read like a typo for M-VAVE. Package identity unchanged (`FM-1_17...`).
+
+Where it comes from (Alex, 2026-11-22): first hills, terrain, textures, a landscape with a weathervane; then a
+playground, a schoolyard. This synth is meant for playful exploration, and *yard* says that. The *vane* is less tied
+to the image, yet does not disturb it.
 
 ## Open questions for Alex
 - Where to find VIBE FM's SDK or converter (TheFirmwareHub's documentation, or its author).

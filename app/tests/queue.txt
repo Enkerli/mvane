@@ -11,6 +11,7 @@ expect sq_lost 44
 wait 50
 expect sq_recoveries 1
 expect voices 6
+shot queue_saw.png
 # the chord let go while the queue is full: its note-offs are lost; recovery silences it all the same
 flood 300 off
 wait 50
@@ -31,12 +32,15 @@ expect voices 0
 turn PRESET 1
 wait 300
 expect sound 1
+# (the PLAY page's GLIDE reaches the new sound as it loads: not only when the knob turns)
+expect clp_glide >0
 key 0 down 100
 wait 100
 flood 300 off
 wait 100
 expect sq_recoveries 4
 expect voices 0
+shot queue_clipper.png
 key 0 up
 wait 50
 turn PRESET -1

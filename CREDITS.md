@@ -20,6 +20,9 @@ asked to keep that joy. What comes from it:
   pads with chorus and reverb).
 - Its looper's lesson: what was played should be kept, and replayed through other sounds.
 
+Still to bring over (roadmap M2): qualities **combined** by holding one top-row key while pressing another, and a
+**single note** when no quality is latched, so a phrase can open from single notes into chords.
+
 No Coral Flower code is in mvane yard; its source was read for its design. Coral Flower's own inspiration is
 Telepathic Instruments' Orchid; ChoralRoot's engine (`cr_engine`) is Quixotic7's.
 

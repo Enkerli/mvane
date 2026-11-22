@@ -174,6 +174,74 @@ static uint16_t clp_list[CLP_NSOUNDS];          /* engine << 8 | preset, the pla
 static uint32_t clp_n;
 static volatile int32_t clp_req = -1;           /* the sound asked for (main loop), taken by the render */
 
+/* (mvane yard) expression for every sound: the factory sounds that full pressure or slide leaves unchanged (measured:
+ * tools/clp_expr.c, gen/clp_expr.h; most because their engine reads no cutoff, where Clipper sends both) get a matrix
+ * slot when loaded, pressure or slide to the engine's tone (its CUT where it has one; DCW, TIMB, VOWL, TOP, MOD ...),
+ * half its range, and pressure to the level too (up to +3.5 dB). All rest at 0, so the sound at rest is the factory's. clp_expr_on(0): none (to measure) */
+#if __has_include("clp_expr.h")
+#include "clp_expr.h"                           /* CLP_EXPR[engine][preset]: 1 pressure, 2 slide leaves it unchanged */
+#else
+static const uint8_t CLP_EXPR[NENGINES][40];
+#endif
+#define XE(k) ((uint8_t)(MT_E1 + (k) - 1u))     /* the engine's parameter k, 1..8 */
+static const uint8_t CLP_EXPR_DST[NENGINES][2] = {   /* pressure's, slide's destination, by engine (N_ENGNAME) */
+    {XE(5), XE(5)},         /* ANALOG   CUT, CUT */
+    {XE(5), XE(7)},         /* DIGITAL  IDX, FB */
+    {XE(3), XE(3)},         /* PHASE    DCW, DCW */
+    {MT_OFF, MT_OFF},       /* LOFI     (not offered) */
+    {XE(5), XE(5)},         /* SAMPLE   CUT, CUT */
+    {XE(5), XE(1)},         /* VOICE    BUZZ, VOWL */
+    {XE(6), XE(6)},         /* TRIO     CUT, CUT */
+    {XE(7), XE(4)},         /* WHEEL    DRV, TOP */
+    {XE(8), XE(2)},         /* GRAIN    TONE, POS */
+    {XE(3), XE(2)},         /* FM6      MLVL, FB */
+    {XE(3), XE(5)},         /* PHYS     BRIT, POS */
+    {MT_OFF, MT_OFF},       /* NOISE    (not offered) */
+    {XE(1), XE(1)},         /* HYBRID   CUT, CUT */
+    {MT_OFF, MT_OFF},       /* WAVE     (not offered) */
+    {MT_OFF, MT_OFF},       /* ACID     (not offered) */
+    {XE(5), XE(5)},         /* STRINGS  CUT, CUT */
+    {XE(3), XE(2)},         /* MACRO    TIMB, HARM */
+    {XE(5), XE(1)},         /* VPS      CUT, D */
+    {XE(7), XE(4)},         /* TERRAIN  CUT, Y */
+    {XE(3), XE(4)},         /* FMX      MOD, FB */
+    {XE(7), XE(3)},         /* WSEQ     CUT, XFADE */
+    {XE(6), XE(6)},         /* JUNO     CUT, CUT */
+    {XE(8), XE(5)},         /* VECTOR   CUT, X */
+};
+#define CLP_EXPR_AMT 32
+static uint8_t clp_expr_enabled = 1;
+void clp_expr_on(int on) { clp_expr_enabled = (uint8_t)(on != 0); }
+static void clp_expr_fill(track_t *t, uint32_t e, uint32_t pi)
+{
+    uint32_t k, w, deaf = pi < 40u ? CLP_EXPR[e][pi] : 0u, used = 0;
+    if (!clp_expr_enabled || !deaf)
+        return;
+    for (k = 0; k < MX_SLOTS; k++) {             /* what the sound's own matrix already takes */
+        int32_t sr = t->p[mx_pid(k)];
+        if (sr == MS_AT && t->p[mx_pid(k) + 2u])
+            deaf &= ~1u;
+        if (sr == MS_SLIDE && t->p[mx_pid(k) + 2u])
+            deaf &= ~2u;
+    }
+    for (w = 0; w < 3u; w++) {           /* pressure to the tone, slide to the tone, pressure to the level too (a swell
+                                          * every engine answers, the organ's drawbars and saturated tones included) */
+        uint32_t dst = w == 2u ? MT_AMP : CLP_EXPR_DST[e][w];
+        if (!(deaf >> (w & 1u) & 1u) || dst == MT_OFF)
+            continue;
+        for (k = MX_SLOTS; k-- > 0;) {           /* the last free slot */
+            uint32_t id = mx_pid(k);
+            if (used >> k & 1u || (t->p[id] > MS_OFF && t->p[id + 2u]))
+                continue;
+            t->p[id] = (int16_t)(w == 1u ? MS_SLIDE : MS_AT);
+            t->p[id + 1u] = (int16_t)dst;
+            t->p[id + 2u] = CLP_EXPR_AMT;
+            used |= 1u << k;
+            break;
+        }
+    }
+}
+
 static void clp_load(uint32_t e, uint32_t pi)   /* as ui.c set_engine_of + apply_preset_to: the sound, its sends */
 {
     static const uint8_t FX_DEF[4] = {0, 24, 28, 36};
@@ -212,6 +280,7 @@ static void clp_load(uint32_t e, uint32_t pi)   /* as ui.c set_engine_of + apply
         t->p[P_VOICE] = V_LEGATO;
     mseq_init(t);
     fm6_track_loaded(t);
+    clp_expr_fill(t, e % NENGINES, pi);
 }
 
 void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (CC2 the level, as Clipper's EWI) */
@@ -330,6 +399,7 @@ void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block
 }
 
 void clp_panic(void) { trk_all_off(&trk[0]); }
+uint32_t clp_glide(void) { return (uint32_t)trk[0].p[P_GLIDE]; }   /* the sound's GLIDE now (0..127) */
 uint32_t clp_voices(void)                       /* voices with their gate open */
 {
     uint32_t i, n = 0;

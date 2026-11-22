@@ -12,6 +12,11 @@ code.
 | ProgGenie | An AUv3 MIDI processor that walks corpus transition statistics for chord progressions, and keeps an opinion about each chord change | **Progressions on the device** (roadmap M3): its tables and curation weights in C, phrases voiced for the whole loop by `core/harmony` |
 | mvane yard | This firmware | The **retrospective recorder** (a history that never stops, takes captured after the fact) and chords from any pitch-class set on an FM-1 |
 
+## The name
+
+*Yard*, as Alex tells it: first hills, terrain, textures, a landscape with a weathervane; then a playground, a
+schoolyard. mvane yard is meant for playful exploration. The *vane* sits less inside the image, without disturbing it.
+
 ## Shared conventions
 
 - **Pitch-class sets as numbers**, bit 0 the root: the screen shows each scale's (PCO 1723, Noodling 1267), and an

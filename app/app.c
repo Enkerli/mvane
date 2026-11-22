@@ -215,6 +215,9 @@ static void sound_apply(void)            /* the sound setting to the engines (ma
     if (set.sound)
         clp_select(set.sound - 1u);
     eng_want = set.sound != 0;
+    if (set.sound)                       /* the PLAY page's GLIDE is the player's, not the sound's: Clipper's sound
+                                          * loads its own, so it gets the knob's again (its CC5, after the load) */
+        synth_send(0xB0u, SYNTH_CC_GLIDE, synth_param(SP_GLIDE));
 }
 static int sound_mono(void) { return set.sound && clp_sound_mono(set.sound - 1u); }
 static void sound_change_hold(void);     /* (below: what sounds lets go, a held chord comes back on the new sound) */
@@ -1204,33 +1207,52 @@ static void draw(void)
         cv_text(80, 58, &FONT_XS, "0.4'S TAKE: SAVE KEEPS IT", C_HI);
     else if (take_dirty)
         cv_text(80, 58, &FONT_XS, "NOT SAVED", C_DIM);
-    t[0] = 0;                            /* the render's load and its missed deadlines */
-    text_cat(t, "CPU ");
-    int_text((int32_t)plat_cpu_pct(), t + 4);
-    text_cat(t, "%  XR ");
-    {
-        char x[12];
-        int_text((int32_t)plat_xruns(), x);
-        text_cat(t, x);
-        if (sq_lost) {                   /* events the render's queue lost (each recovered) */
-            text_cat(t, " Q");
-            int_text((int32_t)sq_lost, x);
-            text_cat(t, x);
-        }
-    }
-    cv_text(10, 82, &FONT_XS, t, plat_xruns() || sq_lost ? C_HI : C_DIM);
-    if (set.sound) {                     /* the sound's measured cost (tools/clp_cost.c) */
+    {                                    /* the bottom line: the render's load, missed deadlines and lost events on
+                                          * the left, larger; the play mode, the sound's cost and the USB host on the
+                                          * right, each only where it fits (none overlaps) */
         static const char *const COST_N[3] = {"LIGHT", "MID", "HEAVY"};
-        uint32_t c = clp_sound_cost(set.sound - 1u);
-        cv_text(104, 82, &FONT_XS, COST_N[c], c == 2u ? C_HI : C_DIM);
-    }
-    {
         static const char *const PLAY_S[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
         const char *ps = sound_mono() && !(set.play & 1u) ? "MONO SOUND" : PLAY_S[set.play];
-        cv_text(230 - text_w(&FONT_XS, ps), 82, &FONT_XS, ps, set.play || sound_mono() ? C_HI : C_DIM);
+        char x[12];
+        int32_t l, r = 230, w;
+        uint32_t c = set.sound ? clp_sound_cost(set.sound - 1u) : 0u;
+        t[0] = 0;
+        text_cat(t, "CPU ");
+        int_text((int32_t)plat_cpu_pct(), x);
+        text_cat(t, x);
+        text_cat(t, "%");
+        l = cv_text(10, 81, &FONT_S, t, C_WHITE) + 10;
+        t[0] = 0;
+        text_cat(t, "XR ");
+        int_text((int32_t)plat_xruns(), x);
+        text_cat(t, x);
+        l = cv_text(l, 81, &FONT_S, t, plat_xruns() ? C_HI : C_GRAY) + 10;
+        if (sq_lost) {                   /* events the render's queue lost (each recovered) */
+            t[0] = 0;
+            text_cat(t, "Q ");
+            int_text((int32_t)sq_lost, x);
+            text_cat(t, x);
+            l = cv_text(l, 81, &FONT_S, t, C_HI) + 10;
+        }
+        w = text_w(&FONT_XS, ps);
+        if (r - w >= l) {
+            cv_text(r - w, 82, &FONT_XS, ps, set.play || sound_mono() ? C_HI : C_GRAY);
+            r -= w + 8;
+        }
+        if (set.sound) {                 /* the sound's measured cost (tools/clp_cost.c) */
+            w = text_w(&FONT_XS, COST_N[c]);
+            if (r - w >= l) {
+                cv_text(r - w, 82, &FONT_XS, COST_N[c], c == 2u ? C_HI : C_GRAY);
+                r -= w + 8;
+            }
+        }
+        if (plat_usb_host_state()) {
+            const char *h = plat_usb_host_state() == USBH_CONNECTED ? "HOST" : "HOST..";
+            w = text_w(&FONT_XS, h);
+            if (r - w >= l)
+                cv_text(r - w, 82, &FONT_XS, h, C_HI);
+        }
     }
-    if (plat_usb_host_state())
-        cv_text(150, 82, &FONT_XS, plat_usb_host_state() == USBH_CONNECTED ? "HOST" : "HOST..", C_HI);
     cv_blit(0, 140);
 }
 
@@ -1438,6 +1460,8 @@ int app_expect(const char *what, int *got)
         *got = (int)take.duration_ms;
     else if (!strcmp(what, "playing"))
         *got = player.playing;
+    else if (!strcmp(what, "clp_glide"))   /* Clipper's sound's GLIDE (the PLAY page's, given at each load) */
+        *got = (int)clp_glide();
     else if (!strcmp(what, "glide"))
         *got = (int)synth_param(SP_GLIDE);
     else if (!strcmp(what, "dirty"))

@@ -19,6 +19,8 @@ void clp_select(uint32_t i);                  /* play sound i (main loop: the pa
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2);   /* a MIDI message (render: before clp_render) */
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12);   /* n stereo frames, 24-bit, MASTER as the render has it */
 void clp_panic(void);
+uint32_t clp_glide(void);                   /* the sound's GLIDE now, 0..127 (host checks) */
+void clp_expr_on(int on);                    /* 1 (default): the sounds deaf to pressure or slide get a matrix slot for it (tools/clp_expr.c) */
 uint32_t clp_voices(void);                  /* voices with their gate open */
 void clp_mode(uint32_t mono, uint32_t breath);
 uint32_t clp_macro(uint32_t i);              /* BRITE TIMBR MOTN SPACE as CC 16..19 set them: 0..127 */
