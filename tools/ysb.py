@@ -4,12 +4,14 @@
 
 The bank, version 2 (0.11; version 1, 0.10's, had the YARD part only, 1032 bytes):
   "MVYB" (little-endian 0x4259564D), version, 32, two zeros; 32 YARD sounds of 32 bytes: a name (12, NUL-padded,
-  printable ASCII), flags (bit 0 used, bit 1 mono), the nine parameters 0..127 in synth.h's order, ten zeros;
+  printable ASCII), flags (bit 0 used, bit 1 mono), the thirteen parameters 0..127 in synth.h's order (0.10 wrote
+  nine: the other four at 0), six zeros;
   "MVCB" (0x4243564D), 32, three zeros; 32 Clipper sounds of 64 bytes: a name (12), flags (bit 0 used), the factory
   sound it starts from (engine, preset), the reverb's model (signed: -1 as it is), how many changes (up to 14), three
   zeros, 14 changes of 3 bytes (Clipper's parameter P_*, a signed 16-bit value, little-endian), two zeros.
 The JSON: {"format": "mvane-yard-sounds", "version": 2, "sounds": [YARD's: {"slot", "name", "mono", "tone",
-"release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"}], "clipper": [{"slot", "name", "engine",
+"release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave" (0..42 SAW, 43..84 PULSE, 85..127
+TRIANGLE), "pw", "noise", "filter" (0..42 LOW, 43..84 BAND, 85..127 HIGH)}], "clipper": [{"slot", "name", "engine",
 "preset", "sound" (its name, to read), "reverb" (ROOM, PLATE, HALL, SHIMR or null), "changes": [{"id", "name" (to
 read), "value"}]}]}; a sound without a slot takes the first free one; a Clipper sound may name its sound ("sound")
 instead of its engine and preset, a change its parameter ("name", when one has that label) instead of its id: BRITE,
@@ -23,9 +25,10 @@ import sys
 MAGIC, CMAGIC, N, CN, OV = 0x4259564D, 0x4243564D, 32, 32, 14
 HYBRID = 12                                         # (Clipper's HYBRID engine: its macros are its EDIT values M1..M4)
 SIZE1, SIZE = 8 + 32 * N, 8 + 32 * N + 8 + 64 * CN
-PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"]   # synth.h SP_*
+PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck",   # synth.h SP_*
+          "wave", "pw", "noise", "filter"]          # (0.11: 0 leaves a sound as 0.10 made it)
 DEFAULT = {"tone": 56, "release": 60, "glide": 30, "attack": 24, "decay": 64, "res": 0, "detune": 0, "sub": 0,
-           "pluck": 0}
+           "pluck": 0, "wave": 0, "pw": 0, "noise": 0, "filter": 0}
 NAMES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web", "clp_names.json")
 _names = None
 

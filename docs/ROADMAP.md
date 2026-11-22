@@ -321,9 +321,12 @@ Alex on 0.10-beta (2026-11-22):
 - **Versions**: 0.11, 0.12 ... 0.99 (fm1-base's identity takes two digits a part: no 0.100; then 1.0, or 0.99.1).
 
 Then, from Alex's list:
-- **YARD's sound itself editable**: its oscillators (today one saw for every sound, a second detuned, a sub square:
-  BRASS and WIND differ only by the nine values), so a waveform (saw, pulse with PWM, triangle), noise for breath, a
-  filter mode, an envelope's shape, as patch parameters; the bank's format grows (a version 2).
+- **YARD's sound itself editable. Done in 0.11-dev:** WAVE (SAW, PULSE, TRIANGLE: the pulse two band-limited saws a
+  width apart), PW (pressure narrows it: PWM under the fingers), NOISE (with breath, the breath's), FILTER (LOW,
+  BAND, HIGH from the same SVF); a second FX page (SELECT); HOLLOW, CLAV, FLUTE, REED, and WIND now a triangle with
+  breath noise. Each at 0 leaves a sound as before (SAW bit for bit). Settings MVA8 (0.10's MVA7 read); the bank's
+  YARD entries have room (0.10's read with the four at 0). Next, by ear: an LFO (vibrato, PWM), the envelope's
+  shape, a pitch envelope for plucks.
 - **Clipper's sounds as patch files. Done in 0.11-dev:** a factory sound and up to 14 parameters changed over it
   (any of the 126, by id), its reverb's model; FX and SAVE on the panel keeps the macros, sends and reverb; in the
   same bank as YARD's (version 2, 3088 bytes; 0.10's still reads), the page's card, `yard.py sounds`, JSON with names

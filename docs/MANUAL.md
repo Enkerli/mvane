@@ -46,7 +46,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | --- | --- | --- | --- | --- | --- |
 | **EDIT**: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
-| **FX** (YARD's sounds: no effects, its second page) | DETUNE (a second saw) | SUB (a square two octaves down) | RES (resonance) | PLUCK (from a pad to a pluck) | |
+| **FX** (YARD's sounds: no effects; two pages) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
 | **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
@@ -125,18 +125,21 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 PRESETS steps through **YARD**, mvane yard's own synth, then Clipper's factory sounds (337) in families, by how each
 behaves (the full list: [SOUNDS.md](SOUNDS.md)).
 
-**YARD** (9 sounds: SAW, PAD, ENSEMBLE, KEYS, PLUCK, BRASS; LEAD, BASS, WIND mono): a band-limited saw, a second one
-detuned (DETUNE), a square two octaves down (SUB), through a lowpass that follows the note (TONE: dark to bright; RES its
-resonance), 18 dB/oct; PLUCK lowers the sustain and opens the filter from five octaves up at each note, falling at
-DECAY: one knob from a pad to a pluck. Pressure brightens, slide (CC74) moves the cutoff, breath (POLY+BR, MONO+BR)
-is the level. The lightest sounds here (SAW about 12% of the FM-1 with a chord; BRASS, the heaviest, about half as
-much again), its voices over both cores. A YARD sound brings its parameters; GLIDE stays the PLAY page's; LEAD, BASS
-and WIND play one voice whatever PLAY says. Every knob is recorded in the history as a CC on channel 1 (TONE 74,
-ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
+**YARD** (13 sounds: SAW, PAD, ENSEMBLE, KEYS, PLUCK, BRASS, HOLLOW, CLAV; LEAD, BASS, WIND, FLUTE, REED mono): an
+oscillator (WAVE: a band-limited SAW, a PULSE of width PW, 50% down to 5%, or a TRIANGLE), a second one detuned
+(DETUNE), a square two octaves down (SUB), noise (NOISE: with breath, the breath's) through a filter that follows the
+note (TONE: dark to bright; RES its resonance; FILTER: LOW 18 dB/oct, BAND or HIGH 12 dB/oct); PLUCK lowers the
+sustain and opens the filter from five octaves up at each note, falling at DECAY: one knob from a pad to a pluck.
+Pressure brightens and narrows the pulse (each note's own, with MPE), slide (CC74) moves the cutoff, breath
+(POLY+BR, MONO+BR) is the level. The lightest sounds here (SAW about 12% of the FM-1 with a chord; BRASS and HOLLOW,
+the heaviest, about half as much again), its voices over both cores. A YARD sound brings its parameters; GLIDE
+stays the PLAY page's; the mono ones play one voice whatever PLAY says. On FX, SELECT turns between its two pages.
+Every knob is recorded in the history as a CC on channel 1 (TONE 74, ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE
+20, SUB 21, PLUCK 22, WAVE 23, PW 24, NOISE 25, FILTER 26).
 
 **Your own sounds**, YARD's and Clipper's: FX held (or opened), SAVE keeps the sound playing (over itself if it is
 already one of yours), up to 32 of each, kept across a restart.
-- A **YARD** sound is its nine values (its oscillators are the same for every YARD sound, for now): saved as USER n,
+- A **YARD** sound is its thirteen values (oscillator, filter, envelope, noise): saved as USER n,
   listed after YARD's nine in their family (mono: LEADS EZ; PLUCK 64 or more: HITS EZ; else CHORDS EZ).
 - A **Clipper** sound is a factory sound and what was changed on it: up to 14 parameters (on the panel, its four
   macros on the SOUND page and its four sends on FX) and the reverb's model (FX, SELECT); saved as its sound's name
@@ -145,7 +148,8 @@ On the computer they are one file, `yard.ysb`: the page's **Your sounds** card l
 its sound, reverb and changes as `name=value`, any of Clipper's 126 parameters by name or `#number`), add or remove,
 send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and `tools/yard.py sounds --put
 mine.json` sends them (replacing the FM-1's). In the JSON a YARD sound is `{"slot", "name", "mono", "tone",
-"release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"}`, a Clipper sound `{"slot", "name", "sound"
+"release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave", "pw", "noise", "filter"}` (wave and
+filter: 0 SAW / LOW, 64 PULSE / BAND, 127 TRI / HIGH), a Clipper sound `{"slot", "name", "sound"
 (or "engine" and "preset"), "reverb", "changes": [{"id" or "name", "value"}]}` (BRITE, TIMBR, MOTN and SPACE are a
 HYBRID sound's M1 to M4, as on the panel).
 

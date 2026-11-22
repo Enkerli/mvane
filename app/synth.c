@@ -11,6 +11,7 @@ typedef struct {
     float ic1, ic2, lp;                  /* the filter's state */
     float sp, ss, sb, sp1, ss1, sb1;     /* pressure, slide and bend, smoothed twice (no zipper) */
     float lb, lb_of, mul, mul_of;        /* caches: log2 of the pitch in Hz (for base lb_of), the bend's ratio (for sb) */
+    uint32_t nz;                         /* NOISE's generator */
     float phase2, phsub, cont;           /* DETUNE's second saw, SUB's square (two octaves down), PLUCK's contour (1 at
                                           * the note's start, falling at DECAY) */
     uint32_t age;
@@ -27,7 +28,13 @@ const synth_sound_t SYNTH_SOUNDS[] = {
     {"BRASS", 0, {40, 42, 30, 30, 60, 22, 52, 24, 38}},
     {"LEAD", 1, {76, 30, 30, 6, 64, 52, 40, 0, 20}},
     {"BASS", 1, {34, 26, 30, 0, 40, 40, 0, 92, 60}},
-    {"WIND", 1, {52, 32, 30, 22, 64, 16, 26, 0, 0}},    /* (with POLY+BR or MONO+BR: the breath the level) */
+    /* WIND (0.11): a triangle and its breath's noise (with POLY+BR or MONO+BR: the breath the level) */
+    {"WIND", 1, {52, 32, 30, 22, 64, 16, 26, 0, 0, 127, 0, 40, 0}},
+    /* (0.11) the oscillators' choices: TONE REL GLIDE ATTACK DECAY RES DETUNE SUB PLUCK WAVE PW NOISE FILTER */
+    {"HOLLOW", 0, {60, 80, 30, 40, 64, 10, 30, 0, 0, 64, 40, 0, 0}},     /* a pulse pad: pressure narrows it */
+    {"FLUTE", 1, {64, 30, 30, 30, 64, 5, 0, 0, 0, 127, 0, 55, 0}},       /* a triangle, breath noise */
+    {"REED", 1, {58, 28, 30, 12, 64, 35, 10, 0, 0, 64, 110, 20, 64}},    /* a narrow pulse through the bandpass */
+    {"CLAV", 0, {80, 20, 30, 0, 30, 40, 0, 0, 100, 64, 100, 0, 127}},    /* a narrow pulse, highpassed, plucked */
 };
 const unsigned SYNTH_NSOUNDS = sizeof SYNTH_SOUNDS / sizeof SYNTH_SOUNDS[0];
 
@@ -70,7 +77,7 @@ void synth_init(const uint8_t p[SP_N])
         prm[i] = p[i];
     ft_init();
     for (i = 0; i < NVOICE; i++)
-        vc[i].lb_of = vc[i].mul_of = -1.0f;
+        vc[i].lb_of = vc[i].mul_of = -1.0f, vc[i].nz = 0x9E3779B9u * (i + 1u);
     for (i = 0; i < 16u; i++) {
         bend_range[i] = i ? 48u : 2u;    /* MPE's defaults: members 48, the master 2 */
         slide[i] = 0.5f;                 /* CC74 at rest: 64 (bipolar controllers rest there) */
@@ -242,6 +249,14 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
             prm[SP_SUB] = (uint8_t)d2;
         else if (d1 == SYNTH_CC_PLUCK && !ch)
             prm[SP_PLUCK] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_WAVE && !ch)
+            prm[SP_WAVE] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_PW && !ch)
+            prm[SP_PW] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_NOISE && !ch)
+            prm[SP_NOISE] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_FMODE && !ch)
+            prm[SP_FMODE] = (uint8_t)d2;
         else if (d1 == 101u)
             rpn_msb[ch] = (uint8_t)d2;
         else if (d1 == 100u)
@@ -263,9 +278,38 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
 /* the block's values, worked out once (synth_render), read by both cores' voices */
 static struct {
     uint32_t n;
-    float rel, att, glide, tone, batt, k, rgain, dec, pluck, sus, sub, det, dmul, g2;
+    float rel, att, glide, tone, batt, k, rgain, dec, pluck, sus, sub, det, dmul, g2, pw, noise;
+    uint32_t wave, fmode;
     float bsub[16];
 } bk;
+
+/* a saw's step smoothed (polyBLEP: the division only next to the step) at phase t, increment inc */
+static inline float blep_saw(float t, float inc)
+{
+    float s = 2.0f * t - 1.0f;
+    if (t < inc) {
+        float x = t / inc;
+        s -= x + x - x * x - 1.0f;
+    } else if (t > 1.0f - inc) {
+        float x = (t - 1.0f) / inc;
+        s -= x * x + x + x + 1.0f;
+    }
+    return s;
+}
+/* the oscillator at phase t: SAW; PULSE of width pw (two saws a width apart, their difference: no DC, both steps
+ * smoothed); TRIANGLE (its corners only bend: harmonics fall 12 dB an octave, little left to alias) */
+static inline float yosc(uint32_t wave, float t, float inc, float pw)
+{
+    if (wave == 1u) {
+        float t2 = t + pw;
+        if (t2 >= 1.0f)
+            t2 -= 1.0f;
+        return 0.5f * (blep_saw(t, inc) - blep_saw(t2, inc)) * 1.6f;
+    }
+    if (wave == 2u)
+        return 1.0f - 4.0f * fm_fabsf(t - 0.5f);
+    return blep_saw(t, inc);
+}
 
 /* voices j0..j1-1 into acc (the core's own: a voice touches its own state only) */
 static void render_voices(uint32_t j0, uint32_t j1, float *acc)
@@ -318,6 +362,9 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
             }
 #endif
             a1 = 1.0f / (1.0f + g * (g + k)), a2 = g * a1, a3 = g * a2;
+            {
+            /* PW: pressure narrows the pulse (MPE: each note's own) */
+            float pw = fm_maxf(0.03f, bk.pw - 0.35f * v->sp), nzg = bk.noise * (breath_on ? 1.5f * br : 1.0f);
             for (i = i0; i < end; i++) {
                 float s, t, inc, v1, v2, v3;
                 v->base += (v->target - v->base) * bk.glide;
@@ -326,29 +373,18 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
                 if (v->phase >= 1.0f)
                     v->phase -= 1.0f;
                 t = v->phase;
-                s = 2.0f * t - 1.0f;     /* a saw, its steps smoothed (polyBLEP, the division only at a step) */
-                if (t < inc) {
-                    float x = t / inc;
-                    s -= x + x - x * x - 1.0f;
-                } else if (t > 1.0f - inc) {
-                    float x = (t - 1.0f) / inc;
-                    s -= x * x + x + x + 1.0f;
-                }
-                if (bk.g2 > 0.0f) {      /* DETUNE: a second saw, a little sharp, beating against the first */
-                    float i2 = inc * bk.dmul, t2, s2;
+                s = yosc(bk.wave, t, inc, pw);   /* (SAW: the same samples as before WAVE) */
+                if (bk.g2 > 0.0f) {      /* DETUNE: a second oscillator, a little sharp, beating against the first */
+                    float i2 = inc * bk.dmul, s2;
                     v->phase2 += i2;
                     if (v->phase2 >= 1.0f)
                         v->phase2 -= 1.0f;
-                    t2 = v->phase2;
-                    s2 = 2.0f * t2 - 1.0f;
-                    if (t2 < i2) {
-                        float x = t2 / i2;
-                        s2 -= x + x - x * x - 1.0f;
-                    } else if (t2 > 1.0f - i2) {
-                        float x = (t2 - 1.0f) / i2;
-                        s2 -= x * x + x + x + 1.0f;
-                    }
+                    s2 = yosc(bk.wave, v->phase2, i2, pw);
                     s = (s + bk.g2 * s2) * (1.0f / (1.0f + 0.5f * bk.g2));
+                }
+                if (nzg > 0.0f) {        /* NOISE: white, into the filter (a wind's breath) */
+                    v->nz = v->nz * 1664525u + 1013904223u;
+                    s += nzg * ((float)(int32_t)v->nz * (1.0f / 2147483648.0f));
                 }
                 if (bk.sub > 0.0f) {     /* SUB: a square two octaves down (0.11, Alex: -24 rather than -12), its two
                                           * steps smoothed */
@@ -376,9 +412,14 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
                 v2 = v->ic2 + a2 * v->ic1 + a3 * v3;
                 v->ic1 = 2.0f * v1 - v->ic1;
                 v->ic2 = 2.0f * v2 - v->ic2;
-                v->lp += (v2 - v->lp) * c1;
+                if (!bk.fmode)           /* LOWPASS: the SVF's low, then the one-pole: 18 dB/oct */
+                    v->lp += (v2 - v->lp) * c1;
+                else                     /* BANDPASS, HIGHPASS: the SVF's own outputs (12 dB/oct), their level made
+                                          * up (they lose the fundamental: a chord 15 to 20 dB down without) */
+                    v->lp = bk.fmode == 1u ? 3.0f * v1 : 4.0f * (s - k * v1 - v2);
                 v->level += v->gate ? (tv - v->level) * a : -v->level * bk.rel;
                 acc[i] += v->lp * v->level;
+            }
             }
         }
         v->ic1 = fm_flush(v->ic1), v->ic2 = fm_flush(v->ic2), v->lp = fm_flush(v->lp);
@@ -428,6 +469,10 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     bk.sus = 1.0f - 0.85f * pl;          /* PLUCK: the level falls to this, the cutoff from five octaves up */
     bk.sub = (float)prm[SP_SUB] * (0.8f / 127.0f);
     bk.g2 = det > 0.0f ? 1.0f : 0.0f;
+    bk.wave = SYNTH_WAVE(prm[SP_WAVE]);
+    bk.fmode = SYNTH_FMODE(prm[SP_FMODE]);
+    bk.pw = 0.5f - 0.45f * (float)prm[SP_PW] * (1.0f / 127.0f);   /* 50% .. 5% */
+    bk.noise = (float)prm[SP_NOISE] * (0.9f / 127.0f);
     bk.dmul = fm_exp2f(det * det * (0.3f / 12.0f) + 0.002f);   /* up to 30 cents sharp */
     for (k = 0; k < 16u; k++) {          /* breath, smoothed twice, once every 16 samples; a gentle curve */
         bsm1 += (breath_in - bsm1) * 0.15f;

@@ -4,8 +4,9 @@
 // clp-names) turn a change's label into its parameter and back.
 export const MAGIC = 0x4259564d, CMAGIC = 0x4243564d, N = 32, CN = 32, OV = 14, HYBRID = 12;
 export const SIZE1 = 8 + 32 * N, SIZE = SIZE1 + 8 + 64 * CN;
-export const PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"];
-export const DEFAULT = { tone: 56, release: 60, glide: 30, attack: 24, decay: 64, res: 0, detune: 0, sub: 0, pluck: 0 };
+export const PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave", "pw", "noise", "filter"];
+export const DEFAULT = { tone: 56, release: 60, glide: 30, attack: 24, decay: 64, res: 0, detune: 0, sub: 0, pluck: 0,
+  wave: 0, pw: 0, noise: 0, filter: 0 };   // (0.11: the last four; 0 leaves a sound as 0.10 made it)
 const MACROS = ["BRITE", "TIMBR", "MOTN", "SPACE"];
 
 export function label(names, id, engine) {      // a parameter's label (an EDIT value: its engine's)

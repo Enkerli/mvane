@@ -35,7 +35,9 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564137u            /* "MVA7" (0.10: YARD's nine parameters); 0.9's "MVA6" is read and moved on */
+#define SET_MAGIC 0x4D564138u            /* "MVA8" (0.11: YARD's thirteen parameters); 0.10's "MVA7" and 0.9's "MVA6"
+                                          * are read and moved on */
+#define SET_MAGIC_10 0x4D564137u
 #define SET_MAGIC_09 0x4D564136u
 typedef struct {
     uint32_t magic;
@@ -43,7 +45,8 @@ typedef struct {
     uint8_t tonic;                       /* 0 C .. 11 B */
     uint8_t scale;                       /* CHORD_SCALES */
     int8_t octave;                       /* -2 .. +2 */
-    uint8_t p[SP_N];                     /* YARD's: tone, release, glide, attack, decay, res, detune, sub, pluck: 0..127 */
+    uint8_t p[SP_N];                     /* YARD's: tone, release, glide, attack, decay, res, detune, sub, pluck, wave,
+                                          * pw, noise, filter: 0..127 */
     uint8_t type, style, bass, usb_full;
     uint8_t voices;                      /* upper voices, 3..6 */
     uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
@@ -57,6 +60,15 @@ typedef struct {
     uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
     uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
 } settings_t;
+typedef struct {                         /* 0.10's record (MVA7): the same, YARD's first nine parameters only */
+    uint32_t magic;
+    uint8_t mode, tonic, scale;
+    int8_t octave;
+    uint8_t p[SP_N_10];
+    uint8_t type, style, bass, usb_full, voices, bank, play, slot;
+    uint16_t sound;
+    uint8_t quant, mpe_out, bend, page;
+} settings_10_t;
 typedef struct {                         /* 0.9's record (MVA6): the same, YARD's first four parameters only */
     uint32_t magic;
     uint8_t mode, tonic, scale;
@@ -71,7 +83,7 @@ static uint8_t set_dirty;
 
 static void settings_defaults(void)
 {
-    static const uint8_t P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0};   /* (YARD SAW: yard_presets' first) */
+    static const uint8_t P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (YARD SAW: SYNTH_SOUNDS' first) */
     uint32_t i;
     set.magic = SET_MAGIC;
     set.mode = 1;
@@ -99,11 +111,22 @@ static void settings_load(void)
     uint32_t i, bad = 0;
     union {
         settings_t now;
+        settings_10_t v10;
         settings_09_t old;
     } r;
     int n = plat_store_load(OBJ_SETTINGS, &r, sizeof r);
     if (n == (int)sizeof r.now && r.now.magic == SET_MAGIC)
         set = r.now;
+    else if (n == (int)sizeof r.v10 && r.v10.magic == SET_MAGIC_10) {   /* 0.10's: moved on, the new four at 0 */
+        settings_10_t o = r.v10;
+        settings_defaults();
+        set.mode = o.mode, set.tonic = o.tonic, set.scale = o.scale, set.octave = o.octave;
+        for (i = 0; i < SP_N_10; i++)
+            set.p[i] = o.p[i];
+        set.type = o.type, set.style = o.style, set.bass = o.bass, set.usb_full = o.usb_full, set.voices = o.voices;
+        set.bank = o.bank, set.play = o.play, set.slot = o.slot, set.sound = o.sound;
+        set.quant = o.quant, set.mpe_out = o.mpe_out, set.bend = o.bend, set.page = o.page;
+    }
     else if (n == (int)sizeof r.old && r.old.magic == SET_MAGIC_09) {   /* 0.9's: moved on, YARD's new ones as SAW's */
         settings_09_t o = r.old;
         settings_defaults();
@@ -757,6 +780,7 @@ static struct {
      * chord_build_qualities; the other bank takes the last); the only latched key tapped again unlatches, and the
      * white keys play single notes. qheld the keys down, qgest the press under way, qlatch the latched set */
     uint16_t qheld, qgest, qlatch;
+    uint8_t yfx;                         /* YARD's FX layer: 0 DETUNE SUB RES PLUCK, 1 WAVE PW NOISE FILTER (SELECT) */
     uint8_t qtoggle;
     uint32_t qstamp[CHORD_BANK], qclock;
     uint8_t chord_degree, chord_vel, hold;
@@ -1016,10 +1040,14 @@ static void harmony_changed(void)
     set_dirty = 1;
 }
 
+static void knob_set(uint32_t which, uint32_t cc, int32_t v, const char *name);
 static void turn_knob(uint32_t which, uint32_t cc, int32_t e, const char *name)
 {
+    knob_set(which, cc, clamp((int32_t)synth_param(which) + e * 2, 0, 127), name);
+}
+static void knob_set(uint32_t which, uint32_t cc, int32_t v, const char *name)   /* a YARD value to v, recorded */
+{
     char t[8];
-    int32_t v = clamp((int32_t)synth_param(which) + e * 2, 0, 127);
     if (v == (int32_t)synth_param(which))
         return;
     synth_set(which, (uint32_t)v);       /* at once, for the screen; the event follows on the bus */
@@ -1245,8 +1273,9 @@ static void knob_info(uint32_t i, const char **label, char *val)
 {
     static const char *const SAW_N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
     static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
-    static const char *const YFX_N[4] = {"DETUNE", "SUB", "RES", "PLUCK"};   /* YARD's second page (no effects) */
-    static const uint8_t YFX_P[4] = {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK};
+    static const char *const YFX_N[2][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"}};
+    static const uint8_t YFX_P[2][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}};
+    static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
     static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
     int32_t l = layer_now();
@@ -1264,8 +1293,16 @@ static void knob_info(uint32_t i, const char **label, char *val)
         else
             text_cat(val, set.bank ? "QUALITY" : "SCALE");
     } else if (l == B_FX) {
-        *label = clp_on() ? FX_N[i] : YFX_N[i];
-        int_text(clp_on() ? (int32_t)clp_fx(i) : (int32_t)synth_param(YFX_P[i]), val);
+        uint32_t pg = ui.yfx & 1u, v = synth_param(YFX_P[pg][i]);   /* (YARD: its two pages, SELECT between) */
+        *label = clp_on() ? FX_N[i] : YFX_N[pg][i];
+        if (clp_on())
+            int_text((int32_t)clp_fx(i), val);
+        else if (YFX_P[pg][i] == SP_WAVE)
+            text_cat(val, WAVE_N[SYNTH_WAVE(v)]);
+        else if (YFX_P[pg][i] == SP_FMODE)
+            text_cat(val, FMODE_N[SYNTH_FMODE(v)]);
+        else
+            int_text((int32_t)v, val);
     } else if (l == B_GLO) {
         static const char *const N[4] = {"PLAY", "USB AUDIO", "MPE OUT", "BEND"};
         *label = N[i];
@@ -1341,11 +1378,20 @@ static void knob_turn(uint32_t i, int32_t e)
     } else if (l == B_FX) {
         static const uint8_t CC[4] = {12, 93, 94, 91};   /* DRIVE (mvane yard's CC 12), CHORUS, DELAY, REVERB */
         static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
-        if (!clp_on()) {                 /* YARD: no effects; its second page */
-            static const uint8_t P[4] = {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK};
-            static const uint8_t YC[4] = {SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK};
-            static const char *const N[4] = {"DETUNE", "SUB", "RES", "PLUCK"};
-            turn_knob(P[i], YC[i], e, N[i]);
+        if (!clp_on()) {                 /* YARD: no effects; its pages (SELECT between) */
+            static const uint8_t P[2][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}};
+            static const uint8_t YC[2][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
+                                             {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE}};
+            static const char *const N[2][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"}};
+            uint32_t pg = ui.yfx & 1u, w = P[pg][i];
+            if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
+                uint32_t z = SYNTH_WAVE(synth_param(w));
+                int32_t nz = clamp((int32_t)z + (e > 0 ? 1 : -1), 0, 2);
+                knob_set(w, YC[pg][i], nz == 0 ? 0 : nz == 1 ? 64 : 127, N[pg][i]);
+                knob_info(i, &label, val);
+                app_say(label, val);
+            } else
+                turn_knob(w, YC[pg][i], e, N[pg][i]);
             return;
         }
         cc_turn(CC[i], clp_fx(i), e, FX_N[i]);
@@ -1409,9 +1455,14 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         if (ui.chord_n)
             chord_sound();
         app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
-    } else if (l == B_FX) {              /* the reverb's model */
+    } else if (l == B_FX) {              /* the reverb's model; YARD's: its other page */
         if (clp_on())
             app_say("REVERB", clp_reverb_step(d));
+        else {
+            ui.yfx ^= 1u;
+            app_say("YARD", ui.yfx ? "WAVE PW NOISE FILTER" : "DETUNE SUB RES PLUCK");
+            ui.redraw = 1;
+        }
     } else if (l == B_GLO) {             /* USB: a computer, or host to a MIDI device (the Diosynth) */
         plat_usb_host(e > 0);
         app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
@@ -2021,6 +2072,18 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         printf("ok\n");
         return 1;
     }
+    if (!strcmp(cmd, "settings_10")) {   /* a 0.10 settings record (MVA7), YARD's nine: then reboot */
+        settings_10_t o;
+        uint32_t i;
+        mvane_zero(&o, sizeof o);
+        o.magic = SET_MAGIC_10, o.mode = 1, o.tonic = 3, o.scale = 0, o.octave = 0;
+        for (i = 0; i < SP_N_10; i++)
+            o.p[i] = (uint8_t)(10u + 10u * i);   /* ... pluck (the ninth) 90 */
+        o.type = CHORD_BANK + 1u, o.style = CHORD_OPEN, o.bass = 1, o.usb_full = 1, o.voices = 5, o.bank = 1;
+        o.play = 0, o.slot = 1, o.sound = 0x4000u, o.quant = 1, o.mpe_out = 1, o.bend = 2, o.page = 0;
+        printf(plat_store_save(OBJ_SETTINGS, &o, sizeof o) ? "fail\n" : "ok\n");
+        return 1;
+    }
     if (!strcmp(cmd, "settings_09")) {   /* a 0.9 settings record (MVA6) stored, as 0.9 saved it: then reboot */
         settings_09_t o;
         uint32_t i;
@@ -2152,6 +2215,16 @@ int app_expect(const char *what, int *got)
         *got = (int)synth_param(SP_SUB);
     else if (!strcmp(what, "pluck"))
         *got = (int)synth_param(SP_PLUCK);
+    else if (!strcmp(what, "wave"))      /* YARD's WAVE, PW, NOISE, FILTER now */
+        *got = (int)synth_param(SP_WAVE);
+    else if (!strcmp(what, "pw"))
+        *got = (int)synth_param(SP_PW);
+    else if (!strcmp(what, "noise"))
+        *got = (int)synth_param(SP_NOISE);
+    else if (!strcmp(what, "fmode"))
+        *got = (int)synth_param(SP_FMODE);
+    else if (!strcmp(what, "yfx"))       /* YARD's FX page */
+        *got = ui.yfx;
     else if (!strcmp(what, "yard_split"))   /* YARD's blocks the second core took part in */
         *got = (int)synth_split_blocks();
     else if (!strcmp(what, "clp_glide"))   /* Clipper's sound's GLIDE (the PLAY page's, given at each load) */

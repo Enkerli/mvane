@@ -43,6 +43,44 @@ release FX
 wait 50
 expect res 62
 shot yard_fx.png
+# YARD's other FX page (SELECT): WAVE PW NOISE FILTER; WAVE a step a turn: SAW, PULSE, TRI
+press FX
+turn SELECT 1
+release FX
+wait 50
+expect yfx 1
+sound SAW
+wait 100
+expect wave 0
+press FX
+turn K1 1
+wait 50
+turn K1 1
+release FX
+wait 50
+expect wave 127
+shot yard_wave.png
+press FX
+turn K1 -1
+release FX
+wait 50
+expect wave 64
+# FLUTE, mono, a triangle and breath noise: LEADS EZ; CLAV, plucked: HITS EZ
+sound FLUTE
+wait 100
+expect family 1
+expect mono 1
+expect wave 127
+expect noise 55
+sound CLAV
+wait 100
+expect family 2
+expect fmode 127
+press FX
+turn SELECT 1
+release FX
+wait 50
+expect yfx 0
 # back to SAW
 sound SAW
 wait 100
@@ -133,6 +171,15 @@ expect chorus 6
 expect reverb 2
 sound SAW
 wait 300
+# a 0.10 settings record (YARD's nine): moved on, the new four at 0
+settings_10
+reboot
+wait 600
+expect tonic 3
+expect slot 1
+expect pluck 90
+expect wave 0
+expect noise 0
 # a 0.9 settings record: moved on (tone, release, glide, attack kept; the sound, Clipper's first as 0.9 had it)
 settings_09
 reboot

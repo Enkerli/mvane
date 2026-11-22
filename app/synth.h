@@ -10,8 +10,15 @@
 /* the master channel's CC74, CC72, CC5, CC73; then (0.10) CC75, CC71, CC20, CC21, CC22: DECAY (PLUCK's fall), RES
  * (the filter's resonance), DETUNE (a second saw), SUB (a square two octaves down), PLUCK (the level falls to a lower
  * sustain and the cutoff from five octaves up, at DECAY) */
-enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB, SP_PLUCK, SP_N };
+/* (0.11) then CC23..26: WAVE (0..42 SAW, 43..84 PULSE, 85..127 TRIANGLE), PW (the pulse's width, 50% down to 5%;
+ * pressure narrows it too), NOISE (white noise into the filter; with breath, the breath's), FILTER (0..42 LOWPASS,
+ * 43..84 BANDPASS, 85..127 HIGHPASS). Each at 0 leaves a sound as 0.10 made it */
+enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB, SP_PLUCK,
+       SP_WAVE, SP_PW, SP_NOISE, SP_FMODE, SP_N };
 #define SP_N_09 4u                       /* (0.9's settings had the first four) */
+#define SP_N_10 9u                       /* (0.10's, the first nine) */
+#define SYNTH_WAVE(v) ((v) < 43u ? 0u : (v) < 85u ? 1u : 2u)   /* 0 saw, 1 pulse, 2 triangle */
+#define SYNTH_FMODE(v) ((v) < 43u ? 0u : (v) < 85u ? 1u : 2u)  /* 0 lowpass, 1 bandpass, 2 highpass */
 #define SYNTH_CC_TONE 74u
 #define SYNTH_CC_REL 72u
 #define SYNTH_CC_GLIDE 5u
@@ -21,6 +28,10 @@ enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB
 #define SYNTH_CC_DETUNE 20u
 #define SYNTH_CC_SUB 21u
 #define SYNTH_CC_PLUCK 22u
+#define SYNTH_CC_WAVE 23u
+#define SYNTH_CC_PW 24u
+#define SYNTH_CC_NOISE 25u
+#define SYNTH_CC_FMODE 26u
 
 /* YARD's own sounds (app.c: first on PRESETS): their parameters; mono, one voice whatever PLAY says */
 typedef struct {
