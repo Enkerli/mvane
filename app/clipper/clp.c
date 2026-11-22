@@ -143,6 +143,12 @@ static uint32_t cpu1_ticks(void) { return 0; }
 #include "params.c"
 #include "voice.c"
 #include "slicer.c"
+/* (mvane yard) each sound's trim (Q15, 32768 none): Clipper's levels suit a few notes, mvane yard's chords are six
+ * (a bass and five), and the master limiter worked 11 dB on the median chord sound, audible as grit (Alex,
+ * 2026-11-22). tools/clp_trim.c measures each sound's chord (a mono sound's note) and writes gen/clp_trim.h: the gain
+ * that keeps it under the limiter, never above 1. clp_load sets it */
+static int32_t clp_trim = 32768;
+#define CLP_TRIM clp_trim
 #include "fx.c"
 static volatile uint8_t panic_req;             /* (seq.c) bit per track: release every sounding note */
 static uint8_t midi_local_off, midi_bank, midi_rpn[2] = {127, 127};
@@ -247,6 +253,14 @@ static void clp_expr_fill(track_t *t, uint32_t e, uint32_t pi)
     }
 }
 
+#if __has_include("clp_trim.h")
+#include "clp_trim.h"                           /* CLP_TRIM_Q15[engine][preset] (0: none measured, 32768) */
+#else
+static const uint16_t CLP_TRIM_Q15[NENGINES][40];
+#endif
+static uint8_t clp_trim_enabled = 1;
+void clp_trim_on(int on) { clp_trim_enabled = (uint8_t)(on != 0); }
+int32_t clp_trim_now(void) { return clp_trim; }
 static void clp_load(uint32_t e, uint32_t pi)   /* as ui.c set_engine_of + apply_preset_to: the sound, its sends */
 {
     static const uint8_t FX_DEF[4] = {0, 24, 28, 36};
@@ -286,6 +300,10 @@ static void clp_load(uint32_t e, uint32_t pi)   /* as ui.c set_engine_of + apply
     mseq_init(t);
     fm6_track_loaded(t);
     clp_expr_fill(t, e % NENGINES, pi);
+    {
+        uint32_t q = pi < 40u ? CLP_TRIM_Q15[e % NENGINES][pi] : 0u;
+        clp_trim = clp_trim_enabled && q ? (int32_t)q : 32768;
+    }
 }
 
 void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (CC2 the level, as Clipper's EWI) */

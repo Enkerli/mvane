@@ -145,6 +145,9 @@ ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
 The screen names the family as the sound changes (CHORDS LIGHT, SAMPLE CHOIR). A fast turn of PRESETS, or SELECT on
 the play pages, goes to the next family's first sound (back: this family's first, then the one before). Within a
 family, sounds of a kind are together, in Clipper's own filing: pads, organs, keys, stabs, plucks, leads, basses.
+Each of Clipper's sounds is trimmed so that a chord of six (the bass and five voices) stays under its master
+limiter: Clipper's levels suit a few notes, and a limiter working hard on a held chord is heard as grit (`make
+clp-trim`). Chord sounds are quieter than in Clipper (MASTER makes it up); none is limited more than 1.5 dB.
 WAVE is left out for now (RAM); ACID, NOISE and LOFI are out of the list. A sound saved in the settings stays the
 same across the reordering (it is kept by name, not by place). Clipper's sounds are dry, as Clipper ships them: no delay, no reverb. They respond to MPE, pressure (as
 aftertouch), the mod wheel, expression, sustain, breath, and the standard CCs (71 resonance, 72 release, 73 attack,

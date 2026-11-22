@@ -278,6 +278,21 @@ the FX layer DETUNE SUB RES PLUCK. `make yard-render` writes them to listen to: 
 more than SAW, BRASS half; mono sounds a third. SAW sounds as before (133 dB under). Next, by ear: the sounds' voicing
 and levels, a pulse or PWM, noise for breath, expression mapped deliberately.
 
+Alex on YARD's sounds (2026-11-22, cda2ed7): all light, fairly generic, doing the job; they could replace some of
+Clipper's.
+
+### M2g: levels and the master limiter (Alex, 2026-11-22)
+
+A JAZZ ORGAN recording (e2f8b22, USB AUDIO FULL, effects off) had "noise on the line": its peaks sat at exactly
+-11.2 dBFS, Clipper's master limiter's threshold (fx.c LIM_T, 18000 in Q15), which worked all the time. Clipper's
+levels suit a few notes; mvane yard's chords are six: with a chord of six at full level, the median polyphonic sound
+was limited 11.5 dB (a quarter over 17 dB; mono sounds, a note, about 1 dB). **Done:** each sound's trim before the
+master and the limiters (`make clp-trim`, gen/clp_trim.h, fx.c CLP_TRIM): 295 sounds trimmed, none limited over
+1.5 dB now. Chord sounds are 3 to 8 dB quieter on average; the ceiling is the same.
+
+Also from Alex: Clipper's default reverb sounds too metallic (FX held, SELECT changes the model); choose a warmer
+default. YARD's sounds have no effects of their own: their character is different, which is interesting.
+
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
   weights (`packages/proggen/src/curation.js` in music-suite). Phrases come out as chord events that
@@ -306,6 +321,10 @@ and levels, a pulse or PWM, noise for breath, expression mapped deliberately.
   the device.
 - A web editor on WebMIDI and fm1-base's companion services: patches, takes (with MIDI export in the page), settings,
   backup. fm1-base's `web/companion` page is the starting point; Clipper's editor is the model for the UI.
+- **Patch files** (Alex, 2026-11-22: "now that we have a bunch of patches"): YARD's sounds first (nine parameters and
+  a name: a small file each, over the companion service as the takes go, edited on the page, shared with the
+  plugin), then a Clipper sound as edited (its engine and preset, the parameters changed from it, the matrix, the
+  macros and sends).
 - **A compact take ("efficiency mode")** (Alex, 2026-11-22): the baseline phrase is 24,164 events for 123 notes.
   Dense controller streams (bend, pressure, slide every few ms) could be thinned where a straight line between kept
   points stays within a tolerance (as a line simplification), on capture or on export, keeping the gesture while

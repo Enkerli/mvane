@@ -1534,6 +1534,14 @@ static void mix_block(int32_t *out, uint32_t n)
     {
         static int32_t ol[CTL], orr[CTL], ul[CTL], ur[CTL];
         static uint8_t usb_was;
+#ifdef CLP_TRIM
+        if (CLP_TRIM < 32768)                           /* (mvane yard) the sound's trim, before the master and the
+                                                         * limiters: a chord of six held under the limiter (clp.c) */
+            for (i = 0; i < n; i++) {
+                mix_l[i] = (int32_t)(((int64_t)clamp(mix_l[i], -MIX_MAX, MIX_MAX) * CLP_TRIM) >> 15);
+                mix_r[i] = (int32_t)(((int64_t)clamp(mix_r[i], -MIX_MAX, MIX_MAX) * CLP_TRIM) >> 15);
+            }
+#endif
         for (i = 0; i < n; i++) {
             int32_t m = m0 + (((m1 - m0) * (int32_t)i) >> CTL_LOG2);
             int32_t xl = clamp(mix_l[i], -MIX_MAX, MIX_MAX), xr = clamp(mix_r[i], -MIX_MAX, MIX_MAX);

@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -77,3 +77,10 @@ yard-render:   # YARD's sounds to listen to (build/desktop/yard_sounds.wav), and
 	@mkdir -p $(B)
 	$(CC) -O2 -std=gnu99 -Wall -Wextra -Werror -Ibase/include tools/yard_render.c -o $(B)/yard_render -lm -lpthread
 	$(B)/yard_render $(B)/yard_sounds.wav
+
+clp-trim:   # each Clipper sound's trim: a chord of six under the master limiter (app/clipper/gen/clp_trim.h)
+	@mkdir -p $(B)
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_trim.c -o $(B)/clp_trim -lm
+	$(B)/clp_trim app/clipper/gen/clp_trim.h
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_trim.c -o $(B)/clp_trim -lm
+	$(B)/clp_trim $(B)/clp_trim_again.h check
