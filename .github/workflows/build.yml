@@ -41,6 +41,7 @@ jobs:
           make synth-cmp
           make clp-split
           make clp-race
+          make yard-race
 
       - name: Host simulator checks
         run: |
@@ -49,6 +50,7 @@ jobs:
           app/build/host/mvane-yard_host app/tests/migrate.txt app/build/host | tee -a host.log
           app/build/host/mvane-yard_host app/tests/queue.txt app/build/host | tee -a host.log
           app/build/host/mvane-yard_host app/tests/combos.txt app/build/host | tee -a host.log
+          app/build/host/mvane-yard_host app/tests/yard.txt app/build/host | tee -a host.log
           ! grep -q '^FAIL' host.log
 
       - name: File transfer checks (the take as MIDI, a MIDI file in; the page's conversions)

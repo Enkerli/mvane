@@ -1,0 +1,57 @@
+# YARD, mvane yard's own synth (0.10): its sounds first on PRESETS, their parameters, mono ones, the second core, the
+# FX layer as its second page, a 0.9 settings record moved on. app/build/host/mvane-yard_host app/tests/yard.txt app/build/host
+wait 600
+expect sound 0
+expect family -1
+expect res 0
+expect pluck 0
+# a chord on SAW: its voices over both cores
+key 0 down 100
+wait 200
+expect voices 6
+expect yard_split >0
+shot yard_saw.png
+key 0 up
+wait 100
+# the next YARD sound, PAD: its parameters; GLIDE stays the PLAY page's
+turn PRESET 1
+wait 100
+expect sound 1
+expect detune 72
+expect glide 30
+# PLUCK, then LEAD: mono, whatever PLAY says
+turn PRESET 3
+wait 100
+expect sound 4
+expect pluck 112
+turn PRESET 2
+wait 100
+expect sound 6
+expect mono 1
+key 0 down 100
+wait 100
+expect voices 1
+key 0 up
+wait 100
+# the FX layer on YARD: DETUNE SUB RES PLUCK (K3: RES)
+press FX
+turn K3 5
+release FX
+wait 50
+expect res 62
+shot yard_fx.png
+# back to SAW
+turn PRESET -6
+wait 100
+expect sound 0
+expect res 0
+expect mono 0
+# a 0.9 settings record: moved on (tone, release, glide, attack kept; the sound, Clipper's first as 0.9 had it)
+settings_09
+reboot
+wait 600
+expect tonic 5
+expect slot 2
+expect glide 30
+expect sound_key 3072
+expect res 0

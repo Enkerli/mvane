@@ -35,14 +35,15 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
-#define SET_MAGIC 0x4D564136u            /* "MVA6" */
+#define SET_MAGIC 0x4D564137u            /* "MVA7" (0.10: YARD's nine parameters); 0.9's "MVA6" is read and moved on */
+#define SET_MAGIC_09 0x4D564136u
 typedef struct {
     uint32_t magic;
     uint8_t mode;                        /* 0 notes, 1 chords */
     uint8_t tonic;                       /* 0 C .. 11 B */
     uint8_t scale;                       /* CHORD_SCALES */
     int8_t octave;                       /* -2 .. +2 */
-    uint8_t p[SP_N];                     /* tone, release, glide, attack: 0..127 */
+    uint8_t p[SP_N];                     /* YARD's: tone, release, glide, attack, decay, res, detune, sub, pluck: 0..127 */
     uint8_t type, style, bass, usb_full;
     uint8_t voices;                      /* upper voices, 3..6 */
     uint8_t bank;                        /* black keys: 0 types from the scale, 1 fixed qualities */
@@ -56,12 +57,21 @@ typedef struct {
     uint8_t bend;                        /* the MPE members' bend range sent: BEND_RANGES[bend] */
     uint8_t page;                        /* the knobs' page: 0 PLAY, 1 SOUND */
 } settings_t;
+typedef struct {                         /* 0.9's record (MVA6): the same, YARD's first four parameters only */
+    uint32_t magic;
+    uint8_t mode, tonic, scale;
+    int8_t octave;
+    uint8_t p[SP_N_09];
+    uint8_t type, style, bass, usb_full, voices, bank, play, slot;
+    uint16_t sound;
+    uint8_t quant, mpe_out, bend, page;
+} settings_09_t;
 static settings_t set;
 static uint8_t set_dirty;
 
 static void settings_defaults(void)
 {
-    static const uint8_t P[SP_N] = {56, 60, 30, 24};
+    static const uint8_t P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0};   /* (YARD SAW: yard_presets' first) */
     uint32_t i;
     set.magic = SET_MAGIC;
     set.mode = 1;
@@ -87,7 +97,23 @@ static void settings_defaults(void)
 static void settings_load(void)
 {
     uint32_t i, bad = 0;
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC)
+    union {
+        settings_t now;
+        settings_09_t old;
+    } r;
+    int n = plat_store_load(OBJ_SETTINGS, &r, sizeof r);
+    if (n == (int)sizeof r.now && r.now.magic == SET_MAGIC)
+        set = r.now;
+    else if (n == (int)sizeof r.old && r.old.magic == SET_MAGIC_09) {   /* 0.9's: moved on, YARD's new ones as SAW's */
+        settings_09_t o = r.old;
+        settings_defaults();
+        set.mode = o.mode, set.tonic = o.tonic, set.scale = o.scale, set.octave = o.octave;
+        for (i = 0; i < SP_N_09; i++)
+            set.p[i] = o.p[i];
+        set.type = o.type, set.style = o.style, set.bass = o.bass, set.usb_full = o.usb_full, set.voices = o.voices;
+        set.bank = o.bank, set.play = o.play, set.slot = o.slot, set.sound = o.sound;
+        set.quant = o.quant, set.mpe_out = o.mpe_out, set.bend = o.bend, set.page = o.page;
+    } else
         bad = 1;
     for (i = 0; i < SP_N; i++)
         bad |= set.p[i] > 127u;
@@ -98,19 +124,30 @@ static void settings_load(void)
         settings_defaults();
 }
 
+#define YARD SYNTH_SOUNDS                  /* YARD's own sounds, first on PRESETS (synth.c) */
+#define NYARD ((uint32_t)SYNTH_NSOUNDS)
+static int clp_on(void) { return set.sound >= NYARD; }             /* a Clipper sound plays */
+static uint32_t clp_at(void) { return set.sound - NYARD; }         /* .. its index in clp's list */
+static uint32_t yard_at(void) { return set.sound < NYARD ? set.sound : 0u; }
+
 /* the sound as stored to its place in the list (after clp_init), and back (to store) */
 static void sound_from_store(void)
 {
-    uint32_t key, i;
-    if (!set.sound)
+    uint32_t key, i, v = set.sound;
+    if (v < 0x4000u && v)                /* before 0.10: 1.. a Clipper sound, its place in the order as made */
+        key = clp_sound_old_key(v - 1u);
+    else if (v & 0x8000u)                /* 0.10: 0x8000 | its key */
+        key = v & 0x7FFFu;
+    else {                               /* 0 (the saw), or 0x4000 | a YARD sound */
+        set.sound = (uint16_t)((v & 0x3FFFu) < NYARD ? v & 0x3FFFu : 0u);
         return;
-    key = set.sound & 0x8000u ? set.sound & 0x7FFFu : clp_sound_old_key(set.sound - 1u);
+    }
     i = clp_sound_of_key(key);
-    set.sound = (uint16_t)(i < clp_sounds() ? i + 1u : 0u);
+    set.sound = (uint16_t)(i < clp_sounds() ? i + NYARD : 0u);
 }
 static uint16_t sound_to_store(void)
 {
-    return (uint16_t)(set.sound ? 0x8000u | (clp_sound_key(set.sound - 1u) & 0x7FFFu) : 0u);
+    return (uint16_t)(clp_on() ? 0x8000u | (clp_sound_key(clp_at()) & 0x7FFFu) : 0x4000u | set.sound);
 }
 
 /* ------------------------------------------------------------- the render --- */
@@ -225,18 +262,24 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 
 void app_panic(void) { synth_panic(); clp_panic(); }
 
+static void yard_mode(void)              /* YARD's mono: PLAY's MONO, or the sound's own */
+{
+    synth_mode((set.play & 1u) | YARD[yard_at()].mono, set.play >> 1);
+}
 static void sound_apply(void)            /* the sound setting to the engines (main loop) */
 {
-    if (set.sound > clp_sounds())
+    if (set.sound >= NYARD + clp_sounds())
         set.sound = 0;
-    if (set.sound)
-        clp_select(set.sound - 1u);
-    eng_want = set.sound != 0;
-    if (set.sound)                       /* the PLAY page's GLIDE is the player's, not the sound's: Clipper's sound
+    if (clp_on())
+        clp_select(clp_at());
+    else
+        yard_mode();
+    eng_want = (uint8_t)clp_on();
+    if (clp_on())                        /* the PLAY page's GLIDE is the player's, not the sound's: Clipper's sound
                                           * loads its own, so it gets the knob's again (its CC5, after the load) */
         synth_send(0xB0u, SYNTH_CC_GLIDE, synth_param(SP_GLIDE));
 }
-static int sound_mono(void) { return set.sound && clp_sound_mono(set.sound - 1u); }
+static int sound_mono(void) { return clp_on() ? clp_sound_mono(clp_at()) : YARD[yard_at()].mono; }
 static void sound_change_hold(void);     /* (below: what sounds lets go, a held chord comes back on the new sound) */
 
 /* --------------------------------------------------------------------- bus --- */
@@ -409,7 +452,11 @@ void app_init(void)
     synth_mode(set.play & 1u, set.play >> 1);
     clp_init();
     sound_from_store();
-    clp_cores(plat_cpu2_set(1) == 0 ? 2u : 1u);   /* the second core renders half of Clipper's voices */
+    if (plat_cpu2_set(1) == 0) {         /* the second core renders half the voices, Clipper's or YARD's */
+        clp_cores(2u);
+        synth_cores(plat_cpu2_run, plat_cpu2_wait);
+    } else
+        clp_cores(1u);
     clp_mode(set.play & 1u, set.play >> 1);
     sound_apply();
 }
@@ -759,19 +806,7 @@ static void capture(uint32_t gap)
     app_say(gap ? "PHRASE" : "ALL", t);
 }
 
-static const char *sound_name(void) { return set.sound ? clp_sound_name(set.sound - 1u) : "SAW"; }
-
-static const char *sound_label(void)    /* the sound's name, then MONO for a mono sound and HEAVY for a costly one */
-{
-    static char t[32];
-    t[0] = 0;
-    text_cat(t, sound_name());
-    if (sound_mono())
-        text_cat(t, " MONO");
-    if (set.sound && clp_sound_cost(set.sound - 1u) == 2u)
-        text_cat(t, " HEAVY");
-    return t;
-}
+static const char *sound_name(void) { return clp_on() ? clp_sound_name(clp_at()) : YARD[yard_at()].name; }
 
 /* a new sound: what sounds lets go first (the engine fades it out and the notes would be lost to it); a chord kept
  * by HOLD, or held under a finger, sounds again on the new sound once its switch is done (Clipper fades for 6 ms, and
@@ -791,11 +826,11 @@ static void sound_change_hold(void)
 }
 
 /* PRESETS turned: a sound on or back; a fast turn, the next family's first sound (or this one's, then the one before):
- * YARD (the saw), CHORDS LIGHT, CHORDS, HITS LIGHT, HITS, LEADS, OTHER (clp_sound_family) */
-static int32_t sound_fam(uint32_t s) { return s ? (int32_t)clp_sound_family(s - 1u) : -1; }
+ * YARD (mvane yard's own), CHORDS LIGHT, CHORDS, HITS LIGHT, HITS, LEADS, OTHER (clp_sound_family) */
+static int32_t sound_fam(uint32_t s) { return s >= NYARD ? (int32_t)clp_sound_family(s - NYARD) : -1; }
 static void sound_step(int32_t e)
 {
-    uint32_t ns = clp_sounds() + 1u, s = set.sound;
+    uint32_t ns = NYARD + clp_sounds(), s = set.sound;
     if (e > 4) {
         int32_t f = sound_fam(s);
         while (s + 1u < ns && sound_fam(s) == f)
@@ -816,6 +851,19 @@ static void sound_step(int32_t e)
     } else
         s = (s + ns + (e > 0 ? 1u : ns - 1u)) % ns;
     set.sound = (uint16_t)s;
+}
+static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the next sound, said; a YARD sound brings
+                                          * its parameters (GLIDE stays the PLAY page's) */
+{
+    uint32_t i;
+    sound_step(e);
+    if (!clp_on())
+        for (i = 0; i < SP_N; i++)
+            if (i != SP_GLIDE)
+                synth_set(i, YARD[set.sound].p[i]), knob[i] = YARD[set.sound].p[i];
+    set_dirty = 1;
+    sound_change_hold();
+    app_say(clp_on() ? clp_family_name(clp_sound_family(clp_at())) : "YARD", sound_name());
 }
 
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
@@ -856,8 +904,10 @@ static const char *layer_name(int32_t l)
 
 static void knob_info(uint32_t i, const char **label, char *val)
 {
-    static const char *const SAW_N[4] = {"TONE", "ATTACK", "RELEASE", "GLIDE"};
-    static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_REL, SP_GLIDE};
+    static const char *const SAW_N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
+    static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
+    static const char *const YFX_N[4] = {"DETUNE", "SUB", "RES", "PLUCK"};   /* YARD's second page (no effects) */
+    static const uint8_t YFX_P[4] = {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
     static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
     int32_t l = layer_now();
@@ -875,11 +925,8 @@ static void knob_info(uint32_t i, const char **label, char *val)
         else
             text_cat(val, set.bank ? "QUALITY" : "SCALE");
     } else if (l == B_FX) {
-        *label = FX_N[i];
-        if (set.sound)
-            int_text((int32_t)clp_fx(i), val);
-        else
-            text_cat(val, "-");
+        *label = clp_on() ? FX_N[i] : YFX_N[i];
+        int_text(clp_on() ? (int32_t)clp_fx(i) : (int32_t)synth_param(YFX_P[i]), val);
     } else if (l == B_GLO) {
         static const char *const N[4] = {"PLAY", "USB AUDIO", "MPE OUT", "BEND"};
         *label = N[i];
@@ -907,10 +954,10 @@ static void knob_info(uint32_t i, const char **label, char *val)
             text_cat(val, CHORD_SCALES[set.scale].name);
         else
             int_text(knob[SP_GLIDE], val);
-    } else if (set.sound) {              /* SOUND: Clipper's four macros */
+    } else if (clp_on()) {               /* SOUND: Clipper's four macros */
         *label = MAC_N[i];
         int_text((int32_t)clp_macro(i), val);
-    } else {                             /* SOUND: mvane yard's saw */
+    } else {                             /* SOUND: YARD's */
         *label = SAW_N[i];
         int_text((int32_t)synth_param(SAW_P[i]), val);
     }
@@ -930,7 +977,7 @@ static void play_set(uint32_t p)         /* POLY / MONO / +BREATH, both engines 
     set.play = (uint8_t)(p & 3u);
     set_dirty = 1;
     all_off();
-    synth_mode(set.play & 1u, set.play >> 1);
+    yard_mode();
     clp_mode(set.play & 1u, set.play >> 1);
     app_say("PLAY", PLAY_N[set.play]);
 }
@@ -955,8 +1002,11 @@ static void knob_turn(uint32_t i, int32_t e)
     } else if (l == B_FX) {
         static const uint8_t CC[4] = {12, 93, 94, 91};   /* DRIVE (mvane yard's CC 12), CHORUS, DELAY, REVERB */
         static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
-        if (!set.sound) {
-            app_say("FX", "CLIPPER SOUNDS");
+        if (!clp_on()) {                 /* YARD: no effects; its second page */
+            static const uint8_t P[4] = {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK};
+            static const uint8_t YC[4] = {SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK};
+            static const char *const N[4] = {"DETUNE", "SUB", "RES", "PLUCK"};
+            turn_knob(P[i], YC[i], e, N[i]);
             return;
         }
         cc_turn(CC[i], clp_fx(i), e, FX_N[i]);
@@ -995,14 +1045,14 @@ static void knob_turn(uint32_t i, int32_t e)
             return;
         }
         set_dirty = 1;
-    } else if (set.sound) {
+    } else if (clp_on()) {
         static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
         cc_turn(16u + i, clp_macro(i), e, MAC_N[i]);   /* Clipper's macros, CC 16..19: recorded */
         return;
     } else {
-        static const uint8_t P[4] = {SP_TONE, SP_ATTACK, SP_REL, SP_GLIDE};
-        static const uint8_t CC[4] = {SYNTH_CC_TONE, SYNTH_CC_ATTACK, SYNTH_CC_REL, SYNTH_CC_GLIDE};
-        static const char *const N[4] = {"TONE", "ATTACK", "RELEASE", "GLIDE"};
+        static const uint8_t P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
+        static const uint8_t CC[4] = {SYNTH_CC_TONE, SYNTH_CC_ATTACK, SYNTH_CC_DECAY, SYNTH_CC_REL};
+        static const char *const N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
         turn_knob(P[i], CC[i], e, N[i]);
         return;
     }
@@ -1021,7 +1071,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
             chord_sound();
         app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
     } else if (l == B_FX) {              /* the reverb's model */
-        if (set.sound)
+        if (clp_on())
             app_say("REVERB", clp_reverb_step(d));
     } else if (l == B_GLO) {             /* USB: a computer, or host to a MIDI device (the Diosynth) */
         plat_usb_host(e > 0);
@@ -1029,11 +1079,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
     } else if (l == B_SEQ)
         slot_step(d);
     else {                               /* the play pages: the next / previous family's first sound */
-        sound_step(d > 0 ? 5 : -5);
-        set_dirty = 1;
-        sound_change_hold();
-        app_say(set.sound ? clp_family_name(clp_sound_family(set.sound - 1u)) : "YARD",
-                set.sound ? clp_sound_name(set.sound - 1u) : "SAW");
+        sound_pick(d > 0 ? 5 : -5);
     }
 }
 
@@ -1191,11 +1237,7 @@ static void input(void)
             set_dirty = 1;
             app_say("MODE", set.mode ? "CHORDS" : "NOTES");
         } else if (k == EN_PRESET) {     /* PRESETS: the sound (0 mvane yard's saw, then Clipper's by family) */
-            sound_step(e);
-            set_dirty = 1;
-            sound_change_hold();
-            app_say(set.sound ? clp_family_name(clp_sound_family(set.sound - 1u)) : "YARD",
-                    set.sound ? clp_sound_name(set.sound - 1u) : "SAW");
+            sound_pick(e);
         } else if (k == EN_SELECT)
             select_turn(e);
         else
@@ -1354,18 +1396,16 @@ static void draw(void)
         const char *ps = sound_mono() && !(set.play & 1u) ? "MONO SOUND" : PLAY_S[set.play];
         char x[12];
         int32_t l, r = 230, w;
-        uint32_t c = set.sound ? clp_sound_cost(set.sound - 1u) : 0u;
+        uint32_t c = clp_on() ? clp_sound_cost(clp_at()) : 0u;
         t[0] = 0;
         text_cat(t, "CPU ");
         int_text((int32_t)plat_cpu_pct(), x);
         text_cat(t, x);
         text_cat(t, "%");
         l = cv_text(10, 81, &FONT_S, t, C_WHITE) + 4;
-        if (set.sound)                   /* Clipper's sound: x2 while the second core takes half its voices, x1 when
-                                          * it does not run (not started, or given up: plat_cpu2_gave_up) */
-            l = cv_text(l, 82, &FONT_XS, plat_cpu2_on() ? "x2" : "x1", plat_cpu2_on() ? C_GRAY : C_HI) + 10;
-        else
-            l += 6;
+        /* x2 while the second core takes half the voices (Clipper's and YARD's), x1 when it does not run (not
+         * started, or given up: plat_cpu2_gave_up) */
+        l = cv_text(l, 82, &FONT_XS, plat_cpu2_on() ? "x2" : "x1", plat_cpu2_on() ? C_GRAY : C_HI) + 10;
         t[0] = 0;
         text_cat(t, "XR ");
         int_text((int32_t)plat_xruns(), x);
@@ -1538,6 +1578,17 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         printf("ok\n");
         return 1;
     }
+    if (!strcmp(cmd, "settings_09")) {   /* a 0.9 settings record (MVA6) stored, as 0.9 saved it: then reboot */
+        settings_09_t o;
+        uint32_t i;
+        o.magic = SET_MAGIC_09, o.mode = 1, o.tonic = 5, o.scale = 0, o.octave = 0;
+        for (i = 0; i < SP_N_09; i++)
+            o.p[i] = (uint8_t)(10u + 10u * i);   /* tone 10, release 20, glide 30, attack 40 */
+        o.type = CHORD_BANK + 1u, o.style = CHORD_OPEN, o.bass = 1, o.usb_full = 1, o.voices = 5, o.bank = 1;
+        o.play = 0, o.slot = 2, o.sound = 1, o.quant = 1, o.mpe_out = 1, o.bend = 2, o.page = 0;
+        printf(plat_store_save(OBJ_SETTINGS, &o, sizeof o) ? "fail\n" : "ok\n");
+        return 1;
+    }
     if (strcmp(cmd, "flood"))
         return 0;
     n = (uint32_t)atoi(a);
@@ -1600,7 +1651,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "cores"))   /* the second core takes jobs: 2, else 1 */
         *got = plat_cpu2_on() ? 2 : 1;
     else if (!strcmp(what, "sound_key"))   /* engine << 8 | preset of the sound (-1: the saw); stored: as saved */
-        *got = set.sound ? (int)clp_sound_key(set.sound - 1u) : -1;
+        *got = clp_on() ? (int)clp_sound_key(clp_at()) : -1;
     else if (!strcmp(what, "sound_stored"))
         *got = sound_to_store();
     else if (!strcmp(what, "mono"))     /* the sound is a mono one */
@@ -1627,6 +1678,18 @@ int app_expect(const char *what, int *got)
         *got = (int)take.duration_ms;
     else if (!strcmp(what, "playing"))
         *got = player.playing;
+    else if (!strcmp(what, "decay"))     /* YARD's parameters now */
+        *got = (int)synth_param(SP_DECAY);
+    else if (!strcmp(what, "res"))
+        *got = (int)synth_param(SP_RES);
+    else if (!strcmp(what, "detune"))
+        *got = (int)synth_param(SP_DETUNE);
+    else if (!strcmp(what, "sub"))
+        *got = (int)synth_param(SP_SUB);
+    else if (!strcmp(what, "pluck"))
+        *got = (int)synth_param(SP_PLUCK);
+    else if (!strcmp(what, "yard_split"))   /* YARD's blocks the second core took part in */
+        *got = (int)synth_split_blocks();
     else if (!strcmp(what, "clp_glide"))   /* Clipper's sound's GLIDE (the PLAY page's, given at each load) */
         *got = (int)clp_glide();
     else if (!strcmp(what, "glide"))

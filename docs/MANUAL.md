@@ -36,7 +36,7 @@ The four knobs' names are on the screen above them, and the one you turn lights 
 | --- | --- | --- | --- | --- |
 | **PLAY** (as Coral Flower's) | QUANT (off, basic, full) | KEY | SCALE | GLIDE |
 | **SOUND**, Clipper's sounds | BRITE | TIMBR | MOTN | SPACE (Clipper's four macros) |
-| **SOUND**, mvane yard's saw | TONE | ATTACK | RELEASE | GLIDE |
+| **SOUND**, YARD's sounds | TONE | ATTACK | DECAY (PLUCK's fall) | RELEASE |
 
 Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 to 74), so a take replays it.
 
@@ -46,6 +46,7 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 | --- | --- | --- | --- | --- | --- |
 | **EDIT**: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
+| **FX** (YARD's sounds: no effects, its second page) | DETUNE (a second saw) | SUB (a square an octave down) | RES (resonance) | PLUCK (from a pad to a pluck) | |
 | **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
@@ -121,8 +122,17 @@ MAJOR (2741), MINOR (1453), DORIAN (1709), HARM MIN (2477), PENTA (661), PCO (17
 
 ### Sounds
 
-PRESETS steps through mvane yard's saw (YARD: a band-limited saw through a key-tracked lowpass, dark to bright), then
-Clipper's factory sounds (337) in families, by how each behaves (the full list: [SOUNDS.md](SOUNDS.md)):
+PRESETS steps through **YARD**, mvane yard's own synth, then Clipper's factory sounds (337) in families, by how each
+behaves (the full list: [SOUNDS.md](SOUNDS.md)).
+
+**YARD** (9 sounds: SAW, PAD, ENSEMBLE, KEYS, PLUCK, BRASS; LEAD, BASS, WIND mono): a band-limited saw, a second one
+detuned (DETUNE), a square an octave down (SUB), through a lowpass that follows the note (TONE: dark to bright; RES its
+resonance), 18 dB/oct; PLUCK lowers the sustain and opens the filter from five octaves up at each note, falling at
+DECAY: one knob from a pad to a pluck. Pressure brightens, slide (CC74) moves the cutoff, breath (POLY+BR, MONO+BR)
+is the level. The lightest sounds here (SAW about 12% of the FM-1 with a chord; BRASS, the heaviest, about half as
+much again), its voices over both cores. A YARD sound brings its parameters; GLIDE stays the PLAY page's; LEAD, BASS
+and WIND play one voice whatever PLAY says. Every knob is recorded in the history as a CC on channel 1 (TONE 74,
+ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
 
 | Family | What | For |
 | --- | --- | --- |

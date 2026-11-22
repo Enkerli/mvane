@@ -29,9 +29,9 @@ flood 0 off
 wait 50
 expect voices 0
 # on a Clipper sound too
-turn PRESET 1
+spin PRESET 9
 wait 300
-expect sound 1
+expect family 0
 # (the PLAY page's GLIDE reaches the new sound as it loads: not only when the knob turns)
 expect clp_glide >0
 key 0 down 100
@@ -43,6 +43,6 @@ expect voices 0
 shot queue_clipper.png
 key 0 up
 wait 50
-turn PRESET -1
+spin PRESET -9
 wait 100
 expect sound 0

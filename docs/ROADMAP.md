@@ -270,6 +270,14 @@ level and brightness, slide to timbre), its voices on the second core (half each
 (pads, keys, leads), and, later, the WindCore voice beside it (M8). Each addition measured (`make synth-cmp`'s
 renders, the FM-1's CPU) and heard.
 
+**Done in 0.10-dev:** DETUNE (a second saw, up to 30 cents), SUB (a square an octave down), RES, PLUCK (one macro:
+the sustain lower, a filter contour from five octaves up) and DECAY; the voices' upper half on the second core (a
+chord spreads over both halves; `make yard-race`: ThreadSanitizer, within one step of 24 bits); nine sounds (SAW, PAD,
+ENSEMBLE, KEYS, PLUCK, BRASS; LEAD, BASS, WIND mono), first on PRESETS; the SOUND page TONE ATTACK DECAY RELEASE,
+the FX layer DETUNE SUB RES PLUCK. `make yard-render` writes them to listen to: on a Mac, DETUNE costs about a third
+more than SAW, BRASS half; mono sounds a third. SAW sounds as before (133 dB under). Next, by ear: the sounds' voicing
+and levels, a pulse or PWM, noise for breath, expression mapped deliberately.
+
 ### M3: ProgGenie on the device
 - Port ProgGenie's engine to C in `core/proggen`: corpus transition tables (compact, in flash) and the curation
   weights (`packages/proggen/src/curation.js` in music-suite). Phrases come out as chord events that

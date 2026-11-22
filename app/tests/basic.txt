@@ -253,17 +253,19 @@ wait 600
 expect slot 1
 expect take_ms 1590
 shot slots.png
-# the sound: PRESETS through Clipper's factory sounds and back to mvane yard's saw; a chord sounds on each
+# the sound: PRESETS from YARD's to Clipper's (a fast turn: the next family) and back to mvane yard's saw; a chord
+# sounds on each
 expect sound 0
-turn PRESET 1
+expect family -1
+spin PRESET 9
 wait 300
-expect sound 1
+expect family 0
 key 0 down 100
 wait 200
 shot clipper.png
 key 0 up
 wait 100
-turn PRESET -1
+spin PRESET -9
 wait 100
 expect sound 0
 # QUANT (the PLAY page's K1): BASIC by default; NOTES: a black key snaps to the scale (C# to C); OFF: as printed
@@ -300,10 +302,11 @@ key 0 up
 wait 50
 # a chord kept by HOLD, across a sound change from a poly sound to a mono one: it sounds again on the new sound, and
 # the next chord plays (before 0.9 it waited for HOLD to be pressed again)
-turn PRESET 1
+spin PRESET 9
+wait 50
 turn PRESET 1
 wait 200
-expect sound 2
+expect family 0
 tapkey 25 90
 expect hold 1
 tapkey 0 90
