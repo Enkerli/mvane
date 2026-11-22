@@ -1264,9 +1264,15 @@ static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous sl
 static const char *const QUANT_N[3] = {"OFF", "BASIC", "FULL"};
 static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
 static int32_t layer_now(void) { return ui.held >= 0 ? ui.held : ui.latched; }
+static int clp_on(void);
+/* EDIT follows the knobs' page (Alex, 2026-11-22): on PLAY the chords' layer, on SOUND the sound's own editing (a
+ * YARD sound: its two pages, SELECT between; FX shows them too). The layer the knobs answer to */
+static int sound_edit(void) { return layer_now() == B_EDIT && set.page && !clp_on(); }
+static int32_t layer_knobs(void) { return sound_edit() ? B_FX : layer_now(); }
 static const char *layer_name(int32_t l)
 {
-    return l == B_EDIT ? "CHORD" : l == B_FX ? "FX" : l == B_GLO ? "SETTINGS" : l == B_SEQ ? "TAKES" : 0;
+    return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX" : l == B_GLO ? "SETTINGS"
+           : l == B_SEQ ? "TAKES" : 0;
 }
 
 static void knob_info(uint32_t i, const char **label, char *val)
@@ -1278,7 +1284,7 @@ static void knob_info(uint32_t i, const char **label, char *val)
     static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
     static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
-    int32_t l = layer_now();
+    int32_t l = layer_knobs();
     val[0] = 0;
     *label = "";
     if (l == B_EDIT) {
@@ -1360,7 +1366,7 @@ static void play_set(uint32_t p)         /* POLY / MONO / +BREATH, both engines 
 
 static void knob_turn(uint32_t i, int32_t e)
 {
-    int32_t l = layer_now(), d = e > 0 ? 1 : -1;
+    int32_t l = layer_knobs(), d = e > 0 ? 1 : -1;
     const char *label;
     char val[16];
     if (l == B_EDIT) {
@@ -1447,7 +1453,7 @@ static void knob_turn(uint32_t i, int32_t e)
 
 static void select_turn(int32_t e)       /* SELECT: what the context lists */
 {
-    int32_t l = layer_now(), d = e > 0 ? 1 : -1;
+    int32_t l = layer_knobs(), d = e > 0 ? 1 : -1;
     if (l == B_EDIT) {                   /* the chord type, in its bank */
         set.type = (uint8_t)(set.bank * CHORD_BANK + (set.type % CHORD_BANK + CHORD_BANK + (uint32_t)d) % CHORD_BANK);
         ui.qlatch = (uint16_t)(1u << (set.type % CHORD_BANK));   /* (one quality: SELECT steps through them alone) */
@@ -1582,7 +1588,8 @@ static void input(void)
                 app_say("TAKE", "PLAYING");
             } else
                 app_say("TAKE", "EMPTY");
-        } else if (k == B_SAVE && layer_now() == B_FX) {   /* FX and SAVE: this sound kept, YARD's or Clipper's */
+        } else if (k == B_SAVE && (layer_now() == B_FX || sound_edit())) {   /* FX (or EDIT on SOUND) and SAVE: this
+                                                                             * sound kept, YARD's or Clipper's */
             if (ui.held >= 0)
                 ui.held_used = 1;
             if (clp_on())
@@ -1700,6 +1707,10 @@ static void draw(void)
             cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
         cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   REC, PLAY, SAVE AS EVER", C_GRAY);
+    } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's two pages */
+        cv_text(10, 4, &FONT_S, ui.yfx ? "WAVE  PW  NOISE  FILTER" : "DETUNE  SUB  RES  PLUCK", C_WHITE);
+        cv_text(10, 22, &FONT_S, ui.yfx ? "DETUNE  SUB  RES  PLUCK" : "WAVE  PW  NOISE  FILTER", C_GRAY);
+        cv_text(10, 44, &FONT_XS, "SELECT: THE OTHER PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_EDIT) {          /* CHORD: the black keys' types in this bank */
         int32_t x = 10;
         for (i = 0; i < CHORD_BANK; i++) {

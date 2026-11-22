@@ -318,15 +318,21 @@ Alex on 0.10-beta (2026-11-22):
 - **SUB** two octaves down (0.11).
 - **Xruns**: not at a change of sound (PK 0, SW 10); one while a file came from the computer (flash writes stop the
   audio for each sector erased). The bottom line now tells them apart (n SW, n FL).
-- **Versions**: 0.11, 0.12 ... 0.99 (fm1-base's identity takes two digits a part: no 0.100; then 1.0, or 0.99.1).
+- **Versions**: releases 0.11, 0.12 ... 0.99 (fm1-base's identity takes two digits a part: no 0.100; then 1.0, or
+  0.99.1). CI's builds: 0.11.N+COMMIT, N the commits since the last release (Alex: so they count up).
+- **SAW's glitches are after the DAC**: Alex's USB recording is clean (peaks -10.4 dBFS, nothing flattened). The
+  firmware's lever is the analog level (app.h APP_GAIN: MASTER's curve, the speaker's only with USB AUDIO FULL): a
+  setting to cap it, if the glitches come with level.
 
 Then, from Alex's list:
 - **YARD's sound itself editable. Done in 0.11-dev:** WAVE (SAW, PULSE, TRIANGLE: the pulse two band-limited saws a
   width apart), PW (pressure narrows it: PWM under the fingers), NOISE (with breath, the breath's), FILTER (LOW,
   BAND, HIGH from the same SVF); a second FX page (SELECT); HOLLOW, CLAV, FLUTE, REED, and WIND now a triangle with
   breath noise. Each at 0 leaves a sound as before (SAW bit for bit). Settings MVA8 (0.10's MVA7 read); the bank's
-  YARD entries have room (0.10's read with the four at 0). Next, by ear: an LFO (vibrato, PWM), the envelope's
-  shape, a pitch envelope for plucks.
+  YARD entries have room (0.10's read with the four at 0). No LFO (Alex: "not in my house"): movement comes from
+  playing (pressure narrows the pulse). **Sound editing on EDIT** (Alex): EDIT follows the knobs' page, the chords'
+  layer on PLAY, the sound's editing on SOUND (YARD's two pages now). Next: the same for Clipper's sounds (its
+  engine's eight values, its envelope), once YARD's is tried on the FM-1.
 - **Clipper's sounds as patch files. Done in 0.11-dev:** a factory sound and up to 14 parameters changed over it
   (any of the 126, by id), its reverb's model; FX and SAVE on the panel keeps the macros, sends and reverb; in the
   same bank as YARD's (version 2, 3088 bytes; 0.10's still reads), the page's card, `yard.py sounds`, JSON with names

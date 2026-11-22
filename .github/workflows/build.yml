@@ -24,6 +24,7 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+          fetch-depth: 0               # (the history and tags: the build's number, commits since the last release)
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6.1.0 (fm1-base's pin)
         with:
@@ -59,9 +60,13 @@ jobs:
           node web/take_test.mjs
           node web/ysb_test.mjs
 
-      - name: The FM-1 package (its version 0.11-dev+ the commit, on its screen, the page and the file's name)
+      - name: The FM-1 package (its version, X.Y.N+COMMIT, on its screen, the page and the file's name)
         run: |
-          VER="0.11-dev+${GITHUB_SHA::7}"
+          # X.Y: app.h's "X.Y-dev"; N: the commits since the latest release's tag (sequential, build after build)
+          BASE=$(sed -n 's/^#define APP_VERSION "\([0-9.]*\)-dev"/\1/p' app/app.h)
+          TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          N=$(if [ -n "$TAG" ]; then git rev-list --count "$TAG"..HEAD; else git rev-list --count HEAD; fi)
+          VER="$BASE.$N+${GITHUB_SHA::7}"
           echo "#define APP_VERSION \"$VER\"" > app/build_id.h
           echo "VER=$VER" >> "$GITHUB_ENV"
           ./build.sh

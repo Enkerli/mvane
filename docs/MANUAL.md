@@ -44,9 +44,9 @@ Every knob move on these pages is recorded with the take (as CC 5, 16 to 19, 72 
 
 | Layer | K1 | K2 | K3 | K4 | SELECT |
 | --- | --- | --- | --- | --- | --- |
-| **EDIT**: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
+| **EDIT** on the PLAY page: CHORD | VOICING (close, open, wide, pairs) | VOICES (3 to 6) | BASS (on, off) | BANK (quality, scale) | the chord type; the screen lists the black keys' types |
 | **FX** (Clipper's sounds) | DRIVE | CHORUS | DELAY | REVERB (sends; recorded as CC 12, 93, 94, 91) | the reverb's model |
-| **FX** (YARD's sounds: no effects; two pages) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
+| **EDIT** on the SOUND page, a YARD sound (FX shows the same) | DETUNE (a second oscillator) / WAVE (SAW, PULSE, TRI) | SUB (a square two octaves down) / PW (the pulse's width) | RES (resonance) / NOISE (breath noise) | PLUCK (from a pad to a pluck) / FILTER (LOW, BAND, HIGH) | the other page |
 | **GLO**: SETTINGS | PLAY (poly, mono, + breath) | USB AUDIO (full, master) | MPE OUT (on, off) | BEND (12, 24, 48, 96) | USB: right, host to a USB MIDI device (the Diosynth); left, back to the computer |
 | **SEQ**: TAKES | SLOT | | | | the take slot (1 to 8); the screen shows the eight slots |
 
@@ -133,7 +133,9 @@ sustain and opens the filter from five octaves up at each note, falling at DECAY
 Pressure brightens and narrows the pulse (each note's own, with MPE), slide (CC74) moves the cutoff, breath
 (POLY+BR, MONO+BR) is the level. The lightest sounds here (SAW about 12% of the FM-1 with a chord; BRASS and HOLLOW,
 the heaviest, about half as much again), its voices over both cores. A YARD sound brings its parameters; GLIDE
-stays the PLAY page's; the mono ones play one voice whatever PLAY says. On FX, SELECT turns between its two pages.
+stays the PLAY page's; the mono ones play one voice whatever PLAY says. To edit one: HOME to the SOUND page, then
+EDIT (held or tapped): its two pages, SELECT between them, SAVE keeps the sound (FX shows the same pages). On the PLAY
+page, EDIT is the chords' layer as before.
 Every knob is recorded in the history as a CC on channel 1 (TONE 74, ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE
 20, SUB 21, PLUCK 22, WAVE 23, PW 24, NOISE 25, FILTER 26).
 

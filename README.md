@@ -54,7 +54,7 @@ The host build needs Python 3 with Pillow and FriBiDi (`brew install fribidi` on
 
 The JieLi toolchain only runs on Linux x86-64. Three ways to get the `.fwsc`:
 
-1. **GitHub Actions** (`.github/workflows/build.yml`): every push builds it; download `mvane-yard-0.11-dev+COMMIT` from the run (the version, with the commit, is the file's name and what the screen and the page show).
+1. **GitHub Actions** (`.github/workflows/build.yml`): every push builds it; download `mvane-yard-0.11.N+COMMIT` from the run (N counts the commits since the last release, so builds go up one by one; the version is the file's name and what the screen and the page show).
 2. **A Linux x86-64 PC:** `base/tools/setup_toolchain.sh --only uv,python,jieli,ac79-sdk`, then `./build.sh`.
 3. **This Mac, in a container:** install Docker or Podman; `base/tools/build.py` runs the toolchain in the pinned
    image by itself.

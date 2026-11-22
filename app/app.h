@@ -5,8 +5,9 @@
 #include "plat.h"
 
 #define APP_NAME "MVANE YARD"
-#if __has_include("build_id.h")         /* (CI writes it: 0.11-dev+ its commit, so each download says which it is; a release: 0.11 .. 0.99, two digits a
-                                          * part: fm1-base's identity, tools/build.py) */
+#if __has_include("build_id.h")         /* (CI writes it: 0.11.N+COMMIT, N the commits since the last release,
+                                          * so builds count up; a release: 0.11 .. 0.99, two digits a part: fm1-base's
+                                          * identity, tools/build.py) */
 #include "build_id.h"
 #endif
 #ifndef APP_VERSION                      /* (a release build gives its own: tools/build.py --release) */

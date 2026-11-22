@@ -159,6 +159,42 @@ expect cuser 1
 expect brite 60
 sound SAW
 wait 300
+# EDIT follows the knobs' page: on SOUND, a YARD sound's editing (RES on K3; SELECT, the other page; SAVE keeps
+# it); on PLAY, the chords' layer as ever
+sound PAD
+wait 100
+expect page 0
+tap HOME
+wait 50
+expect page 1
+expect res 20
+press EDIT
+turn K3 5
+release EDIT
+wait 50
+expect res 30
+shot edit_sound.png
+press EDIT
+press SAVE
+release SAVE
+release EDIT
+wait 50
+expect user 1
+tap HOME
+wait 50
+expect page 0
+expect style 1
+press EDIT
+turn K1 1
+release EDIT
+wait 50
+expect style 2
+press EDIT
+turn K1 -1
+release EDIT
+wait 50
+sound SAW
+wait 100
 # a Clipper sound from the computer (its changes over GLASS PAD, the reverb HALL): picked, they are there
 cbank_glassy
 wait 50
