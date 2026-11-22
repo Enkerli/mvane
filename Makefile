@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim
+.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim clp-names
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -85,3 +85,8 @@ clp-trim:   # each Clipper sound's trim: a chord of six under the master limiter
 	$(B)/clp_trim app/clipper/gen/clp_trim.h
 	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_trim.c -o $(B)/clp_trim -lm
 	$(B)/clp_trim $(B)/clp_trim_again.h check
+
+clp-names:   # Clipper's names for the computer's side of the user's Clipper sounds (web/clp_names.json)
+	@mkdir -p $(B)
+	$(CC) -O1 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_names.c -o $(B)/clp_names -lm
+	$(B)/clp_names web/clp_names.json

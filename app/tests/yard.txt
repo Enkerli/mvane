@@ -83,6 +83,56 @@ expect res 30
 sound SAW
 wait 100
 expect sound 0
+# the user's Clipper sounds (0.11): GLASS PAD, BRITE turned up on the SOUND page, FX held and SAVE: GLASS PAD+, in
+# its family; away and back, and after a restart, BRITE as saved
+sound GLASS_PAD
+wait 300
+expect cuser 0
+expect brite 50
+tap HOME
+wait 50
+turn K1 5
+wait 50
+tap HOME
+wait 50
+expect brite 60
+press FX
+press SAVE
+release SAVE
+release FX
+wait 50
+expect ncuser 1
+expect cuser 1
+shot clipper_user.png
+sound GLASS_PAD
+wait 300
+expect cuser 0
+expect brite 50
+sound GLASS_PAD+
+wait 300
+expect cuser 1
+expect brite 60
+tap SAVE
+wait 50
+reboot
+wait 800
+expect ncuser 1
+expect cuser 1
+expect brite 60
+sound SAW
+wait 300
+# a Clipper sound from the computer (its changes over GLASS PAD, the reverb HALL): picked, they are there
+cbank_glassy
+wait 50
+expect ncuser 2
+sound GLASSY
+wait 300
+expect cuser 1
+expect brite 84
+expect chorus 6
+expect reverb 2
+sound SAW
+wait 300
 # a 0.9 settings record: moved on (tone, release, glide, attack kept; the sound, Clipper's first as 0.9 had it)
 settings_09
 reboot

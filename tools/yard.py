@@ -9,7 +9,7 @@
     tools/yard.py put FILE                a take into slot 1 (--slot N): a .mvt, or a MIDI file (its notes, controllers, pressure
                                           and bend, all tracks merged; at most 30,000 events)
     tools/yard.py settings [OUT]          the settings as a file (default settings.bin); --put FILE sends one back
-    tools/yard.py sounds [OUT.json]       the user's YARD sounds (FX and SAVE keep them on the FM-1) as JSON (default
+    tools/yard.py sounds [OUT.json]       your own sounds, YARD's and Clipper's (FX and SAVE keep them on the FM-1) as JSON (default
                                           yard-sounds.json; .ysb: the bank as it is); --put FILE (.json or .ysb) sends
                                           them, replacing the FM-1's
     tools/yard.py ls                      what the FM-1 has
@@ -226,8 +226,8 @@ def main(argv=None, link=None):
                 except ValueError as e:
                     raise SystemExit(f"{a.put}: {e}")
                 c.write(i, raw)
-                n = len(ysb.to_json(raw)["sounds"])
-                print(f"{a.put} -> the FM-1's YARD sounds ({n}: after YARD's nine on PRESETS)")
+                j = ysb.to_json(raw)
+                print(f"{a.put} -> the FM-1's own sounds ({len(j['sounds'])} YARD, {len(j['clipper'])} Clipper)")
             else:
                 out = a.file or "yard-sounds.json"
                 raw = bytes(c.read(i))
@@ -235,7 +235,8 @@ def main(argv=None, link=None):
                     open(out, "wb").write(raw)
                 else:
                     open(out, "w").write(json.dumps(ysb.to_json(raw), indent=2) + "\n")
-                print(f"{len(ysb.to_json(raw)['sounds'])} YARD sounds -> {out}")
+                j = ysb.to_json(raw)
+                print(f"{len(j['sounds'])} YARD and {len(j['clipper'])} Clipper sounds -> {out}")
     except fc.CompanionError as e:
         print(f"yard: {e}", file=sys.stderr)
         return fc.EXIT.get(e.code, 1)

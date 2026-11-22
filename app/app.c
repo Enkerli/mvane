@@ -136,11 +136,30 @@ typedef struct {
     uint8_t p[SP_N];
     uint8_t pad[32 - 12 - 1 - SP_N];
 } yb_sound_t;
+/* (0.11) the user's Clipper sounds, after YARD's in the same bank (version 2; version 1 had YARD's only): each a
+ * name, flags (bit 0 used), the factory sound it starts from (its engine and preset), the reverb's model (-1: as
+ * it is), and up to CLP_OV_MAX changed parameters (Clipper's P_* and a value, little-endian) */
+#define CB_MAGIC 0x4243564Du             /* "MVCB" */
+typedef struct {
+    char name[12];
+    uint8_t flags, engine, preset;
+    int8_t rtype;
+    uint8_t n, pad[3];
+    struct {
+        uint8_t id, lo, hi;
+    } ch[CLP_OV_MAX];
+    uint8_t pad2[2];
+} cb_sound_t;
 typedef struct {
     uint32_t magic;
     uint8_t version, n, pad[2];
     yb_sound_t s[YB_N];
+    uint32_t cmagic;                     /* (version 2) */
+    uint8_t cn, cpad[3];
+    cb_sound_t c[YB_N];
 } yard_bank_t;
+typedef char cb_sound_is_64[sizeof(cb_sound_t) == 64u ? 1 : -1];
+#define YB_V1_SIZE (8u + 32u * YB_N)
 typedef char yb_sound_is_32[sizeof(yb_sound_t) == 32u ? 1 : -1];
 static yard_bank_t ybank;
 static synth_sound_t yuser[YB_N];        /* the used ones, in slot order, as PRESETS lists them */
@@ -166,13 +185,42 @@ static void yard_bank_index(void)
         yuser_slot[nyuser++] = (uint8_t)i;
     }
 }
+/* the user's Clipper sounds in PRESETS's order: each one's place in the bank and its factory sound's in clp's list
+ * (one whose sound is not in this build is left out) */
+static uint8_t cuser_slot[YB_N], ncuser;
+static uint16_t cuser_base[YB_N];
+static char cuser_name[YB_N][13];
+static void clp_bank_index(void)
+{
+    uint32_t i, k;
+    ncuser = 0;
+    for (i = 0; i < YB_N; i++) {
+        cb_sound_t *b = &ybank.c[i];
+        uint32_t at = clp_sound_of_key((uint32_t)b->engine << 8 | b->preset);
+        if (!(b->flags & 1u) || at >= clp_sounds())
+            continue;
+        for (k = 0; k < 12u; k++)
+            cuser_name[ncuser][k] = b->name[k] >= ' ' && b->name[k] <= '~' ? b->name[k] : (b->name[k] ? '?' : 0);
+        cuser_name[ncuser][12] = 0;
+        if (!cuser_name[ncuser][0])
+            cuser_name[ncuser][0] = 'C', cuser_name[ncuser][1] = (char)('1' + i % 9u), cuser_name[ncuser][2] = 0;
+        if (b->n > CLP_OV_MAX)
+            b->n = CLP_OV_MAX;
+        cuser_base[ncuser] = (uint16_t)at;
+        cuser_slot[ncuser++] = (uint8_t)i;
+    }
+}
 static void yard_bank_load(void)
 {
-    if (plat_store_load(OBJ_YARD, &ybank, sizeof ybank) != (int)sizeof ybank || ybank.magic != YB_MAGIC ||
-        ybank.version != 1u)
+    int n = plat_store_load(OBJ_YARD, &ybank, sizeof ybank);
+    if (n == (int)YB_V1_SIZE && ybank.magic == YB_MAGIC && ybank.version == 1u)   /* 0.10's: YARD's only */
+        mvane_zero(&ybank.cmagic, sizeof ybank - YB_V1_SIZE);
+    else if (n != (int)sizeof ybank || ybank.magic != YB_MAGIC || ybank.version != 2u || ybank.cmagic != CB_MAGIC)
         mvane_zero(&ybank, sizeof ybank);
-    ybank.magic = YB_MAGIC, ybank.version = 1, ybank.n = YB_N;
+    ybank.magic = YB_MAGIC, ybank.version = 2, ybank.n = YB_N;
+    ybank.cmagic = CB_MAGIC, ybank.cn = YB_N;
     yard_bank_index();
+    clp_bank_index();
 }
 /* PRESETS's list (0.10, Alex 2026-11-22): the families CHORDS EZ, LEADS EZ, HITS EZ, CHORDS HRD, LEADS HRD, HITS HRD,
  * OTHER (clp.h), each YARD's own sounds first, then the user's, then Clipper's. An entry: PL_YARD | YARD's own,
@@ -180,8 +228,9 @@ static void yard_bank_load(void)
 #define PL_YARD 0x0000u
 #define PL_USER 0x4000u
 #define PL_CLP 0x8000u
+#define PL_CUSER 0xC000u                 /* the user's Clipper sounds (their place in cuser_*) */
 #define PL_KIND 0xC000u
-#define PL_MAX (SYNTH_NSOUNDS_MAX + YB_N + 512u)
+#define PL_MAX (SYNTH_NSOUNDS_MAX + 2u * YB_N + 512u)
 #define SYNTH_NSOUNDS_MAX 32u
 static uint16_t plist[PL_MAX];
 static uint8_t pfam[PL_MAX];
@@ -200,6 +249,9 @@ static void plist_build(void)
         for (i = 0; i < nyuser && n < PL_MAX; i++)
             if (yard_fam(&yuser[i]) == f)
                 pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_USER | i);
+        for (i = 0; i < ncuser && n < PL_MAX; i++)   /* (in the family of the sound each starts from) */
+            if (clp_sound_family(cuser_base[i]) == f)
+                pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_CUSER | i);
         for (i = 0; i < clp_sounds() && n < PL_MAX; i++)
             if (clp_sound_family(i) == f)
                 pfam[n] = (uint8_t)f, plist[n++] = (uint16_t)(PL_CLP | i);
@@ -214,8 +266,12 @@ static uint32_t plist_find(uint16_t code)       /* its place, or 0 (the first: S
     return i < plist_n ? i : 0u;
 }
 static uint16_t pl_now(void) { return set.sound < plist_n ? plist[set.sound] : (uint16_t)PL_YARD; }
-static int clp_on(void) { return (pl_now() & PL_KIND) == PL_CLP; }        /* a Clipper sound plays */
-static uint32_t clp_at(void) { return pl_now() & 0x0FFFu; }                /* .. its index in clp's list */
+static int cuser_on(void) { return (pl_now() & PL_KIND) == PL_CUSER; }    /* a user's Clipper sound */
+static int clp_on(void) { return (pl_now() & PL_KIND) == PL_CLP || cuser_on(); }   /* a Clipper sound plays */
+static uint32_t clp_at(void)             /* .. its (factory sound's) index in clp's list */
+{
+    return cuser_on() ? cuser_base[(pl_now() & 0x0FFFu) % YB_N] : pl_now() & 0x0FFFu;
+}
 static int user_on(void) { return (pl_now() & PL_KIND) == PL_USER; }      /* a user's YARD sound */
 static const synth_sound_t *ycur(void)          /* the YARD sound playing (a Clipper one: SAW's) */
 {
@@ -238,6 +294,10 @@ static void sound_from_store(void)
     } else if (v & 0x8000u) {            /* 0.10: 0x8000 | its key */
         i = clp_sound_of_key(v & 0x7FFFu);
         code = (uint16_t)(i < clp_sounds() ? PL_CLP | i : PL_YARD);
+    } else if ((v & 0xFF00u) == 0x4200u) {   /* a user's Clipper sound, by its slot (gone: SAW) */
+        for (i = 0; i < ncuser && cuser_slot[i] != (v & 0xFFu); i++)
+            ;
+        code = (uint16_t)(i < ncuser ? PL_CUSER | i : PL_YARD);
     } else if ((v & 0xFF00u) == 0x4100u) {   /* a user sound, by its slot (gone: SAW) */
         for (i = 0; i < nyuser && yuser_slot[i] != (v & 0xFFu); i++)
             ;
@@ -249,6 +309,8 @@ static void sound_from_store(void)
 static uint16_t sound_to_store(void)
 {
     uint16_t c = pl_now();
+    if ((c & PL_KIND) == PL_CUSER)
+        return (uint16_t)(0x4200u | cuser_slot[(c & 0x0FFFu) % YB_N]);
     if ((c & PL_KIND) == PL_CLP)
         return (uint16_t)(0x8000u | (clp_sound_key(c & 0x0FFFu) & 0x7FFFu));
     if ((c & PL_KIND) == PL_USER)
@@ -418,7 +480,15 @@ static void sound_apply(void)            /* the sound setting to the engines (ma
 {
     if (set.sound >= plist_n)
         set.sound = 0;
-    if (clp_on())
+    if (cuser_on()) {                    /* a user's Clipper sound: the factory sound, its changes over it */
+        const cb_sound_t *b = &ybank.c[cuser_slot[(pl_now() & 0x0FFFu) % YB_N]];
+        uint8_t id[CLP_OV_MAX];
+        int16_t v[CLP_OV_MAX];
+        uint32_t k;
+        for (k = 0; k < b->n && k < CLP_OV_MAX; k++)
+            id[k] = b->ch[k].id, v[k] = (int16_t)(b->ch[k].lo | b->ch[k].hi << 8);
+        clp_select_with(clp_at(), id, v, k, b->rtype);
+    } else if (clp_on())
         clp_select(clp_at());
     else
         yard_mode();
@@ -974,7 +1044,10 @@ static void capture(uint32_t gap)
     app_say(gap ? "PHRASE" : "ALL", t);
 }
 
-static const char *sound_name(void) { return clp_on() ? clp_sound_name(clp_at()) : YARD_NOW.name; }
+static const char *sound_name(void)
+{
+    return cuser_on() ? cuser_name[(pl_now() & 0x0FFFu) % YB_N] : clp_on() ? clp_sound_name(clp_at()) : YARD_NOW.name;
+}
 
 /* a new sound: what sounds lets go first (the engine fades it out and the notes would be lost to it); a chord kept
  * by HOLD, or held under a finger, sounds again on the new sound once its switch is done (Clipper fades for 6 ms, and
@@ -1076,6 +1149,58 @@ static void yard_store(void)
     set_dirty = 1;
     for (k = 0; k < 12u && ybank.s[slot].name[k]; k++)
         t[k] = ybank.s[slot].name[k];
+    t[k] = 0;
+    app_say("SAVED", t);
+}
+
+/* FX held, SAVE on a Clipper sound: what differs from its factory sound (the macros and sends, a file's changes; at
+ * most CLP_OV_MAX) and the reverb's model into the user's bank: over itself if it is a user sound, else into the
+ * first free slot, named after its sound and a +; the bank saved, the new one playing */
+static void clp_user_store(void)
+{
+    uint32_t i, slot = YB_N, k, n, key = clp_sound_key(clp_at());
+    uint8_t id[CLP_OV_MAX];
+    int16_t v[CLP_OV_MAX];
+    char t[16];
+    cb_sound_t *b;
+    rt_flash();
+    if (cuser_on())
+        slot = cuser_slot[(pl_now() & 0x0FFFu) % YB_N];
+    else
+        for (i = 0; i < YB_N && slot == YB_N; i++)
+            if (!(ybank.c[i].flags & 1u))
+                slot = i;
+    if (slot >= YB_N) {
+        app_say("CLIPPER", "32 SOUNDS: FULL");
+        return;
+    }
+    b = &ybank.c[slot];
+    if (!(b->flags & 1u)) {              /* a new one: its sound's name and a + */
+        const char *nm = clp_sound_name(clp_at());
+        mvane_zero(b, sizeof *b);
+        for (k = 0; k < 11u && nm[k]; k++)
+            b->name[k] = nm[k];
+        b->name[k] = '+';
+    }
+    b->flags = 1u;
+    b->engine = (uint8_t)(key >> 8), b->preset = (uint8_t)key;
+    b->rtype = (int8_t)clp_reverb_type();
+    n = clp_changes(id, v, CLP_OV_MAX);
+    b->n = (uint8_t)n;
+    for (k = 0; k < n; k++)
+        b->ch[k].id = id[k], b->ch[k].lo = (uint8_t)v[k], b->ch[k].hi = (uint8_t)((uint16_t)v[k] >> 8);
+    if (plat_store_save(OBJ_YARD, &ybank, sizeof ybank)) {
+        app_say("CLIPPER", "NOT SAVED");
+        return;
+    }
+    clp_bank_index();
+    plist_build();
+    for (i = 0; i < ncuser && cuser_slot[i] != slot; i++)
+        ;
+    set.sound = (uint16_t)plist_find((uint16_t)(PL_CUSER | i));
+    set_dirty = 1;
+    for (k = 0; k < 12u && b->name[k]; k++)
+        t[k] = b->name[k];
     t[k] = 0;
     app_say("SAVED", t);
 }
@@ -1406,10 +1531,13 @@ static void input(void)
                 app_say("TAKE", "PLAYING");
             } else
                 app_say("TAKE", "EMPTY");
-        } else if (k == B_SAVE && layer_now() == B_FX && !clp_on()) {   /* FX and SAVE: this YARD sound kept */
+        } else if (k == B_SAVE && layer_now() == B_FX) {   /* FX and SAVE: this sound kept, YARD's or Clipper's */
             if (ui.held >= 0)
                 ui.held_used = 1;
-            yard_store();
+            if (clp_on())
+                clp_user_store();
+            else
+                yard_store();
         } else if (k == B_SAVE) {
             int bad;
             rt_flash();
@@ -1854,6 +1982,7 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         for (k = 0; k < plist_n; k++) {
             uint16_t c = plist[k];
             const char *nm = (c & PL_KIND) == PL_CLP ? clp_sound_name(c & 0x0FFFu)
+                             : (c & PL_KIND) == PL_CUSER ? cuser_name[(c & 0x0FFFu) % YB_N]
                              : (c & PL_KIND) == PL_USER ? yuser[(c & 0x0FFFu) % YB_N].name
                                                         : SYNTH_SOUNDS[(c & 0x0FFFu) % SYNTH_NSOUNDS].name;
             if (!strcmp(nm, want))
@@ -1866,6 +1995,23 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         set.sound = (uint16_t)(k ? k - 1u : plist_n - 1u);
         sound_pick(1);
         printf("ok\n");
+        return 1;
+    }
+    if (!strcmp(cmd, "cbank_glassy")) {  /* as a file from the computer would: a Clipper sound GLASSY in slot 2,
+                                          * GLASS PAD with BRITE (its M1) 84 and CHORUS 6, the reverb HALL */
+        cb_sound_t *b = &ybank.c[1];
+        uint32_t at, key;
+        const char *nm = "GLASSY";
+        for (at = 0; at < clp_sounds() && strcmp(clp_sound_name(at), "GLASS PAD"); at++)
+            ;
+        key = clp_sound_key(at);
+        mvane_zero(b, sizeof *b);
+        for (n = 0; nm[n]; n++)
+            b->name[n] = nm[n];
+        b->flags = 1, b->engine = (uint8_t)(key >> 8), b->preset = (uint8_t)key, b->rtype = 2, b->n = 2;
+        b->ch[0].id = 122, b->ch[0].lo = 84, b->ch[1].id = 34, b->ch[1].lo = 6;   /* (HYBRID's BRITE: M1, 0..127) */
+        printf(plat_store_save(OBJ_YARD, &ybank, sizeof ybank) ? "fail\n" : "ok\n");
+        app_file_changed(OBJ_YARD);
         return 1;
     }
     if (!strcmp(cmd, "stored_sound")) {  /* the sound as a settings record holds it (before 0.10: a place in the old
@@ -1966,6 +2112,16 @@ int app_expect(const char *what, int *got)
             *got += ui.chord_note[i];
     } else if (!strcmp(what, "nyuser"))   /* the user's YARD sounds */
         *got = nyuser;
+    else if (!strcmp(what, "brite"))    /* Clipper's sound's BRITE macro now (CC 16) */
+        *got = (int)clp_macro(0);
+    else if (!strcmp(what, "chorus"))   /* .. its CHORUS send (CC 93) */
+        *got = (int)clp_fx(1);
+    else if (!strcmp(what, "reverb"))   /* the reverb's model now */
+        *got = (int)clp_reverb_type();
+    else if (!strcmp(what, "ncuser"))   /* the user's Clipper sounds */
+        *got = ncuser;
+    else if (!strcmp(what, "cuser"))    /* a user's Clipper sound plays */
+        *got = cuser_on();
     else if (!strcmp(what, "qlatch"))   /* the latched qualities (bit i: the i-th black key), 0: single notes */
         *got = ui.qlatch;
     else if (!strcmp(what, "sq_lost"))  /* the render queue's lost events, and its recoveries */

@@ -81,17 +81,23 @@ def main():
         mine = {"format": "mvane-yard-sounds", "version": 1, "sounds": [
             {"slot": 3, "name": "Glass Keys", "mono": False, "tone": 80, "release": 70, "glide": 30, "attack": 2,
              "decay": 50, "res": 30, "detune": 40, "sub": 0, "pluck": 90},
-            {"name": "REED", "mono": True, "tone": 45, "res": 10}]}
+            {"name": "REED", "mono": True, "tone": 45, "res": 10}],
+            "clipper": [{"name": "Glassy", "sound": "GLASS PAD", "reverb": "hall",
+                         "changes": [{"name": "BRITE", "value": 20}, {"id": 34, "value": 6}]}]}
         json.dump(mine, open(os.path.join(d, "mine.json"), "w"))
         assert yard.main(["sounds", "--put", os.path.join(d, "mine.json")], link) == 0
         link.run(50)
         r = link.cmd("expect nyuser 2"); assert r[-1].strip().startswith("ok"), r
+        r = link.cmd("expect ncuser 1"); assert r[-1].strip().startswith("ok"), r
         assert yard.main(["sounds", os.path.join(d, "back.json")], link) == 0
         back = json.load(open(os.path.join(d, "back.json")))["sounds"]
         assert [(x["slot"], x["name"], x["mono"], x["pluck"]) for x in back] == [(1, "REED", True, 0),
                                                                                  (3, "GLASS KEYS", False, 90)], back
         assert back[0]["release"] == ysb.DEFAULT["release"]
-        print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out, YARD sounds in and out)")
+        clip = json.load(open(os.path.join(d, "back.json")))["clipper"]
+        assert [(c["slot"], c["name"], c["sound"], c["reverb"]) for c in clip] == [(1, "GLASSY", "GLASS PAD", "HALL")], clip
+        assert [(c["id"], c["name"], c["value"]) for c in clip[0]["changes"]] == [(122, "M1", 20), (34, "CHO", 6)], clip
+        print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out, YARD and Clipper sounds in and out)")
     finally:
         link.close()
 

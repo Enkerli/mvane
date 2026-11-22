@@ -311,7 +311,7 @@ Alex on 0.10-beta (2026-11-22):
 - **VIBE FM still gets 0.4.** The converter is not in the public SDK (github.com/Vibe-FM-SDK/vibe-fm-sdk: its
   `vibe-check` rejects forbidden imports, blocks over budget while loading, crashes under random events). Ask the hub
   (zven@thefirmwarehub.com, or an issue on the SDK) for the converter's log of 0.10-beta.
-- **Patch files only for YARD's sounds**: flagged as such in the manual until Clipper's come (below).
+- **Patch files only for YARD's sounds**: Clipper's came in 0.11-dev (below).
 - **Clipping, even on SAW.** YARD's output peaks at -10 dBFS played hard (velocity 127, full pressure, six voices):
   nothing reaches its soft clipper (from -6 dBFS). Alex hears the same on other firmwares: the FM-1's analog stage,
   or something intermittent. Next: a USB recording of it (the digital signal: clean there means after the DAC).
@@ -324,8 +324,11 @@ Then, from Alex's list:
 - **YARD's sound itself editable**: its oscillators (today one saw for every sound, a second detuned, a sub square:
   BRASS and WIND differ only by the nine values), so a waveform (saw, pulse with PWM, triangle), noise for breath, a
   filter mode, an envelope's shape, as patch parameters; the bank's format grows (a version 2).
-- **Clipper's sounds as patch files**: a sound as edited (engine, preset, the parameters changed, the matrix, macros,
-  sends), saved on the device and moved as files like YARD's.
+- **Clipper's sounds as patch files. Done in 0.11-dev:** a factory sound and up to 14 parameters changed over it
+  (any of the 126, by id), its reverb's model; FX and SAVE on the panel keeps the macros, sends and reverb; in the
+  same bank as YARD's (version 2, 3088 bytes; 0.10's still reads), the page's card, `yard.py sounds`, JSON with names
+  (`make clp-names`: web/clp_names.json). Next: more of a Clipper sound editable on the panel, more than 14 changes
+  if a sound needs it, YARD's oscillators (below).
 - **A demo take in the firmware**: a short MIDI phrase showing it off (MPE chords, glide, combined qualities, a lead),
   1980s-demo cheesy is fine, and a short wind-controller take (breath, a mono lead), maybe in the same file; in a
   slot at the first start.

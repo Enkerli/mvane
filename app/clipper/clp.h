@@ -23,7 +23,16 @@ uint32_t clp_sound_kind_id(uint32_t i);       /* Clipper's kind: 0 BASS 1 KEYS 2
 void clp_bank_on(int on);                     /* 1 (default): by family; 0: as made, by engine (tools) */
 uint32_t clp_sound_old_key(uint32_t i);       /* engine << 8 | preset of index i in the order before 0.10 */
 uint32_t clp_sound_of_key(uint32_t key);      /* the index of a sound by its key now (clp_sounds(): none) */          /* 0 LIGHT, 1 MID, 2 HEAVY: its measured CPU (tools/clp_cost.c) */       /* BASS KEYS ORGN PAD LEAD PLCK STAB FX */
-void clp_select(uint32_t i);                  /* play sound i (main loop: the part switches at its next block) */
+void clp_select(uint32_t i);
+/* (0.11) the user's Clipper sounds: sound i loaded, then n of its parameters set (id: Clipper's P_*, its range), the
+ * reverb's model (-1: as it is); clp_changes: what differs now from the factory sound as it loaded (the macros and
+ * sends first), at most max; the reverb's model now; a parameter's label (an EDIT value: engine's); P_COUNT */
+#define CLP_OV_MAX 14u
+void clp_select_with(uint32_t i, const uint8_t *id, const int16_t *v, uint32_t n, int32_t rtype);
+uint32_t clp_changes(uint8_t *id, int16_t *v, uint32_t max);
+int32_t clp_reverb_type(void);
+const char *clp_param_name(uint32_t i, uint32_t engine);
+uint32_t clp_param_count(void);                  /* play sound i (main loop: the part switches at its next block) */
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2);   /* a MIDI message (render: before clp_render) */
 void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12);   /* n stereo frames, 24-bit, MASTER as the render has it */
 void clp_panic(void);

@@ -318,6 +318,7 @@ void clp_mode(uint32_t mono, uint32_t breath)   /* SEL: MONO (legato), BREATH (C
 void clp_cores(uint32_t n) { cpu1_units = n > 1u ? 1 : 0; }   /* the app started the second core (app_init) */
 
 static void clp_order(void);
+static int16_t clp_base[P_COUNT];
 void clp_init(void)
 {
     uint32_t i, e, p;
@@ -334,6 +335,11 @@ void clp_init(void)
     trk[0].engine = 0;
     clp_load(clp_list[0] >> 8, clp_list[0] & 0xFFu);
     trk[0].engine = trk[0].eng_req;
+    {
+        uint32_t k;
+        for (k = 0; k < P_COUNT; k++)
+            clp_base[k] = trk[0].p[k];
+    }
 }
 
 /* the sounds' order. As made: the engines in an order for chords (Clipper's sounds within each), also the order a
@@ -454,20 +460,86 @@ int clp_sound_mono(uint32_t i)                  /* 1: a mono sound (legato), as 
 {
     return i < clp_n && ENGINES[clp_list[i] >> 8]->presets[clp_list[i] & 0xFFu].mono;
 }
+static volatile uint8_t clp_ov_on;
 void clp_select(uint32_t i)
 {
     if (i < clp_n)
-        clp_req = (int32_t)i;
+        clp_ov_on = 0, clp_req = (int32_t)i;     /* (a factory sound: no changes over it) */
 }
 
+/* (mvane yard, 0.11) a sound with changes: the factory sound loaded, then CLP_OV_MAX parameters set over it (the
+ * user's Clipper sounds: app.c). clp_base holds the parameters as the factory sound loaded (its trim and expression
+ * slots in), so clp_changes can tell what moved since: the macros and sends turned, a file's changes */
+static int16_t clp_base[P_COUNT];               /* (clp_init's first load fills it too) */
+static uint8_t clp_ov_id[CLP_OV_MAX], clp_ov_n;
+static int16_t clp_ov_v[CLP_OV_MAX], clp_ov_rt = -1;
+static void clp_param_set(track_t *t, uint32_t id, int32_t v)   /* within its range (an EDIT value: the engine's) */
+{
+    const param_desc_t *d = id >= P_E0 && id < P_E0 + 8u ? &ENGINES[t->eng_req % NENGINES]->edit[id - P_E0] : &TP[id];
+    if (id >= P_COUNT || id == P_VOICE || id == P_GLIDE)   /* (the play mode and GLIDE are the player's) */
+        return;
+    if (d->max > d->min)
+        v = clamp(v, d->min, d->max);
+    t->p[id] = (int16_t)v;
+}
 static void clp_pending(void)                   /* a sound asked for: loaded before what follows it */
 {
     int32_t r = clp_req;
     if (r >= 0) {
+        uint32_t k;
         clp_req = -1;
         clp_load(clp_list[r] >> 8, clp_list[r] & 0xFFu);
+        for (k = 0; k < P_COUNT; k++)
+            clp_base[k] = trk[0].p[k];
+        if (clp_ov_on) {
+            for (k = 0; k < clp_ov_n; k++)
+                clp_param_set(&trk[0], clp_ov_id[k], clp_ov_v[k]);
+            if (clp_ov_rt >= 0) {
+                const param_desc_t *g = &GP[G_RTYPE];
+                song.g[G_RTYPE] = (int16_t)clamp(clp_ov_rt, g->min, g->max);
+            }
+            clp_ov_on = 0;
+        }
     }
 }
+void clp_select_with(uint32_t i, const uint8_t *id, const int16_t *v, uint32_t n, int32_t rtype)
+{
+    uint32_t k;
+    if (i >= clp_n)
+        return;
+    clp_ov_n = (uint8_t)(n < CLP_OV_MAX ? n : CLP_OV_MAX);
+    for (k = 0; k < clp_ov_n; k++)
+        clp_ov_id[k] = id[k], clp_ov_v[k] = v[k];
+    clp_ov_rt = (int16_t)rtype;
+    clp_ov_on = 1;                               /* (before the request: the render reads both) */
+    clp_req = (int32_t)i;
+}
+uint32_t clp_changes(uint8_t *id, int16_t *v, uint32_t max)   /* what differs from the factory sound as it loaded:
+                                                                * the macros and sends first, then in order */
+{
+    static const uint8_t FIRST[8] = {P_MAC1, P_MAC2, P_MAC3, P_MAC4, P_DIST, P_CHOR, P_DLY, P_REV};
+    uint32_t k, j, n = 0;
+    const int16_t *p = trk[0].p;
+    for (k = 0; k < 8u && n < max; k++)
+        if (p[FIRST[k]] != clp_base[FIRST[k]])
+            id[n] = FIRST[k], v[n++] = p[FIRST[k]];
+    for (k = 0; k < P_COUNT && n < max; k++) {
+        int first = 0;
+        for (j = 0; j < 8u; j++)
+            first |= FIRST[j] == k;
+        if (!first && k != P_VOICE && k != P_GLIDE && p[k] != clp_base[k])
+            id[n] = (uint8_t)k, v[n++] = p[k];
+    }
+    return n;
+}
+int32_t clp_reverb_type(void) { return song.g[G_RTYPE]; }
+const char *clp_param_name(uint32_t i, uint32_t engine)   /* a parameter's label (an EDIT value: the engine's) */
+{
+    if (i >= P_E0 && i < P_E0 + 8u)
+        return engine < NENGINES ? ENGINES[engine]->edit[i - P_E0].label : "";
+    return i < P_COUNT && TP[i].label ? TP[i].label : "";
+}
+uint32_t clp_param_count(void) { return P_COUNT; }
 
 void clp_event(uint32_t st, uint32_t d1, uint32_t d2)   /* (seq.c's events_block: MIDI in, for part 1) */
 {

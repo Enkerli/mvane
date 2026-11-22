@@ -134,14 +134,20 @@ much again), its voices over both cores. A YARD sound brings its parameters; GLI
 and WIND play one voice whatever PLAY says. Every knob is recorded in the history as a CC on channel 1 (TONE 74,
 ATTACK 73, DECAY 75, RELEASE 72, RES 71, DETUNE 20, SUB 21, PLUCK 22).
 
-**Your own YARD sounds** (for now, YARD's only: an edited Clipper sound, its macros and sends, is not kept; and the
-nine values are all there is to a YARD sound, its oscillators the same for every one): FX held (or opened), SAVE
-keeps the YARD sound playing, as its knobs have it, as USER n
-(over itself if it is already one of yours); up to 32, listed after YARD's nine on PRESETS, kept across a restart.
-On the computer they are a file, `yard.ysb`: the page's **YARD sounds** card lists them to edit (name, mono, the
-nine values), add or remove, send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and
-`tools/yard.py sounds --put mine.json` sends them (replacing the FM-1's). The JSON is plain: one entry a sound,
-`{"slot", "name", "mono", "tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"}`.
+**Your own sounds**, YARD's and Clipper's: FX held (or opened), SAVE keeps the sound playing (over itself if it is
+already one of yours), up to 32 of each, kept across a restart.
+- A **YARD** sound is its nine values (its oscillators are the same for every YARD sound, for now): saved as USER n,
+  listed after YARD's nine in their family (mono: LEADS EZ; PLUCK 64 or more: HITS EZ; else CHORDS EZ).
+- A **Clipper** sound is a factory sound and what was changed on it: up to 14 parameters (on the panel, its four
+  macros on the SOUND page and its four sends on FX) and the reverb's model (FX, SELECT); saved as its sound's name
+  and a + (GLASS PAD+), listed first in that sound's family.
+On the computer they are one file, `yard.ysb`: the page's **Your sounds** card lists them to edit (a Clipper sound:
+its sound, reverb and changes as `name=value`, any of Clipper's 126 parameters by name or `#number`), add or remove,
+send back, or save as JSON to share; `tools/yard.py sounds` fetches them as JSON and `tools/yard.py sounds --put
+mine.json` sends them (replacing the FM-1's). In the JSON a YARD sound is `{"slot", "name", "mono", "tone",
+"release", "glide", "attack", "decay", "res", "detune", "sub", "pluck"}`, a Clipper sound `{"slot", "name", "sound"
+(or "engine" and "preset"), "reverb", "changes": [{"id" or "name", "value"}]}` (BRITE, TIMBR, MOTN and SPACE are a
+HYBRID sound's M1 to M4, as on the panel).
 
 | Family | What | For |
 | --- | --- | --- |
