@@ -23,8 +23,17 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    controls. The host's sample rate (`synth_rate`); the audio in its own flow (the events queue MIDI messages, the
    audio alone touches YARD). YARD's code is built with precise maths (`#pragma clang fp`), as the FM-1 builds it:
    at 44.1 kHz the same samples (`make vibe-cmp`).
-2. The controls: NOTES and CHORDS (`core/chords.c`), the black keys' qualities, the scale; the six keys right of
-   ENTER as SOUND · ENV · LFO · ARP · FX · SEQ; F1–F6.
+2. **Done:** the controls, the VIBE's own (no imitated FM-1 keys):
+   - **keys**: NOTES, or CHORDS as on the FM-1 (Coral Flower's): the 15 white keys the scale's degrees, higher up
+     the keyboard; the 10 black keys the qualities (M6 M7 M9 S2 S4 m6 m7 m9 M m), latched (pressed together:
+     combined; the one latched alone again: none, single notes). `core/chords.c` builds and voices them, each voice
+     on its own MPE channel, common tones held. OCT moves the chords' register with the keyboard.
+   - **K1–K6**: SOUND (YARD's values, F6 their next four), PLAY (QUANT KEY SCALE GLIDE), CHORD (VOICING VOICES BASS
+     BANK), ARP and SEQ (steps to come), SCALE (the set's number, a digit an encoder); encoders 1–4 the page's values.
+   - **F1 F2 F3**: NOTES / CHORDS, HOLD, POLY / MONO / +BREATH. **A** the sound, **B** the scale (bright to dark).
+   - MIDI and the DAW's notes as notes on their channels; QUANT FULL snaps them to the scale.
+   - `vibe/chords.json` (wasmtest) plays and draws Cmaj7, C6, D6, Dmaj9 (M7 + M9), the CHORD page, NOTES.
+   - Not yet: the pads (to decide), ENV and LFO (the house's K2 and K3 are PLAY and CHORD here for now).
 3. The pages, on the full 480 × 320.
 4. FOCUS (DATA + ENTER reaches every control).
 5. The DAW: YARD's parameters (automatable), the ARP and the loops on the song position.
