@@ -56,7 +56,7 @@ In order, each to judge by ear on the FM-1:
 7. **The sound list curated**: engines dropped or folded (Alex: variety over count), which frees flash and RAM.
 8. **CPU**: a per-bus effect gate (about 15% of a light sound back while playing), the hot engine code in RAM if the
    xruns at a change of sound come back.
-9. **VIBE FM**: the converter runs again (2026-11-22) and its platform now has the second core's calls and the USB host's state: the stand-ins for those, which it took for second definitions, are gone (0.12.7); next, its result in the plugin.
+9. **VIBE FM**: the converter runs again (2026-11-22), and its platform now has every call mvane yard makes: the second core's, the USB host's, the microsecond ticks. Our weak stand-ins for them were second definitions to it (it builds the app in one unit): those for the second core and the USB host's state went in 0.12.7, the last two (plat_ticks24, plat_usb_host) in 0.13.3. Next: a release with it, the hub's conversion, its result in the plugin.
 10. **Try it in the browser, from the landing page** (Alex, 2026-11-22): fm1-base's WebAssembly emulator (the host
     build, as the VIBE route needs anyway) on the page, the panel and keys on screen, takes and sounds from the
     computer. Not installing from the browser: with the bricked-module stories around, the page points to
