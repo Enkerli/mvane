@@ -10,8 +10,8 @@
  *   A, B     the sound; the scale (the list from bright to dark)
  *   HOME     the controls of the page
  * MIDI and the DAW's notes play as notes, each on its channel (MPE); QUANT FULL snaps them to the scale. The audio has
- * its own flow: the events only queue MIDI messages, the audio alone touches YARD. To follow: the pages drawn in full,
- * FOCUS, the DAW's parameters and transport, storage, the recorder, the ARP, Clipper. */
+ * its own flow: the events only queue MIDI messages, the audio alone touches the engines (YARD here, Clipper in
+ * clipper.c). Steps 3 to 9 below: the pages, FOCUS, the DAW, storage, the recorder, the ARP, Clipper (vibe/README.md). */
 #include "vibe.h"
 #include <stddef.h>
 size_t strlen(const char *s);   /* (the SDK's: vibe_sdk.c) */
@@ -29,6 +29,7 @@ void *memcpy(void *d, const void *s, size_t n);
 #include "../../core/scale_names.h"
 #include "../../app/settings.h"
 #include "../../core/rec.c"
+#include "clp.h"                         /* (Clipper: clipper.c, its own unit) */
 
 VIBE_PARALLEL_AUDIO
 
@@ -43,6 +44,8 @@ VIBE_PARALLEL_AUDIO
 #define Q_TONIC 0xF6u                    /* d1: the key */
 #define Q_TAKE 0xF7u                     /* d1: the file image to play from (0, 1), d2: 1 none (an empty slot) */
 #define Q_EXPORT 0xF8u                   /* d1: the file image to copy the recording into (and play from) */
+#define Q_ENGINE 0xFCu                   /* (Clipper, step 9) d1 | d2 << 7: Clipper's sound to play, 0x3FFF: YARD */
+#define Q_CUSER 0xFDu                    /* one of your Clipper sounds (cu_*, handed over first) */
 #define Q_ARP 0xF9u                      /* (the ARP, step 8) d1: 0 off, 1 on, 2 on with LATCH */
 #define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 3, d2: GATE (5..100) */
 #define Q_ARP_B 0xFBu                    /* d1: OCTAVES | (TEMPO - 40) >> 7 << 3, d2: (TEMPO - 40) & 127 */
@@ -374,9 +377,24 @@ static void bank_name(const uint8_t *b, char *out)   /* 12 bytes, NUL-padded, AS
 }
 static uint32_t us_pcs(uint32_t i) { const uint8_t *b = bank + YB_SCALE(i) + 12u; return (uint32_t)(b[0] | b[1] << 8); }
 
-/* the sounds A steps through: YARD's thirteen (0..12), then yours (13 + the slot) */
-#define SOUNDS_N (SYNTH_NSOUNDS + YB_N)
-static int sound_exists(uint32_t n) { return n < SYNTH_NSOUNDS || user_used(n - SYNTH_NSOUNDS); }
+/* the sounds A steps through: YARD's thirteen (0..12), your YARD sounds (13 + the slot), Clipper's (CLP0 + its
+ * place in clp's list: by family, as on the FM-1), your Clipper sounds (CU0 + the slot: a factory sound and up to 14
+ * changes over it, the bank's second part) */
+#define CLP0 (SYNTH_NSOUNDS + YB_N)
+#define CU0 (CLP0 + clp_sounds())
+#define SOUNDS_N (CU0 + YB_N)
+#define CB_SOUND(i) (YB_V1 + 8u + 64u * (i))
+static uint32_t cuser_base(uint32_t slot)   /* the factory sound one of yours starts from (clp_sounds(): none) */
+{
+    const uint8_t *b = bank + CB_SOUND(slot);
+    return slot < YB_N && (b[12] & 1u) ? clp_sound_of_key((uint32_t)b[13] << 8 | b[14]) : clp_sounds();
+}
+static int sound_clp(uint32_t n) { return n >= CLP0; }
+static int sound_exists(uint32_t n)
+{
+    return n < SYNTH_NSOUNDS || (n < CLP0 && user_used(n - SYNTH_NSOUNDS)) || (n >= CLP0 && n < CU0)
+           || (n >= CU0 && n < SOUNDS_N && cuser_base(n - CU0) < clp_sounds());
+}
 static void sound_of(uint32_t n, uint8_t *p, uint8_t *mono, char *name)   /* its values, mono, name */
 {
     uint32_t i;
@@ -395,14 +413,37 @@ static void sound_of(uint32_t n, uint8_t *p, uint8_t *mono, char *name)   /* its
             strcpy(name, "USER");
     }
 }
-static const char *sound_name(void)
+static const char *sound_name_of(uint32_t n, char *nm)   /* any sound's name */
 {
-    static char nm[16];
     uint8_t p[SP_N], mono;
-    sound_of(set.sound, p, &mono, nm);
+    if (n >= CU0) {
+        bank_name(bank + CB_SOUND(n - CU0), nm);
+        if (!nm[0])
+            strcpy(nm, "CLIPPER");
+    } else if (n >= CLP0)
+        strcpy(nm, clp_sound_name(n - CLP0));
+    else
+        sound_of(n, p, &mono, nm);
     return nm;
 }
-static int sound_mono(void) { uint8_t p[SP_N], mono; char nm[16]; sound_of(set.sound, p, &mono, nm); return mono; }
+static const char *sound_name(void) { static char nm[16]; return sound_name_of(set.sound, nm); }
+static int sound_mono(void)
+{
+    uint8_t p[SP_N], mono;
+    char nm[16];
+    if (set.sound >= CU0)
+        return clp_sound_mono(cuser_base(set.sound - CU0));
+    if (set.sound >= CLP0)
+        return clp_sound_mono(set.sound - CLP0);
+    sound_of(set.sound, p, &mono, nm);
+    return mono;
+}
+static uint32_t clp_now(void) { return set.sound >= CU0 ? cuser_base(set.sound - CU0) : set.sound - CLP0; }   /* (on Clipper) */
+/* one of your Clipper sounds, handed to the audio: written, then Q_CUSER */
+static uint32_t cu_idx, cu_n;
+static uint8_t cu_id[CLP_OV_MAX];
+static int16_t cu_v[CLP_OV_MAX];
+static int32_t cu_rt;
 
 /* the scales B steps through: the named list, bright to dark, then yours (in slot order) */
 static uint32_t scale_list(uint32_t *nums)   /* the numbers, in order; how many */
@@ -442,10 +483,30 @@ static void sound_pick(uint32_t n)       /* one of the list's, its values sent a
     uint8_t p[SP_N], mono;
     char nm[16];
     set.sound = sound_exists(n) ? n : 0u;
-    sound_of(set.sound, p, &mono, nm);
     q_live = 0;                          /* (a sound's values: not the playing, not kept in the history) */
-    for (i = 0; i < SP_N; i++)
-        param_set(i, p[i]);
+    if (sound_clp(set.sound)) {          /* Clipper's: the audio switches to it (its own values, as Clipper loads them) */
+        all_off();
+        if (set.sound >= CU0) {
+            const uint8_t *b = bank + CB_SOUND(set.sound - CU0);
+            uint32_t k;
+            cu_idx = cuser_base(set.sound - CU0);
+            cu_n = b[16] > CLP_OV_MAX ? CLP_OV_MAX : b[16];
+            cu_rt = (int8_t)b[15];
+            for (k = 0; k < cu_n; k++)
+                cu_id[k] = b[20u + 3u * k], cu_v[k] = (int16_t)(b[21u + 3u * k] | b[22u + 3u * k] << 8);
+            VIBE_RELEASE();
+            send(Q_CUSER, 0, 0);
+        } else
+            send(Q_ENGINE, (set.sound - CLP0) & 0x7Fu, (set.sound - CLP0) >> 7);
+        mono = (uint8_t)clp_sound_mono(clp_now());
+    } else {
+        if (set.started)
+            all_off();
+        send(Q_ENGINE, 0x7Fu, 0x7Fu);    /* (YARD) */
+        sound_of(set.sound, p, &mono, nm);
+        for (i = 0; i < SP_N; i++)
+            param_set(i, p[i]);
+    }
     q_live = 1;
     if (set.started)                     /* the PLAY page's GLIDE is the player's: every sound gets it (as the FM-1) */
         param_set(SP_GLIDE, (int32_t)glide);
@@ -481,8 +542,46 @@ static void scale_step(int d)            /* B: the list's next or previous (the 
     set.pcs = (uint16_t)nums[set.scale];
     harmony_changed();
 }
+static void keep_clipper(void)           /* F4 on a Clipper sound: its macros, sends and reverb as they are now, over it */
+{
+    uint32_t slot = set.sound >= CU0 ? set.sound - CU0 : YB_N, i, key = clp_sound_key(clp_now()), n;
+    uint8_t *b, id[CLP_OV_MAX];
+    int16_t v[CLP_OV_MAX];
+    char nm[16];
+    for (i = 0; i < YB_N && slot == YB_N; i++)
+        if (!(bank[CB_SOUND(i) + 12u] & 1u))
+            slot = i;
+    if (slot >= YB_N) {
+        say("CLIPPER", "32 SOUNDS: FULL");
+        return;
+    }
+    b = bank + CB_SOUND(slot);
+    if (!(b[12] & 1u)) {                 /* a new one: its factory sound's name, shortened, and a + */
+        memset(b, 0, 64);
+        strcpy(nm, clp_sound_name(clp_now()));
+        nm[11] = 0;
+        cat(nm, "+");
+        memcpy(b, nm, strlen(nm) > 12u ? 12u : strlen(nm));
+    }
+    n = clp_changes(id, v, CLP_OV_MAX);
+    b[12] = 1, b[13] = (uint8_t)(key >> 8), b[14] = (uint8_t)key, b[15] = (uint8_t)(int8_t)clp_reverb_type();
+    b[16] = (uint8_t)n;
+    for (i = 0; i < n; i++)
+        b[20u + 3u * i] = id[i], b[21u + 3u * i] = (uint8_t)v[i], b[22u + 3u * i] = (uint8_t)((uint16_t)v[i] >> 8);
+    if (bank_save()) {
+        say("CLIPPER", "NOT KEPT");
+        return;
+    }
+    set.sound = CU0 + slot;
+    bank_name(b, nm);
+    say("KEPT", nm);
+}
 static void keep_sound(void)             /* F4 on SOUND: these values kept as yours (as the FM-1's FX + SAVE) */
 {
+    if (sound_clp(set.sound)) {
+        keep_clipper();
+        return;
+    }
     uint32_t slot = set.sound >= SYNTH_NSOUNDS ? set.sound - SYNTH_NSOUNDS : YB_N, i;
     char nm[16];
     for (i = 0; i < YB_N && slot == YB_N; i++)
@@ -568,7 +667,11 @@ static void page_value(uint32_t i, const char **label, char *val)   /* encoder i
 {
     val[0] = 0;
     *label = "";
-    if (page == PG_SOUND) {
+    if (page == PG_SOUND && sound_clp(set.sound)) {   /* Clipper's: its four macros; F6: its four sends */
+        static const char *const N[2][4] = {{"BRITE", "TIMBR", "MOTN", "SPACE"}, {"DRIVE", "CHORUS", "DELAY", "REVERB"}};
+        *label = N[more % 2u][i];
+        vg_itoa((int)(more % 2u ? clp_fx(i) : clp_macro(i)), val);
+    } else if (page == PG_SOUND) {
         uint32_t p = SOUND_P[more % 3u][i];
         *label = SOUND_N[more % 3u][i];
         if (p == SP_WAVE) {
@@ -646,7 +749,11 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
     int d = e > 0.0f ? 1 : -1, de = (int)(e + (e > 0.0f ? 0.5f : -0.5f));
     if (de == 0)
         de = d;
-    if (page == PG_SOUND) {
+    if (page == PG_SOUND && sound_clp(set.sound)) {   /* (as the FM-1's: CC 16..19, and 12 93 94 91; recorded) */
+        static const uint8_t FXC[4] = {12, 93, 94, 91};
+        int v = (int)(more % 2u ? clp_fx(i) : clp_macro(i)) + 2 * de;
+        send(0xB0u, more % 2u ? FXC[i] : 16u + i, (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v));
+    } else if (page == PG_SOUND) {
         uint32_t p = SOUND_P[more % 3u][i];
         if (p == SP_WAVE || p == SP_FMODE) {   /* a choice of three: a step a turn (0, 64, 127) */
             int z = (int)SYNTH_WAVE(set.val[p]) + d;
@@ -745,7 +852,7 @@ static void lights(void)
  * Editor tab A: YARD (the sound, its values, the play mode); tab B: the harmony (NOTES / CHORDS, the key, QUANT, the
  * scale's number, the chord's voicing). The panel and the DAW stay in step: a change from the DAW comes as
  * VIBE_EV_PARAM and is applied as the panel would; after every event params_push tells the DAW what moved here. */
-#define SOUNDS_MAX 45u                   /* (YARD's thirteen and the 32 slots: the arrays' size; SOUNDS_N in use) */
+#define SOUNDS_MAX 640u                  /* (the arrays' size: YARD's, yours, Clipper's 337, yours; SOUNDS_N in use) */
 static char sound_names_buf[SOUNDS_MAX][16];
 static const char *SOUND_NAMES[SOUNDS_MAX];  /* the DAW's choices: YARD's thirteen, then your 32 slots (as they were at
                                             * the start: "-" an empty one) */
@@ -767,14 +874,13 @@ static void params_declare(void)
                                             "A · OSCILLATORS", "A · OSCILLATORS", "A · OSCILLATORS", "A · TONE"};
     uint32_t i;
     for (i = 0; i < SOUNDS_N && i < SOUNDS_MAX; i++) {
-        uint8_t pp[SP_N], mono;
         if (sound_exists(i))
-            sound_of(i, pp, &mono, sound_names_buf[i]);
+            sound_name_of(i, sound_names_buf[i]);
         else
             strcpy(sound_names_buf[i], "-");
         SOUND_NAMES[i] = sound_names_buf[i];
     }
-    PRM[PR_SOUND] = (vibe_param){"sound", "Sound", 0, SOUNDS_N - 1, 0, "", SOUNDS_N, (const char *const *)SOUND_NAMES};
+    PRM[PR_SOUND] = (vibe_param){"sound", "Sound", 0, (float)(SOUNDS_N - 1u), 0, "", (int)SOUNDS_N, (const char *const *)SOUND_NAMES};
     GRP[PR_SOUND] = "A · PLAY";
     PRM[PR_PLAY] = (vibe_param){"play", "Play mode", 0, 3, 0, "", 4, PLAY_N}, GRP[PR_PLAY] = "A · PLAY";
     for (i = 0; i < SP_N; i++) {
@@ -905,7 +1011,9 @@ static void settings_save(void)
         rec.p[i] = set.val[i];
     rec.type = set.type, rec.style = set.style, rec.bass = set.bass, rec.voices = set.voices, rec.bank = set.bank;
     rec.play = set.play, rec.quant = set.quant;
-    rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound : 0x4100u | (set.sound - SYNTH_NSOUNDS));
+    rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound       /* (the FM-1's codes: app.c) */
+                           : set.sound < CLP0 ? 0x4100u | (set.sound - SYNTH_NSOUNDS)
+                           : set.sound < CU0 ? 0x8000u | clp_sound_key(set.sound - CLP0) : 0x4200u | (set.sound - CU0));
     rec.page = (uint8_t)(page == PG_SOUND);
     rec.slot = slot, rec.loop = loop_on;
     rec.arp_mode = set.arp_mode, rec.arp_rate = set.arp_rate, rec.arp_gate = set.arp_gate, rec.arp_oct = set.arp_oct;
@@ -937,10 +1045,14 @@ static void settings_load(void)          /* (the defaults are set; a good record
         set.sound = rec.sound & 0xFFu;
     else if ((rec.sound & 0xFF00u) == 0x4100u && user_used(rec.sound & 0xFFu))
         set.sound = SYNTH_NSOUNDS + (rec.sound & 0xFFu);
+    else if ((rec.sound & 0x8000u) && clp_sound_of_key(rec.sound & 0x7FFFu) < clp_sounds())
+        set.sound = CLP0 + clp_sound_of_key(rec.sound & 0x7FFFu);
+    else if ((rec.sound & 0xFF00u) == 0x4200u && cuser_base(rec.sound & 0xFFu) < clp_sounds())
+        set.sound = CU0 + (rec.sound & 0xFFu);
     else
-        set.sound = 0;                   /* (a Clipper sound on the FM-1: YARD's SAW here, until Clipper comes) */
+        set.sound = 0;
     sound_pick(set.sound);
-    for (i = 0; i < SP_N; i++)           /* the values as they were left (a sound edited, not kept) */
+    for (i = 0; i < SP_N && !sound_clp(set.sound); i++)   /* the values as they were left (a sound edited, not kept) */
         param_set(i, rec.p[i]);
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
@@ -957,6 +1069,7 @@ void vibe_on_init(float sample_rate)
     static const uint8_t START_P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (as the FM-1's first start) */
     synth_rate(sample_rate);
     synth_init(START_P);
+    clp_init();                          /* (Clipper at its own 44.1 kHz: clp_out resamples) */
     vibe_notes(VIBE_NOTES);
     set.mode = 1, set.tonic = 0, set.scale = 1, set.pcs = 2741u, set.quant = 1;   /* (the FM-1's defaults) */
     set.voices = 5, set.style = CHORD_OPEN, set.bass = 1, set.bank = 1, set.type = CHORD_BANK + 1u;   /* M7 */
@@ -981,7 +1094,7 @@ static const char *const HELP[] = {
     "KEYS",          "NOTES: notes. CHORDS: white keys the degrees, black keys the qualities (latched; together: combined)",
     "K1 - K6",       "the pages: SOUND, PLAY, CHORD, ARP, SCALE, SEQ",
     "ENCODERS 1 - 4", "the page's four values",
-    "A",             "the sound: YARD's thirteen, then yours (F4 on SOUND keeps one)",
+    "A",             "the sound: YARD's thirteen, yours, Clipper's 337 by family, your Clipper sounds (F4 on SOUND keeps one)",
     "F4",            "KEEP: on SOUND these values as yours; on SCALE the number in your list",
     "B",             "the scale, from bright to dark",
     "F1  F2  F3",    "NOTES / CHORDS, HOLD, POLY / MONO / +BREATH",
@@ -1120,7 +1233,7 @@ static void event(const vibe_event *e)
         else if (e->id == VB_REC)
             rec_press(1);
         else if (e->id == VB_F6)
-            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? 3u : page == PG_ARP ? 2u : 1u));
+            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? (sound_clp(set.sound) ? 2u : 3u) : page == PG_ARP ? 2u : 1u));
         lights();
     }
 }
@@ -1182,6 +1295,51 @@ static uint32_t take_note(uint32_t n)    /* (as app.c's) a recorded note in the 
     out = (int32_t)n - (int32_t)ti + (int32_t)pcs_tone(mb, i * nb / na) + shift;
     return (uint32_t)(out < 0 ? 0 : out > 127 ? 127 : out);
 }
+/* (audio) the engine playing: YARD (0) or Clipper (1); what the queue, the player and the ARP send reaches it */
+static uint8_t eng;
+static void eng_event(uint32_t st, uint32_t d1, uint32_t d2)
+{
+    if (eng)
+        clp_event(st, d1, d2);
+    else
+        synth_event(st, d1, d2);
+}
+/* Clipper at its 44.1 kHz, 32 frames at a time into a ring, read out at the host's rate (cubic Hermite between its
+ * frames; at 44.1 kHz its samples as they are) */
+#define CF_N 512u
+static int32_t cf[2u * CF_N];
+static uint64_t cf_w;                    /* frames written */
+static double cf_pos = 1.0;              /* the read position, in its frames */
+static void clp_out(int32_t *lr, uint32_t n)
+{
+    double step = 44100.0 / (double)srate;
+    uint32_t i, c;
+    for (i = 0; i < n; i++) {
+        uint64_t k = (uint64_t)cf_pos;
+        float t = (float)(cf_pos - (double)k);
+        while (cf_w < k + 3u) {          /* (its next 32) */
+            static int32_t blk[64];
+            uint32_t j;
+            clp_render(blk, 32, 4096u);
+            for (j = 0; j < 32u; j++) {
+                uint32_t at = (uint32_t)((cf_w + j) % CF_N);
+                cf[2u * at] = blk[2u * j], cf[2u * at + 1u] = blk[2u * j + 1u];
+            }
+            cf_w += 32u;
+        }
+        for (c = 0; c < 2u; c++) {
+            float y0 = (float)cf[2u * (uint32_t)((k + CF_N - 1u) % CF_N) + c], y1 = (float)cf[2u * (uint32_t)(k % CF_N) + c];
+            float y2 = (float)cf[2u * (uint32_t)((k + 1u) % CF_N) + c], y3 = (float)cf[2u * (uint32_t)((k + 2u) % CF_N) + c];
+            if (t == 0.0f)
+                lr[2u * i + c] = (int32_t)y1;
+            else {
+                float a = 0.5f * (y2 - y0), b2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3, c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+                lr[2u * i + c] = (int32_t)(((c3 * t + b2) * t + a) * t + y1);
+            }
+        }
+        cf_pos += step;
+    }
+}
 static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)   /* (audio) the recording's events */
 {
     uint32_t ch = st & 15u, kind = st & 0xF0u, m = d1;
@@ -1194,7 +1352,7 @@ static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)   /* (audio
         if (kind != 0xA0u)
             pl_map[ch][d1] = 0;
     }
-    synth_event(st, m, d2);
+    eng_event(st, m, d2);
     if (ov.on)                           /* overdub: the recording's own playing goes into the history too */
         rec_put(&hist, a_ms, st, (uint8_t)m, d2);
 }
@@ -1277,7 +1435,7 @@ static const uint8_t ARP_DIV[6];        /* (below: steps a beat for each RATE) *
 static uint32_t a_chunk;                 /* (the frames into this block, for the DAW's position) */
 static void arp_out(uint32_t st, uint32_t d1, uint32_t d2)
 {
-    synth_event(st, d1, d2);
+    eng_event(st, d1, d2);
     rec_put(&hist, a_ms, (uint8_t)st, (uint8_t)d1, (uint8_t)d2);
 }
 static int arp_daw(void)
@@ -1444,9 +1602,24 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
 {
     if (st == Q_SOUND)
         sound_load(d1);
-    else if (st == Q_MODE)
+    else if (st == Q_MODE) {
         synth_mode(d1, d2);
-    else if (st == Q_SCALE)
+        clp_mode(d1, d2);
+    } else if (st == Q_ENGINE || st == Q_CUSER) {   /* a sound: YARD's, or Clipper's (the one sounding let go) */
+        uint32_t x = d1 | d2 << 7;
+        int to = st == Q_CUSER || x != 0x3FFFu;
+        if (to != eng) {
+            if (eng)
+                clp_panic();
+            else
+                synth_panic();
+        }
+        eng = (uint8_t)to;
+        if (st == Q_CUSER)
+            clp_select_with(cu_idx, cu_id, cu_v, cu_n, cu_rt);
+        else if (to)
+            clp_select(x);
+    } else if (st == Q_SCALE)
         a_pcs = (uint16_t)(d1 | d2 << 7);
     else if (st == Q_TONIC)
         a_tonic = (uint8_t)(d1 % 12u);
@@ -1555,7 +1728,7 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
         else if ((st & 0xE0u) == 0x80u && arp_take(st, d1, d2))
             ;                            /* (the ARP on: a note played joins its notes instead of sounding) */
         else {
-            synth_event(st, d1, d2);
+            eng_event(st, d1, d2);
             if (q_rec[k % QN])           /* what was played: into the history */
                 rec_put(&hist, a_ms, (uint8_t)st, (uint8_t)d1, (uint8_t)d2);
         }
@@ -1568,7 +1741,10 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
         a_chunk = (uint32_t)at;
         a_player();
         arp_tick(a_ms);
-        synth_render(lr + 2 * at, (uint32_t)n, 4096u);   /* (MASTER at full: the host has its own volume) */
+        if (eng)                         /* (MASTER at full: the host has its own volume) */
+            clp_out((int32_t *)lr + 2 * at, (uint32_t)n);
+        else
+            synth_render(lr + 2 * at, (uint32_t)n, 4096u);
     }
     a_frames += (uint64_t)frames;
     a_publish();
@@ -1806,7 +1982,9 @@ static void draw_values(void)
             continue;
         vg_text(lb, x + 8, 234, VG_SMALL, C_DIM, 0);
         vg_text(v, x + 8, 250, VG_BIG, C_INK, 0);
-        if (page == PG_SOUND)
+        if (page == PG_SOUND && sound_clp(set.sound))
+            fill = (int)(more % 2u ? clp_fx(i) : clp_macro(i));
+        else if (page == PG_SOUND)
             fill = set.val[SOUND_P[more % 3u][i]];
         else if (page == PG_PLAY && i == 3u)
             fill = set.val[SP_GLIDE];
@@ -1894,7 +2072,22 @@ void vibe_on_draw(uint16_t *fb)
         vg_rect(0, 4, 480, 36, C_BG);
         vg_text(msg, 240, 10, VG_BIG, 0xFF8A1F, 1);
     }
-    if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
+    if (page == PG_SOUND && sound_clp(set.sound)) {   /* Clipper's sound: its family and engine, its two pages */
+        static const char *const SUB[2] = {"BRITE TIMBR MOTN SPACE (ITS MACROS)", "DRIVE CHORUS DELAY REVERB (ITS SENDS)"};
+        uint32_t c = clp_now();
+        vg_text(sound_name(), 16, 72, VG_BIG | VG_X2, C_INK, 0);
+        t[0] = 0;
+        cat(t, set.sound >= CU0 ? "YOURS, CLIPPER  " : "CLIPPER  ");
+        cat(t, clp_family_name(clp_sound_family(c)));
+        cat(t, "  ");
+        cat(t, clp_sound_engine(c));
+        if (clp_sound_mono(c))
+            cat(t, "  MONO");
+        vg_text(t, 16, 124, VG_MED, C_DIM, 0);
+        for (i = 0; i < 2u; i++)
+            vg_text(SUB[i], 16, 150 + (int)i * 18, VG_SMALL, i == more % 2u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
+        vg_text("A: THE SOUND   F6: THE OTHER FOUR   F4: KEEP", 464, 186, VG_SMALL, C_DIM, 2);
+    } else if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
         static const char *const SUB[3] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER"};
         vg_text(sound_name(), 16, 72, VG_BIG | VG_X2, C_INK, 0);
         vg_text(set.sound >= SYNTH_NSOUNDS ? (sound_mono() ? "YOURS, YARD, MONO" : "YOURS, YARD") : sound_mono() ? "YARD, MONO" : "YARD",

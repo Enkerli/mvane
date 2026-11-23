@@ -10,7 +10,7 @@ firmware's sources: `app/synth.c` (YARD) now, `core/` (chords, the recorder) nex
 Needs the SDK (a clone; `VIBE_SDK`, by default `../vibe-fm-sdk-ref/sdk`) and Zig (0.13.0 as the SDK says; 0.17.1
 works too).
 
-    make vibe        # build/mvane-yard.zip in the SDK's folder, then vibe-check (PASSED)
+    make vibe        # vibe/build.sh: build/mvane-yard.zip in the SDK's folder, then vibe-check (PASSED)
     make vibe-cmp    # YARD in the .wasm against YARD as the FM-1 computes it: bit for bit at 44.1 kHz
 
 Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or the `.wasm` onto the Playground
@@ -81,4 +81,14 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    or F4: on, off. Its own tempo; while the DAW plays, the DAW's, each step on the DAW's grid (`vibe/arp_daw.json`:
    at 90 BPM, 1/16, the steps at 0.632, 0.800, 0.968 s ... against 0.633, 0.800, 0.967 on the grid). Seven DAW
    parameters (Editor tab C); the settings' ARP fields are the FM-1's. `vibe/arp.json`: on, a chord, LATCH.
-9. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).
+9. **Done:** Clipper's sounds, its own unit (`vibe/mvane-yard/clipper.c` around `app/clipper`, the FM-1's vendored
+   copy, unchanged; `vibe/build.sh`: the SDK's build with Clipper's include paths). It runs at its own 44.1 kHz,
+   32 frames at a time into a ring read out at the host's rate (cubic Hermite; at 44.1 kHz its samples as they are),
+   one core (the FM-1's second core answered "none"). A steps through YARD's thirteen, your YARD sounds, Clipper's 337
+   by family, your Clipper sounds; the engine switches with the sound (the one sounding let go), the notes, the
+   player and the ARP reach whichever plays. SOUND on a Clipper sound: its macros BRITE TIMBR MOTN SPACE, F6 its
+   sends DRIVE CHORUS DELAY REVERB (as the FM-1's CCs, recorded); F4 KEEP: its macros, sends and reverb as yours,
+   in the bank's Clipper part, as the FM-1's FX + SAVE. The settings keep a Clipper sound by the FM-1's codes.
+   `vibe/clipper.json` (48, 44.1 and 96 kHz: the same level), `vibe/clipper_keep1.json` then `clipper_keep2.json`
+   (GOSPEL+ with its reverb send kept, read back by `tools/ysb.py`, found again). A six-note chord on Clipper's
+   heaviest: about 1 % of the audio's time in Node on this Mac; the VIBE's own figure to come.

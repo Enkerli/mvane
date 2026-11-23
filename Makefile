@@ -34,7 +34,7 @@ fwsc:   # the FM-1 package (JieLi toolchain: Linux x86-64, a container, or CI)
 
 VIBE_SDK ?= ../vibe-fm-sdk-ref/sdk
 vibe:   # the native VIBE FM firmware (vibe/mvane-yard: the Hub's SDK, Zig): build/mvane-yard.zip in the SDK, then its check
-	sh $(VIBE_SDK)/tools/build.sh $(CURDIR)/vibe/mvane-yard
+	sh vibe/build.sh $(VIBE_SDK)
 	cd $(VIBE_SDK) && node tools/vibe-check.mjs build/mvane-yard.wasm | tail -1
 
 vibe-cmp: vibe   # the port's YARD against the FM-1's, sample for sample (44.1 kHz): should be bit for bit
