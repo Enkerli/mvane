@@ -2,7 +2,7 @@
 #include "synth.h"
 #include "fastmath.h"
 
-#define SR 44100.0f
+static float SR = 44100.0f;              /* the sample rate: the FM-1's; another host's with synth_rate */
 #define NVOICE 12u
 
 typedef struct {
@@ -75,6 +75,8 @@ static void ft_init(void)
 }
 
 static float note_inc(float note) { return 440.0f * fm_exp2f((note - 69.0f) * (1.0f / 12.0f)) * (1.0f / SR); }
+
+void synth_rate(float sr) { SR = sr > 8000.0f ? sr : 44100.0f; }
 
 void synth_init(const uint8_t p[SP_N])
 {

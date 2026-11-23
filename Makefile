@@ -32,6 +32,18 @@ host:   # the firmware in the host simulator, and its scripted checks
 fwsc:   # the FM-1 package (JieLi toolchain: Linux x86-64, a container, or CI)
 	./build.sh
 
+VIBE_SDK ?= ../vibe-fm-sdk-ref/sdk
+vibe:   # the native VIBE FM firmware (vibe/mvane-yard: the Hub's SDK, Zig): build/mvane-yard.zip in the SDK, then its check
+	sh $(VIBE_SDK)/tools/build.sh $(CURDIR)/vibe/mvane-yard
+	cd $(VIBE_SDK) && node tools/vibe-check.mjs build/mvane-yard.wasm | tail -1
+
+vibe-cmp: vibe   # the port's YARD against the FM-1's, sample for sample (44.1 kHz): should be bit for bit
+	@mkdir -p $(B)/vibe
+	cd $(VIBE_SDK) && node tools/wasmtest.mjs build/mvane-yard.wasm $(CURDIR)/vibe/cmp.json $(CURDIR)/$(B)/vibe 44100 >/dev/null
+	$(CC) -O2 -ffp-contract=off -std=c99 -w -Ibase/include tools/vibe_cmp.c -o $(B)/vibe_cmp -lm
+	python3 tools/vibe_events.py vibe/cmp.json | $(B)/vibe_cmp $(B)/vibe/native.raw 517
+	python3 tools/vibe_cmp.py $(B)/vibe/audio.wav $(B)/vibe/native.raw
+
 scale-names:   # the known scales' names, for the screen and the page (core/scale_names.h, web/scale_names.json)
 	python3 tools/scale_names.py
 

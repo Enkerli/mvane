@@ -42,6 +42,7 @@ typedef struct {
 extern const synth_sound_t SYNTH_SOUNDS[];
 extern const unsigned SYNTH_NSOUNDS;
 
+void synth_rate(float sr);              /* another sample rate than the FM-1's 44.1 kHz (VIBE FM), before synth_init */
 void synth_init(const uint8_t p[SP_N]);
 void synth_event(uint32_t st, uint32_t d1, uint32_t d2);
 /* n stereo frames into lr (24-bit), at gain (MASTER as the render gets it, 0..4096) */
