@@ -94,8 +94,12 @@ y = PH + 30
 r(4, PH + 6, W - 8, 10, PAPER, 0)
 
 
+HT = []                                # the same, for the cheat sheet's tables: [title, sub, rows]
+
+
 def section(title, sub=None):
     global y
+    HT.append([title, sub, []])
     t(24, y + 20, title, 20, TXT, 700)
     if sub:
         t(24, y + 40, sub, 13, SOFT)
@@ -114,6 +118,7 @@ def head():
 
 def row(name, cells, sub=None, accent=TEAL, h=None):
     global y
+    HT[-1][2].append((name, sub, cells))
     lines = max(len(c) for c in cells)
     hh = h or (12 + 16 * max(lines, 2 if sub else 1))
     r(16, y, W - 32, hh, "#ffffff", 8, LINE)
@@ -170,18 +175,31 @@ row("ARP (held)", [["MODE / TEMPO"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["
     "tap ARP: on, off", CORAL)
 
 section("Errands")
-ERR = [
-    ("POLY+BREATH (a wind controller)", "PLAY page (HOME unlit) - tap GLO - turn K1 to POLY+BR - tap GLO"),
-    ("USB audio at full level", "PLAY page - tap GLO - turn K2 to FULL - tap GLO"),
-    ("Headphones quieter at the top", "HOME to SOUND (lit) - tap GLO (MORE) - turn K1 (PHONES MAX)"),
-    ("A Diosynth on the USB port", "GLO - turn SELECT right (left: back to the computer)"),
-    ("A scale by its number", "tap SEL - K1 to K4 the digits (2741 C major, 1723 PCO) - SAVE keeps it in your list"),
-    ("Keep what you just played", "tap REC (the last phrase; held: the whole history) - PLAY, PLAY to stop - SAVE into the slot"),
-    ("Loop and overdub", "tap SEQ - K2 LOOP ON - tap SEQ - PLAY - tap REC: a layer at the next pass; hold REC: undo"),
-    ("Edit and keep a sound", "HOME to SOUND - tap EDIT - turn (SELECT: the next page) - SAVE - tap EDIT"),
-    ("Everything off", "OCT- and OCT+ together"),
+ERR = [   # (the errand's name, the task as a user test asks it, the answer)
+    ("POLY+BREATH (a wind controller)", "Set the play mode for a wind controller's breath, then back to POLY.",
+     "PLAY page (HOME unlit) - tap GLO - turn K1 to POLY+BR - tap GLO"),
+    ("USB audio at full level", "Make the computer record the FM-1 at full level, whatever the volume.",
+     "PLAY page - tap GLO - turn K2 to FULL - tap GLO"),
+    ("Headphones quieter at the top", "Lower PHONES MAX to 50%.",
+     "HOME to SOUND (lit) - tap GLO (MORE) - turn K1 (PHONES MAX)"),
+    ("A Diosynth on the USB port", "Let the FM-1 host a USB MIDI device, then go back to the computer.",
+     "GLO - turn SELECT right (left: back to the computer)"),
+    ("Chords from a minor scale", "Play C minor's own chords (Cm7, Fm7, Gm7) on the white keys.",
+     "PLAY page - K3 SCALE to MINOR - K1 QUANT to FULL (or EDIT, K4 BANK to SCALE) - the 1st, 4th, 5th white keys"),
+    ("Two qualities at once", "Make the chords maj7 add4.", "press the M7 and S4 black keys together (they latch together)"),
+    ("A scale by its number", "Play in the pitch-class set 1723 (PCO), and keep it in your list.",
+     "tap SEL - K1 to K4 the digits (2741 C major, 1723 PCO) - SAVE keeps it in your list"),
+    ("Keep what you just played", "Keep the last phrase you played as a recording in slot 3.",
+     "tap SEQ, SELECT to 3, tap SEQ - play - tap REC (held: the whole history) - SAVE"),
+    ("Loop and overdub", "Loop a recording, add a layer, then undo it.",
+     "tap SEQ - K2 LOOP ON - tap SEQ - PLAY - tap REC: a layer at the next pass; hold REC: undo"),
+    ("The arpeggiator", "Turn the arpeggiator on, latched, at 1/16.",
+     "hold ARP - K2 RATE to 1/16 - SELECT, K2 LATCH ON - let go - tap ARP"),
+    ("Edit and keep a sound", "Make CLAV 3 dB quieter and keep it as your own.",
+     "PRESETS to CLAV - HOME to SOUND - tap EDIT - SELECT to page 3/3 - K3 LEVEL down 6 steps - SAVE - tap EDIT"),
+    ("Everything off", "Silence every note at once.", "OCT- and OCT+ together"),
 ]
-for a, b in ERR:
+for a, _, b in ERR:
     r(16, y, W - 32, 30, "#ffffff", 8, LINE)
     t(30, y + 20, a, 13, TEAL, 700)
     t(300, y + 20, b, 13, TXT)
@@ -198,3 +216,92 @@ for p in (os.path.join(here, "..", "docs", "media", "panel-map.svg"), os.path.jo
     with open(p, "w") as f:
         f.write(svg)
 print(f"panel-map.svg: {W} x {H}")
+
+# ---- the cheat sheet: the same as accessible HTML tables, the errands as tasks with their answers hidden ----
+def cell_html(c):
+    return "<br>".join(escape(x) for x in c) if c else "<span class=n>-</span>"
+
+
+tables = []
+for title, sub, rows in HT:
+    if not rows:
+        continue
+    body = []
+    for name, rsub, cells in rows:
+        head_ = escape(name or "") + (f"<span class=sub>{escape(rsub)}</span>" if rsub else "")
+        body.append(f"<tr><th scope=row>{head_}</th>" + "".join(f"<td>{cell_html(c)}</td>" for c in cells) + "</tr>")
+    tables.append(f"<h2>{escape(title)}</h2>" + (f"<p>{escape(sub)}</p>" if sub else "") +
+                  f"<div class=wrap><table><caption class=sr>{escape(title)}</caption><thead><tr><th scope=col>Where</th>"
+                  "<th scope=col>K1</th><th scope=col>K2</th><th scope=col>K3</th><th scope=col>K4</th>"
+                  "<th scope=col>SELECT</th></tr></thead><tbody>" + "".join(body) + "</tbody></table></div>")
+CTRL = [("MASTER", "The volume (PHONES MAX sets its top)"), ("ALGORITHM", "NOTES (left) / CHORDS (right)"),
+        ("PRESETS", "The sound, by family (a fast turn: the next family)"),
+        ("SELECT", "What the layer lists; on the pages, the next family's first sound"),
+        ("HOME", "The PLAY page / the SOUND page (lit); with GLO or EDIT open, their other half"),
+        ("OCT- / OCT+", "The octave; both together: everything off"),
+        ("REC", "Tap: keep the last phrase; hold: the whole history. While a recording loops: tap, a layer; hold, undo"),
+        ("PLAY", "Play / stop the recording"),
+        ("SAVE", "The settings and the recording (stopped); with SEL open: the scale; with FX, or EDIT on SOUND: the sound"),
+        ("ARP", "Tap: on, off; hold: its layer"),
+        ("FX, SEL, EDIT, GLO, SEQ", "Their layers: hold and turn, or tap open and tap closed"), ("ENV, LFO", "Nothing yet"),
+        ("White keys", "NOTES: notes; CHORDS: the scale's degrees from the tonic (F3). Pressure on F3 to C5, each key its own"),
+        ("Black keys", "CHORDS: the chord's quality, latched, combined when pressed together; F#5: HOLD. NOTES: notes")]
+ctrl = ("<h2>Buttons, encoders, keys</h2><div class=wrap><table><caption class=sr>Buttons, encoders, keys</caption>"
+        "<thead><tr><th scope=col>Control</th><th scope=col>Does</th></tr></thead><tbody>" +
+        "".join(f"<tr><th scope=row>{escape(a)}</th><td>{escape(b)}</td></tr>" for a, b in CTRL) + "</tbody></table></div>")
+tasks = "".join(f'<li><label><input type=checkbox data-k="{i}"> {escape(q)}</label>'
+                f"<details><summary>The answer<span class=sr> to task {i + 1}</span></summary><p><b>{escape(a)}:</b> {escape(ans)}</p></details></li>"
+                for i, (a, q, ans) in enumerate(ERR))
+html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mvane yard cheat sheet</title>
+<meta name="description" content="mvane yard on the M-VAVE FM-1: every control, the knob pages and the layers, and tasks to try.">
+<style>
+:root {{ --bg: #fbfaf7; --card: #fff; --ink: #1d1f22; --soft: #5a5f66; --line: #d6d3cc; --teal: #1f7a64; --coral: #b4532a; }}
+@media (prefers-color-scheme: dark) {{ :root {{ --bg: #16181b; --card: #1f2226; --ink: #ececee; --soft: #a9adb4; --line: #353940;
+  --teal: #6fd0b8; --coral: #f0956b; }} }}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }}
+main {{ max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; }}
+h1 {{ font-size: 1.7rem; margin: 0 0 .3rem; }} h2 {{ font-size: 1.25rem; margin: 2rem 0 .4rem; }}
+p {{ margin: .3rem 0 .8rem; color: var(--soft); }} a {{ color: var(--teal); }}
+.wrap {{ overflow-x: auto; }}
+table {{ border-collapse: collapse; width: 100%; background: var(--card); font-size: .95rem; }}
+th, td {{ border: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }}
+thead th {{ color: var(--soft); font-weight: 600; }}
+tbody th {{ color: var(--coral); white-space: nowrap; }}
+.sub {{ display: block; color: var(--soft); font-weight: 400; font-size: .85rem; }}
+.n {{ color: var(--soft); }}
+.sr {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }}
+ol {{ padding-left: 1.4rem; }} li {{ margin: .6rem 0; }}
+details {{ margin: .25rem 0 0 1.6rem; }} summary {{ cursor: pointer; color: var(--teal); }}
+input[type=checkbox] {{ width: 1.1rem; height: 1.1rem; vertical-align: -.15rem; }}
+:focus-visible {{ outline: 3px solid var(--teal); outline-offset: 2px; }}
+</style></head>
+<body><main>
+<h1>mvane yard: the cheat sheet</h1>
+<p>Every control of mvane yard on the M-VAVE FM-1 (0.16), as tables. The same as a picture:
+<a href="panel-map.svg">the panel map</a>. All of it in words: <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">the manual</a>.</p>
+<h2>The panel in three ideas</h2>
+<ol><li><b>Two knob pages</b>: HOME switches K1 to K4 between PLAY and SOUND (HOME lit). The screen names the four knobs.</li>
+<li><b>Layers</b>: FX, SEL, EDIT, GLO, SEQ and ARP change what the knobs and SELECT do. Hold the button and turn, or tap it open and tap it closed. EDIT and GLO follow the page; with one open, HOME flips it to its other half.</li>
+<li><b>SELECT</b> moves through what the layer lists.</li></ol>
+{ctrl}
+{"".join(tables[1:] if tables and tables[0].startswith("<h2>The keys") else tables)}
+<h2>Try it: tasks</h2>
+<p>A way to learn the panel, or to test it: do each task on the FM-1, then open its answer. Your ticks stay in this browser.</p>
+<ol id=tasks>{tasks}</ol>
+<p><small>Made by tools/panel_map.py from the same lists as the panel map.</small></p>
+</main>
+<script>
+document.querySelectorAll("#tasks input").forEach((b) => {{
+  const k = "mvane-task-" + b.dataset.k;
+  try {{ b.checked = localStorage.getItem(k) === "1"; }} catch (e) {{}}
+  b.onchange = () => {{ try {{ localStorage.setItem(k, b.checked ? "1" : "0"); }} catch (e) {{}} }};
+}});
+</script>
+</body></html>
+"""
+with open(os.path.join(here, "..", "web", "cheatsheet.html"), "w") as f:
+    f.write(html)
+print("cheatsheet.html:", len(tables), "tables,", len(ERR), "tasks")

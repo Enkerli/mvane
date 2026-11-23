@@ -3,7 +3,7 @@
   "author": "Enkerli",
   "kinds": ["chords"],
   "editor": "https://enkerli.github.io/mvane-yard/",
-  "cheat": "https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md",
+  "cheat": "https://enkerli.github.io/mvane-yard/cheatsheet.html",
   "image": "docs/media/card.png",
   "color": "#2f8f78",
   "sounds": "none – all synthesised"

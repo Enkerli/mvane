@@ -1769,11 +1769,14 @@ static void yard_store(void)
         app_say("YARD", "32 SOUNDS: FULL");
         return;
     }
-    if (!(ybank.s[slot].flags & 1u)) {   /* a new one: USER n */
+    if (!(ybank.s[slot].flags & 1u)) {   /* a new one: its source's name and its slot (0.16: CLAV 3; USER n before) */
+        uint32_t n;
         mvane_zero(&ybank.s[slot], sizeof ybank.s[slot]);
         t[0] = 0;
-        text_cat(t, "USER ");
-        int_text((int32_t)slot + 1, t + 5);
+        for (n = 0; n < 9u && src->name[n]; n++)
+            t[n] = src->name[n];
+        t[n++] = ' ';
+        int_text((int32_t)slot + 1, t + n);
         for (k = 0; k < 12u && t[k]; k++)
             ybank.s[slot].name[k] = t[k];
         ybank.s[slot].flags = (uint8_t)(1u | (src->mono ? 2u : 0u));
@@ -1854,7 +1857,7 @@ static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous sl
     uint32_t now = plat_ms();
     if (take_dirty && now - ui.slot_warn > 3000u) {
         ui.slot_warn = now;
-        app_say("NOT SAVED", "AGAIN: LOSE IT");
+        app_say("NOT SAVED", "AGAIN: LEAVE IT");
         return;
     }
     ui.slot_warn = 0;
@@ -2134,7 +2137,7 @@ static void knob_turn(uint32_t i, int32_t e)
         return;
     } else if (l == B_GLO) {
         if (i == 0) {
-            play_set((set.play + 4u + (uint32_t)d) & 3u);
+            play_set((uint32_t)clamp((int32_t)set.play + d, 0, 3));   /* (0.16: stops at its ends, as the others) */
             return;
         } else if (i == 1) {
             set.usb_full = (uint8_t)(e > 0);
@@ -2515,6 +2518,8 @@ static void input(void)
         } else if (!ui.held_used)
             ui.latched = ui.latched == ui.held ? -1 : ui.held;
         ui.held = -1;
+        for (k = EN_K1; k < NE; k++)     /* (0.16) the knobs' labels unlit: they are another layer's now */
+            ui.knob_at[k] = 0;
         ui.redraw = 1;
     }
     if (ui.rec_t) {                      /* REC: held, the whole history; a tap, the last phrase */
@@ -2625,12 +2630,12 @@ static void draw(void)
         for (i = 0; i < TAKE_SLOTS; i++) {
             int32_t x = 10 + (int32_t)i * 28, full = i == set.slot ? take.count != 0 : takes_size(i) > 16;
             char d[3] = {(char)('1' + i), 0, 0};
-            cv_rect(x, 6, 24, 30, i == set.slot ? C_HI : C_LINE);
+            cv_rect(x, 6, 24, 30, i == set.slot ? C_HI : full ? C_WHITE : C_LINE);   /* (0.16: a full one plainly filled) */
             if (!full)
                 cv_rect(x + 2, 8, 20, 26, C_BLACK);
-            cv_text(x + 8, 13, &FONT_S, d, full && i == set.slot ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
+            cv_text(x + 8, 13, &FONT_S, d, full ? C_BLACK : i == set.slot ? C_HI : C_GRAY);
         }
-        cv_text(10, 44, &FONT_XS, "SELECT: THE SLOT   K2: LOOP   REC, PLAY, SAVE", C_GRAY);
+        cv_text(10, 44, &FONT_XS, "FILLED: A RECORDING   SELECT: SLOT   K2: LOOP", C_GRAY);
     } else if (lay == B_ARP) {           /* ARP: its modes, the one set lit; the tempo; on / latch */
         int32_t x = 10;
         char bp[32];
@@ -2649,7 +2654,7 @@ static void draw(void)
         }
         text_cat(bp, " BPM");
         cv_text(10, 32, &FONT_S, bp, arp.on ? C_HI : C_GRAY);
-        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE RATE GATE OCT   TAP ARP: ON/OFF" : "SELECT: TEMPO, LATCH   TAP ARP: ON/OFF",
+        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE, RATE ...   TAP ARP: ON, OFF" : "SELECT: TEMPO, LATCH   TAP ARP: ON, OFF",
                 C_GRAY);
     } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
         int h = plat_usb_host_state();
@@ -2678,14 +2683,15 @@ static void draw(void)
         int32_t x = 10;
         for (i = 0; i < CLP_EDIT_PAGES; i++)
             x = cv_text(x, 4, &FONT_S, PG[i], i == ui.cedit ? C_WHITE : C_GRAY) + 12;
-        cv_text(10, 44, &FONT_XS, "SELECT: THE NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
+        cv_text(10, 44, &FONT_XS, "SELECT: NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's three pages */
-        static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET"};
-        int32_t x = 10;
-        for (i = 0; i < 3u; i++)
-            x = cv_text(x, 4 + (int32_t)(i / 2u) * 18, &FONT_S, PG[i], i == ui.yfx % 3u ? C_WHITE : C_GRAY) + 12,
-            x = i == 1u ? 10 : x;
-        cv_text(10, 44, &FONT_XS, "SELECT: THE NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
+        /* (0.16, the first user test: three pages' names did not fit) this page's, then the next one's */
+        static const char *const PG[3] = {"1/3 DETUNE SUB RES PLUCK", "2/3 WAVE PW NOISE FILTER", "3/3 ONSET, LEVEL"};
+        char nx[32] = "NEXT: ";
+        text_cat(nx, PG[(ui.yfx + 1u) % 3u] + 4);
+        cv_text(10, 4, &FONT_S, PG[ui.yfx % 3u], C_WHITE);
+        cv_text(10, 22, &FONT_S, nx, C_GRAY);
+        cv_text(10, 44, &FONT_XS, "SELECT: NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_EDIT) {          /* CHORD: the black keys' types in this bank */
         int32_t x = 10;
         for (i = 0; i < CHORD_BANK; i++) {
@@ -2710,6 +2716,8 @@ static void draw(void)
             char ql[24];
             qual_label(ql);
             text_cat(t, ql);
+            if (set.quant == 2u && set.bank && qual_eff())
+                text_cat(t, " IN SCALE");   /* (0.16: QUANT FULL bends the quality to the scale: Cm7, not "M7") */
         }
         text_cat(t, " ");
         text_cat(t, CHORD_STYLE_NAMES[set.style]);
@@ -2739,8 +2747,9 @@ static void draw(void)
         const char *lb;
         int lit = ui.knob_at[EN_K1 + i] && now - ui.knob_at[EN_K1 + i] < 1200u;
         knob_info(i, &lb, t);
-        cv_text(8 + (int32_t)i * 58, 0, &FONT_XS, lb, lit ? C_WHITE : C_GRAY);
-        cv_text(8 + (int32_t)i * 58, 14, &FONT_S, t, lit ? C_WHITE : C_HI);
+        /* (0.16, the first user test: "PHONES MAXSPREAD") each in its 56 px column: a smaller font when it is wider */
+        cv_text(8 + (int32_t)i * 58, 0, text_w(&FONT_XS, lb) > 55 ? &FONT_T : &FONT_XS, lb, lit ? C_WHITE : C_GRAY);
+        cv_text(8 + (int32_t)i * 58, 14, text_w(&FONT_S, t) > 55 ? &FONT_XS : &FONT_S, t, lit ? C_WHITE : C_HI);
     }
     cv_blit(0, 100);
 

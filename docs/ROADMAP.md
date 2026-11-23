@@ -71,7 +71,8 @@ chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The
 6. **The overdub's playflow made clear** (Alex): what REC does in each state (playing, looping, overdubbing, undo),
    shown on the screen as it happens (LOOP, +DUB, the layer count), the MIDI-in overdub's channel shown, the manual's
    page as a small diagram; then whatever playing shows to change (a count-in, punch in and out, a layer muted).
-6b. **The panel's rough edges, from the first user test** (`tests/usertest/REPORT-2026-11-23.md`): labels that collide
+6b. **The panel's rough edges, from the first user test. Done (0.16), but two left as they are by design: SELECT
+   steps what the layer lists (on EDIT, the chord type), and HOME flips GLO and EDIT to their other half.** (`tests/usertest/REPORT-2026-11-23.md`): labels that collide
    or are cut (PHONES MAX and SPREAD, "ON/OF", "SAVE: KEEP THE SOUND"); the chord line saying "C MINOR M7" over a
    Cm7 (QUANT FULL: the quality as it sounds); USB AUDIO not wrapping where PLAY does; SELECT on EDIT changing the
    chord type when you only look; a saved YARD sound named after its source (CLAV 1, not USER 1); the slot grid

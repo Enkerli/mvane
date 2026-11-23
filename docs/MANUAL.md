@@ -7,6 +7,9 @@ overdub it, move it to another key or scale, save it in one of eight slots, take
 
 ![mvane yard's controls: the panel, the knob pages, the layers, errands](media/panel-map.svg)
 
+The same as accessible tables, with tasks to try (their answers hidden):
+[the cheat sheet](https://enkerli.github.io/mvane-yard/cheatsheet.html).
+
 ## Install
 
 From The Firmware Hub (Install, in Chrome or Edge), or with **M-Flasher**: install `mvane-yard-X.Y.fwsc`. Back up
@@ -23,8 +26,8 @@ native (`mvane yard native`, below).
 - **Chords that follow the scale**: a quality (a black key) is the same whatever the scale, so in MINOR the M7
   latched still plays major sevenths. For chords from the scale, set QUANT to FULL (PLAY page, K1), or EDIT's BANK to
   SCALE; or latch the minor qualities (m7).
-- **Pick the slot before you keep a recording**: changing slots with a recording not saved drops it (the history
-  still has what you played: REC again gets it back).
+- **Pick the slot before you keep a recording**: changing slots with a recording not saved warns (NOT SAVED, AGAIN:
+  LEAVE IT) and a second turn leaves it unsaved; what you played is still in the history, so REC can keep it again.
 - **SAVE** keeps the settings as they are now; without it, a restart brings back the last ones saved.
 
 ## The panel in three ideas
@@ -62,7 +65,7 @@ ENV and LFO do nothing in mvane yard yet.
 | --- | --- |
 | Top left | NOTES or CHORDS (ARP or ARP LATCH beside it while the arpeggiator runs; USB HOST, lit, while the port hosts a device); for a moment after you change something, what changed |
 | Top right | The sound |
-| Middle (CHORDS) | The chord sounding (or the last one, dimmed); below: key, scale, chord type, voicing, voices + BASS, the pitch-class set's number, HOLD |
+| Middle (CHORDS) | The chord sounding (or the last one, dimmed); below: key, scale, chord type (IN SCALE on QUANT FULL: the quality bent to the scale), voicing, voices + BASS, the pitch-class set's number, HOLD |
 | Middle (NOTES) | The notes held |
 | Knob row | What K1 to K4 do now, the one you turn lit, with its value |
 | A layer open | Its name, its four knobs, and what SELECT does |
@@ -257,7 +260,7 @@ most (`make clp-trim`). The PLAY page's GLIDE applies to every sound as it loads
 
 FX (or EDIT on the SOUND page) open, then **SAVE** keeps the sound playing (over itself if it is already yours), up
 to 32 of YARD's and 32 of Clipper's, kept across a restart.
-- A **YARD** sound: its sixteen values, saved as USER n, listed in its family after YARD's (mono: LEADS EZ; PLUCK 64
+- A **YARD** sound: its sixteen values, saved under its source's name and its place (CLAV 3), listed in its family after YARD's (mono: LEADS EZ; PLUCK 64
   or more: HITS EZ; else CHORDS EZ).
 - A **Clipper** sound: a factory sound and up to 14 changes (its macros, its engine's values and envelope on EDIT,
   its sends on FX) and the reverb's model; saved as its sound's name and a + (GLASS PAD+), first in that sound's

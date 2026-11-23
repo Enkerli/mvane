@@ -100,7 +100,7 @@ wait 100
 expect sound 0
 expect res 0
 expect mono 0
-# the user's sounds: FX held and SAVE keeps this one (SAW, RES turned) as USER 1, among the CHORDS EZ after YARD's
+# the user's sounds: FX held and SAVE keeps this one (SAW, RES turned) as SAW 1, among the CHORDS EZ after YARD's
 # own; SAVE and a restart keep it, and it is the sound
 expect nyuser 0
 press FX
