@@ -28,6 +28,7 @@ void *memcpy(void *d, const void *s, size_t n);
 #include "../../core/chords.c"
 #include "../../core/scale_names.h"
 #include "../../app/settings.h"
+#include "../../core/rec.c"
 
 VIBE_PARALLEL_AUDIO
 
@@ -35,7 +36,15 @@ VIBE_PARALLEL_AUDIO
 #define QN 512u
 #define Q_SOUND 0xF0u                    /* (not MIDI) d1: YARD's sound to load */
 #define Q_MODE 0xF1u                     /* d1: mono, d2: breath (synth_mode) */
-static uint8_t q_st[QN], q_d1[QN], q_d2[QN];
+#define Q_REC 0xF2u                      /* (the recorder, step 7) d1: 0 REC tapped, 1 REC held */
+#define Q_PLAY 0xF3u                     /* d1: 0 stop, 1 play / stop, 2 stop only */
+#define Q_LOOP 0xF4u                     /* d1: LOOP off / on */
+#define Q_SCALE 0xF5u                    /* d1, d2: the scale's number (7 + 5 bits) */
+#define Q_TONIC 0xF6u                    /* d1: the key */
+#define Q_TAKE 0xF7u                     /* d1: the file image to play from (0, 1), d2: 1 none (an empty slot) */
+#define Q_EXPORT 0xF8u                   /* d1: the file image to copy the recording into (and play from) */
+static uint8_t q_st[QN], q_d1[QN], q_d2[QN], q_rec[QN];
+static uint8_t q_live = 1;               /* (send's: 0 while a sound loads, which the history does not keep) */
 static volatile uint32_t qw, qr;
 static void send(uint32_t st, uint32_t d1, uint32_t d2)   /* (control flow) full: dropped */
 {
@@ -43,6 +52,7 @@ static void send(uint32_t st, uint32_t d1, uint32_t d2)   /* (control flow) full
     if (w - qr >= QN)
         return;
     q_st[w % QN] = (uint8_t)st, q_d1[w % QN] = (uint8_t)(d1 & 0x7Fu), q_d2[w % QN] = (uint8_t)(d2 & 0x7Fu);
+    q_rec[w % QN] = (uint8_t)(st < 0xF0u && q_live);   /* (what was played goes into the history) */
     VIBE_RELEASE();
     qw = w + 1u;
 }
@@ -429,8 +439,10 @@ static void sound_pick(uint32_t n)       /* one of the list's, its values sent a
     char nm[16];
     set.sound = sound_exists(n) ? n : 0u;
     sound_of(set.sound, p, &mono, nm);
+    q_live = 0;                          /* (a sound's values: not the playing, not kept in the history) */
     for (i = 0; i < SP_N; i++)
         param_set(i, p[i]);
+    q_live = 1;
     if (set.started)                     /* the PLAY page's GLIDE is the player's: every sound gets it (as the FM-1) */
         param_set(SP_GLIDE, (int32_t)glide);
     set.started = 1;
@@ -525,6 +537,13 @@ static void keep_scale(void)             /* F4 on SCALE: the number kept in your
     say("SCALE KEPT", vg_itoa((int)num, nb));
 }
 
+/* (the recorder's, below: the slot, LOOP, and what the SEQ page's controls do) */
+static uint8_t slot, loop_on;
+static void slot_step(int d);
+static void slot_save(void);
+static void send_loop(void);
+static void recorder_init(void);
+
 static void page_value(uint32_t i, const char **label, char *val)   /* encoder i's on this page */
 {
     val[0] = 0;
@@ -567,6 +586,14 @@ static void page_value(uint32_t i, const char **label, char *val)   /* encoder i
             strcpy(val, set.bass ? "ON" : "OFF");
         else
             strcpy(val, set.bank ? "QUALITY" : "SCALE");
+    } else if (page == PG_SEQ) {
+        if (i == 0) {
+            *label = "SLOT";
+            vg_itoa(slot + 1, val);
+        } else if (i == 1) {
+            *label = "LOOP";
+            strcpy(val, loop_on ? "ON" : "OFF");
+        }
     } else if (page == PG_SCALE) {
         static const char *const N[4] = {"x1000", "x100", "x10", "x1"};
         static const uint16_t P[4] = {1000, 100, 10, 1};
@@ -611,6 +638,13 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
             set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
         }
         harmony_changed();
+    } else if (page == PG_SEQ) {
+        if (i == 0)
+            slot_step(d);
+        else if (i == 1) {
+            loop_on = (uint8_t)(d > 0);
+            send_loop();
+        }
     } else if (page == PG_SCALE) {
         static const uint16_t P[4] = {1000, 100, 10, 1};
         uint32_t num = set.pcs & 0xFFFu, dg = num / P[i] % 10u;
@@ -631,9 +665,12 @@ static void labels(void)                 /* the captions under the keys (the key
     for (i = 0; i < 6; i++)
         vibe_label(VB_F1 + i, F[i]);
 }
+static volatile uint32_t pub_playing, pub_ov;   /* (the recorder's, below) */
 static void lights(void)
 {
     int i;
+    vibe_led_button(VB_PLAY, 0x4FD88A, pub_playing ? 1.0f : 0.0f);
+    vibe_led_button(VB_REC, 0xFF3030, pub_ov ? 1.0f : 0.0f);
     for (i = 0; i < PG_N; i++)
         vibe_led_button(VB_K1 + i, PG_COLOR[i], i == page ? 1.0f : 0.15f);
     vibe_led_button(VB_F1, 0xF2F2F2, set.mode ? 1.0f : 0.15f);
@@ -718,9 +755,11 @@ static float param_now(uint32_t i)       /* a parameter's value as the panel has
     default: return (float)set.hold;
     }
 }
-static void params_push(void)            /* what moved on the panel, to the DAW */
+static void send_scale(void);
+static void params_push(void)            /* what moved on the panel, to the DAW (and the key and scale to the player) */
 {
     uint32_t i;
+    send_scale();
     for (i = 0; i < PR_N; i++)
         if (vibe_param_get((int)i) != param_now(i))
             vibe_param_set((int)i, param_now(i));
@@ -776,6 +815,7 @@ static void settings_save(void)
     rec.play = set.play, rec.quant = set.quant;
     rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound : 0x4100u | (set.sound - SYNTH_NSOUNDS));
     rec.page = (uint8_t)(page == PG_SOUND);
+    rec.slot = slot, rec.loop = loop_on;
     vibe_store_write("settings", &rec, (int)sizeof rec);
     set_dirty = 0;
 }
@@ -810,6 +850,7 @@ static void settings_load(void)          /* (the defaults are set; a good record
         param_set(i, rec.p[i]);
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
+    slot = (uint8_t)(rec.slot & 7u), loop_on = (uint8_t)(rec.loop != 0);
 }
 
 void vibe_on_init(float sample_rate)
@@ -827,6 +868,7 @@ void vibe_on_init(float sample_rate)
     bank_load();
     sound_pick(0);
     settings_load();
+    recorder_init();
     labels();
     lights();
     params_declare();
@@ -844,6 +886,7 @@ static const char *const HELP[] = {
     "F1  F2  F3",    "NOTES / CHORDS, HOLD, POLY / MONO / +BREATH",
     "F6",            "MORE: the page's next four (SOUND)",
     "MIDI / DAW",    "notes on their channels (MPE); QUANT FULL: to the scale",
+    "REC  PLAY  STOP", "REC: the last phrase (held: everything); while it loops: overdub (held: undo). SEQ: the slot, LOOP, SAVE (F4)",
     "DATA + ENTER",  "every control on the screen: DATA walks to it, ENTER presses it or edits it (DATA turns)",
     "HOME",          "this overview"};
 
@@ -902,8 +945,13 @@ void vibe_on_event(const vibe_event *e)
     if (e->type == VIBE_EV_PARAM || e->type == VIBE_EV_ENCODER || (e->type == VIBE_EV_BUTTON && e->down))
         settings_touch();
 }
+static void rec_press(int down);
 static void event(const vibe_event *e)
 {
+    if (e->type == VIBE_EV_BUTTON && !e->down && e->id == VB_REC) {
+        rec_press(0);
+        return;
+    }
     {                                    /* FOCUS first (SDK 10): DATA walks, ENTER presses */
         int id, r = vf_event(e, &id);
         if (r == VF_PRESS && id >= FX_QUAL && id < FX_QUAL + (int)CHORD_BANK) {
@@ -957,35 +1005,379 @@ static void event(const vibe_event *e)
             keep_sound();
         else if (e->id == VB_F4 && page == PG_SCALE)
             keep_scale();
+        else if (e->id == VB_F4 && page == PG_SEQ)
+            slot_save();
+        else if (e->id == VB_PLAY)
+            send(Q_PLAY, 1, 0);
+        else if (e->id == VB_STOP)
+            send(Q_PLAY, 2, 0);
+        else if (e->id == VB_REC)
+            rec_press(1);
         else if (e->id == VB_F6)
             more = (uint8_t)((more + 1u) % (page == PG_SOUND ? 3u : 1u));
         lights();
     }
 }
 
+/* ---- the recorder (step 7): the FM-1's (core/rec.c), all in the audio flow, which alone writes the history: what
+ * the events queue is played and kept there, on the audio's own clock (frames, as ms); the player plays a recording
+ * there too, 32 frames at a time, in the key and scale now set (a note to the same degree, as on the FM-1); LOOP, and
+ * overdub (REC while it loops: from the top of the next pass the recording's own playing goes into the history with
+ * what is played over it, and each pass becomes the recording; REC held, the last layer undone). The events only send
+ * commands; the audio publishes what the screen shows (single 32-bit values). The recordings are files take1..8.mvt,
+ * as on the FM-1: the events read one into a file image and hand it over; to keep the one sounding, the audio copies
+ * it into a file image (then plays from there, the history free again) and the events write that ---- */
+#define HIST_WORDS (1u << 15)            /* 32,768 events, however long they took (the FM-1's) */
+#define TAKE_MAX (HIST_WORDS + REC_PRE)
+#define IMG_WORDS (REC_HEAD_WORDS + TAKE_MAX)
+#define PHRASE_GAP_MS 3000u
+#define SLEEP_MS 4000u
+static uint32_t hist_buf[HIST_WORDS];
+static uint32_t img[2][IMG_WORDS];       /* file images: a slot's file read in, or the recording copied out */
+static rec_ring hist;
+static rec_take take, ov_undo_take;
+static rec_player player;
+static uint64_t a_frames;                /* (audio) the frames done */
+static uint32_t a_ms;
+static uint8_t a_loop, a_tonic, a_take_img = 2;   /* (the file image the recording plays from: 2, none / the history) */
+static uint16_t a_pcs = 2741u;
+static struct { uint8_t armed, on, ending, has_undo, layers; uint32_t mark; } ov;
+static uint16_t pl_mask;
+static uint8_t pl_tonic, pl_map[16][128];
+/* published by the audio, read by the events and the screen */
+static volatile uint32_t pub_count, pub_dur, pub_pos, pub_layers, pub_hist_ms, pub_full, pub_dirty, pub_img = 2,
+    pub_export;
+
+static uint32_t a_mask(void) { return (uint32_t)(a_pcs & 0xFFFu) | 1u; }
+static uint32_t pcs_tone(uint32_t m, uint32_t j)   /* the j-th tone of a set, in semitones above its tonic */
+{
+    uint32_t k, n = 0;
+    for (k = 0; k < 12u; k++)
+        if (m >> k & 1u && n++ == j)
+            return k;
+    return 0;
+}
+static uint32_t take_note(uint32_t n)    /* (as app.c's) a recorded note in the key and scale now set */
+{
+    uint32_t mb = a_mask(), pc, k, i = 0, na = 0, nb = chord_scale_size((uint16_t)mb), ti = 0;
+    int32_t shift = ((int32_t)a_tonic - (int32_t)pl_tonic + 12) % 12, out;
+    if (mb == pl_mask && !shift)
+        return n;
+    if (shift > 6)
+        shift -= 12;
+    pc = (n + 12u - pl_tonic) % 12u;
+    for (k = 0; k < 12u; k++)
+        if (pl_mask >> k & 1u) {
+            if (k <= pc)
+                i = na, ti = k;
+            na++;
+        }
+    out = (int32_t)n - (int32_t)ti + (int32_t)pcs_tone(mb, i * nb / na) + shift;
+    return (uint32_t)(out < 0 ? 0 : out > 127 ? 127 : out);
+}
+static void play_emit(void *ctx, uint8_t st, uint8_t d1, uint8_t d2)   /* (audio) the recording's events */
+{
+    uint32_t ch = st & 15u, kind = st & 0xF0u, m = d1;
+    (void)ctx;
+    if (kind == 0x90u && d2)
+        m = take_note(d1), pl_map[ch][d1] = (uint8_t)(m + 1u);
+    else if (kind == 0x80u || kind == 0x90u || kind == 0xA0u) {
+        if (pl_map[ch][d1])
+            m = pl_map[ch][d1] - 1u;
+        if (kind != 0xA0u)
+            pl_map[ch][d1] = 0;
+    }
+    synth_event(st, m, d2);
+    if (ov.on)                           /* overdub: the recording's own playing goes into the history too */
+        rec_put(&hist, a_ms, st, (uint8_t)m, d2);
+}
+static void take_play(uint32_t at)
+{
+    pl_mask = (uint16_t)a_mask(), pl_tonic = a_tonic;
+    memset(pl_map, 0, sizeof pl_map);
+    rec_play_start(&player, &take, at);
+}
+static void ov_off(void)
+{
+    ov.armed = ov.on = ov.ending = 0;
+    hist.sleep_ms = SLEEP_MS;
+}
+static void ov_lock(void)                /* the undo's words kept too, if in the history and older */
+{
+    if (ov.has_undo && ov_undo_take.ring && take.ring && ov_undo_take.start < take.start)
+        hist.lock = ov_undo_take.start, hist.locked = 1;
+}
+static void a_capture(uint32_t gap)      /* REC: the last phrase (gap) or everything (0) */
+{
+    if (player.playing)
+        rec_play_stop(&player, play_emit, 0);
+    ov_off();
+    ov.has_undo = 0, ov.layers = 0;
+    if (rec_capture(&hist, a_ms, gap, &take)) {
+        a_take_img = 2;
+        pub_dirty = 1;
+    }
+}
+static void a_undo(void)
+{
+    if (!ov.has_undo)
+        return;
+    rec_play_stop(&player, play_emit, 0);
+    ov_off();
+    take = ov_undo_take;
+    ov.has_undo = 0;
+    if (ov.layers)
+        ov.layers--;
+    if (take.ring)
+        hist.lock = take.start, hist.locked = 1;
+    pub_dirty = 1;
+    take_play(a_ms);
+}
+static int ov_pass_end(uint32_t b)       /* a looping recording at its end: the pass becomes it if overdubbing */
+{
+    int got = 0;
+    if (ov.on) {
+        rec_take nt;
+        if (hist.full || !rec_capture_from(&hist, ov.mark, take.duration_ms, &nt)) {
+            ov_off();
+            if (take.ring)
+                hist.lock = take.start, hist.locked = 1;
+        } else {
+            ov_undo_take = take, ov.has_undo = 1;
+            take = nt;
+            a_take_img = 2;
+            ov_lock();
+            pub_dirty = 1, got = 1;
+            if (ov.layers < 99u)
+                ov.layers++;
+        }
+    }
+    if (ov.ending)
+        ov_off();
+    if (ov.armed)
+        ov.armed = 0, ov.on = 1, hist.sleep_ms = 0;
+    if (ov.on)
+        ov.mark = rec_mark(&hist, b);
+    return got;
+}
+static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
+{
+    if (st == Q_SOUND)
+        sound_load(d1);
+    else if (st == Q_MODE)
+        synth_mode(d1, d2);
+    else if (st == Q_SCALE)
+        a_pcs = (uint16_t)(d1 | d2 << 7);
+    else if (st == Q_TONIC)
+        a_tonic = (uint8_t)(d1 % 12u);
+    else if (st == Q_LOOP)
+        a_loop = (uint8_t)(d1 != 0);
+    else if (st == Q_REC) {
+        if (player.playing && a_loop) {  /* while it loops: overdub (tapped), undo (held) */
+            if (d1)
+                a_undo();
+            else if (ov.on)
+                ov.ending ^= 1u;
+            else
+                ov.armed ^= 1u;
+        } else
+            a_capture(d1 ? 0u : PHRASE_GAP_MS);
+    } else if (st == Q_PLAY) {
+        if (player.playing || d1 == 2u) {
+            if (player.playing)
+                rec_play_stop(&player, play_emit, 0);
+        } else if (d1 && take.count)
+            take_play(a_ms);
+    } else if (st == Q_TAKE || st == Q_EXPORT) {
+        uint32_t b = d1 & 1u;
+        if (player.playing)
+            rec_play_stop(&player, play_emit, 0);
+        ov_off();
+        ov.has_undo = 0, ov.layers = 0;
+        if (st == Q_EXPORT && take.count) {   /* the recording into file image b: then it plays from there */
+            uint32_t i, head[REC_HEAD_WORDS];
+            rec_file_head(&take, head);
+            for (i = 0; i < REC_HEAD_WORDS; i++)
+                img[b][i] = head[i];
+            for (i = 0; i < take.count && i < TAKE_MAX; i++)
+                img[b][REC_HEAD_WORDS + i] = rec_word(&take, i);
+        }
+        rec_unlock(&hist);
+        memset(&take, 0, sizeof take);
+        if ((st == Q_EXPORT || !d2) && rec_load(&take, (const uint8_t *)img[b], 4u * IMG_WORDS) != 0)
+            take.count = 0;
+        a_take_img = (uint8_t)(take.count ? b : 2u);
+        pub_dirty = 0;
+        if (st == Q_EXPORT) {
+            VIBE_RELEASE();
+            pub_export++;
+        }
+    }
+}
+static void a_publish(void)
+{
+    pub_count = take.count, pub_dur = take.duration_ms, pub_playing = player.playing;
+    pub_pos = player.playing ? a_ms - player.start_ms : 0;
+    pub_ov = ov.on ? 2u + ov.ending : ov.armed, pub_layers = ov.layers, pub_full = hist.full, pub_img = a_take_img;
+    if ((a_frames & 0x3FFFu) < 256u)     /* (the history's reach: now and then) */
+        pub_hist_ms = rec_span_ms(&hist, a_ms);
+}
+static void a_player(void)               /* the recording at a_ms: its events, and LOOP at its end */
+{
+    if (player.playing && !rec_play_poll(&player, a_ms, play_emit, 0)) {
+        if (a_loop && take.duration_ms) {
+            uint16_t m = pl_mask;
+            uint8_t t = pl_tonic;
+            uint32_t b = player.start_ms + take.duration_ms;
+            int layer = ov_pass_end(b);
+            take_play(b);
+            if (!layer)
+                pl_mask = m, pl_tonic = t;
+            rec_play_poll(&player, a_ms, play_emit, 0);
+        }
+    }
+    if (!player.playing && (ov.on || ov.armed))
+        ov_off();
+}
+
 void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
 {
     static int32_t lr[2u * SYNTH_BLOCK];
     uint32_t w = qw, k;
-    int i;
+    int i, at;
     (void)in;
+    if (!hist.buf) {                     /* (the first block: the history starts) */
+        rec_init(&hist, hist_buf, HIST_WORDS);
+        hist.sleep_ms = SLEEP_MS;
+    }
+    a_ms = (uint32_t)(a_frames * 1000u / (uint64_t)srate);
     VIBE_ACQUIRE();
     for (k = qr; k != w; k++) {
-        uint32_t st = q_st[k % QN];
-        if (st == Q_SOUND)
-            sound_load(q_d1[k % QN]);
-        else if (st == Q_MODE)
-            synth_mode(q_d1[k % QN], q_d2[k % QN]);
-        else
-            synth_event(st, q_d1[k % QN], q_d2[k % QN]);
+        uint32_t st = q_st[k % QN], d1 = q_d1[k % QN], d2 = q_d2[k % QN];
+        if (st >= 0xF0u)
+            a_command(st, d1, d2);
+        else {
+            synth_event(st, d1, d2);
+            if (q_rec[k % QN])           /* what was played: into the history */
+                rec_put(&hist, a_ms, (uint8_t)st, (uint8_t)d1, (uint8_t)d2);
+        }
     }
     VIBE_RELEASE();
     qr = w;
-    synth_render(lr, (uint32_t)frames, 4096u);   /* (MASTER at full: the host has its own volume) */
+    for (at = 0; at < frames; at += 32) {   /* 32 frames at a time: the recording's events on time */
+        int n = frames - at < 32 ? frames - at : 32;
+        a_ms = (uint32_t)((a_frames + (uint64_t)at) * 1000u / (uint64_t)srate);
+        a_player();
+        synth_render(lr + 2 * at, (uint32_t)n, 4096u);   /* (MASTER at full: the host has its own volume) */
+    }
+    a_frames += (uint64_t)frames;
+    a_publish();
     for (i = 0; i < frames; i++) {
         out_l[i] = (float)lr[2 * i] * (1.0f / 8388608.0f);
         out_r[i] = (float)lr[2 * i + 1] * (1.0f / 8388608.0f);
     }
+}
+
+/* ---- the recorder, the events' side: commands, the slots' files ---- */
+static uint32_t slot_size[8];            /* each slot's file (bytes; under 16: empty) */
+static uint8_t sent_tonic = 255, export_wait, export_buf;
+static uint16_t sent_pcs = 0xFFFFu;
+static uint32_t export_seen, slot_warn_at;
+static uint64_t rec_down_at;
+static uint8_t rec_down, rec_fired;
+static void slot_name(uint32_t k, char *nm) { strcpy(nm, "take"); vg_itoa((int)k + 1, nm + 4); cat(nm, ".mvt"); }
+static void send_loop(void) { send(Q_LOOP, loop_on, 0); }
+static void send_scale(void)             /* the key and scale, to the player (a recording plays in them) */
+{
+    if ((set.pcs & 0xFFFu) != sent_pcs)
+        sent_pcs = (uint16_t)(set.pcs & 0xFFFu), send(Q_SCALE, sent_pcs & 0x7Fu, sent_pcs >> 7);
+    if (set.tonic != sent_tonic)
+        sent_tonic = set.tonic, send(Q_TONIC, sent_tonic, 0);
+}
+static uint32_t free_img(void) { return pub_img == 0u ? 1u : 0u; }   /* (the file image the audio does not play from) */
+static void slot_load(void)              /* the slot's file into a file image, handed to the audio */
+{
+    char nm[16];
+    uint32_t b = free_img();
+    int n;
+    slot_name(slot, nm);
+    n = vibe_store_read(nm, img[b], (int)(4u * IMG_WORDS));
+    slot_size[slot] = n > 0 ? (uint32_t)n : 0u;
+    VIBE_RELEASE();
+    send(Q_TAKE, b, n < 16 ? 1u : 0u);
+}
+static void slot_step(int d)             /* SLOT: the next or previous (a recording not saved: warned first) */
+{
+    uint32_t now = (uint32_t)(vibe_frames() * 1000u / (uint64_t)srate);
+    if (pub_dirty && now - slot_warn_at > 3000u) {
+        slot_warn_at = now;
+        say("NOT SAVED", "AGAIN: LOSE IT");
+        return;
+    }
+    slot_warn_at = 0;
+    slot = (uint8_t)((slot + 8u + (uint32_t)d) % 8u);
+    slot_load();
+}
+static void slot_save(void)              /* SAVE (F4 on SEQ): the recording into its slot's file */
+{
+    if (!pub_count) {
+        say("RECORDING", "EMPTY");
+        return;
+    }
+    export_buf = (uint8_t)free_img();
+    export_seen = pub_export;
+    export_wait = 1;
+    send(Q_EXPORT, export_buf, 0);
+}
+static void export_check(void)           /* (the events, the screen) the audio has copied it: written to its file */
+{
+    char nm[16];
+    uint32_t count, bytes;
+    if (!export_wait || pub_export == export_seen)
+        return;
+    VIBE_ACQUIRE();
+    export_wait = 0;
+    count = img[export_buf][2];
+    bytes = 4u * (REC_HEAD_WORDS + (count < TAKE_MAX ? count : TAKE_MAX));
+    slot_name(slot, nm);
+    if (vibe_store_write(nm, img[export_buf], (int)bytes))
+        say("SAVE", "FAILED");
+    else {
+        slot_size[slot] = bytes;
+        say("SAVED", nm);
+    }
+}
+static void rec_press(int down)          /* REC: tapped, the last phrase (while it loops: overdub); held, all (undo) */
+{
+    uint64_t now = vibe_frames();
+    if (down) {
+        rec_down = 1, rec_fired = 0, rec_down_at = now;
+        return;
+    }
+    if (rec_down && !rec_fired)
+        send(Q_REC, now - rec_down_at > (uint64_t)(srate * 0.7f), 0);
+    rec_down = 0;
+}
+static void rec_hold_check(void)         /* (the screen) REC held 0.7 s: at once, as on the FM-1 */
+{
+    if (rec_down && !rec_fired && vibe_frames() - rec_down_at > (uint64_t)(srate * 0.7f)) {
+        rec_fired = 1;
+        send(Q_REC, 1, 0);
+    }
+}
+static void recorder_init(void)
+{
+    uint32_t k;
+    char nm[16];
+    for (k = 0; k < 8u; k++) {
+        int n;
+        slot_name(k, nm);
+        n = vibe_store_size(nm);
+        slot_size[k] = n > 0 ? (uint32_t)n : 0u;
+    }
+    send_scale();
+    send_loop();
+    slot_load();
 }
 
 /* ---- the screen (step 3): every page drawn whole each time, 480 x 320, the house layout ----
@@ -1127,8 +1519,10 @@ static void draw_fkeys(void)
     for (i = 0; i < 6u; i++) {
         int x = 8 + (int)i * 78, lit = (i == 0u && set.mode) || (i == 1u && set.hold);
         const char *t = F[i];
-        if ((i == 5u && page != PG_SOUND) || (i == 3u && page != PG_SOUND && page != PG_SCALE))
+        if ((i == 5u && page != PG_SOUND) || (i == 3u && page != PG_SOUND && page != PG_SCALE && page != PG_SEQ))
             t = "";
+        if (i == 3u && page == PG_SEQ)
+            t = "SAVE";
         if (!t[0])
             continue;
         vg_frame(x, 292, 74, 24, 1, lit ? 0xFF7A00 : C_FAINT);
@@ -1176,6 +1570,14 @@ void vibe_on_draw(uint16_t *fb)
     (void)fb;
     if (set_dirty && vibe_frames() - set_dirty_at > (uint64_t)srate)   /* (a second after the last change) */
         settings_save();
+    rec_hold_check();
+    export_check();
+    {                                    /* the PLAY and REC lights follow the recorder */
+        static uint32_t lit = 0xFFFFFFFFu;
+        uint32_t now = pub_playing | pub_ov << 1;
+        if (now != lit)
+            lit = now, lights();
+    }
     if (help) {
         vg_controls("MVANE YARD", HELP, (int)(sizeof HELP / sizeof HELP[0] / 2u));
         return;
@@ -1216,10 +1618,51 @@ void vibe_on_draw(uint16_t *fb)
             vg_text(NOTE_N[(set.tonic + i) % 12u], x + 17, 148, VG_MED, on ? C_BG : C_DIM, 1);
         }
         vg_text("A BIT EACH TONE ABOVE THE KEY: C MAJOR IS 2741    B: THE LIST", 16, 182, VG_SMALL, C_DIM, 0);
-    } else {                             /* ARP, SEQ: the steps to come */
-        vg_text(page == PG_ARP ? "THE ARP" : "RECORDINGS", 16, 72, VG_BIG | VG_X2, C_FAINT, 0);
-        vg_text(page == PG_ARP ? "A STEP TO COME: ON THE AUDIO'S CLOCK, THE DAW'S TEMPO" : "A STEP TO COME: THE RECORDER, LOOPS, OVERDUB",
-                16, 130, VG_MED, C_DIM, 0);
+    } else if (page == PG_SEQ) {         /* the recordings: the eight slots, this one, the history */
+        char nb[12];
+        for (i = 0; i < 8u; i++) {
+            int x = 16 + (int)i * 56, full = i == slot ? pub_count != 0u : slot_size[i] > 16u;
+            if (full)
+                vg_round(x, 70, 48, 40, 5, i == slot ? PG_COLOR[PG_SEQ] : 0x4A4E58);
+            else
+                vg_frame(x, 70, 48, 40, i == slot ? 2 : 1, i == slot ? PG_COLOR[PG_SEQ] : C_FAINT);
+            vg_text(vg_itoa((int)i + 1, nb), x + 24, 78, VG_BIG, full ? C_BG : i == slot ? PG_COLOR[PG_SEQ] : C_DIM, 1);
+        }
+        t[0] = 0;
+        if (pub_count) {
+            cat(t, "RECORDING ");
+            cat(t, vg_itoa(slot + 1, nb));
+            cat(t, ": ");
+            cat(t, vg_ftoa((float)pub_dur / 1000.0f, 1, nb));
+            cat(t, " S");
+        } else
+            cat(t, "EMPTY: PLAY, THEN REC (HELD: ALL)");
+        vg_text(t, 16, 120, VG_BIG, pub_count ? C_INK : C_FAINT, 0);
+        if (pub_playing) {
+            t[0] = 0;
+            if (pub_ov) {
+                cat(t, pub_ov == 1u ? "OVERDUB AT THE TOP" : "OVERDUB ");
+                if (pub_ov >= 2u)
+                    cat(t, vg_itoa((int)pub_layers + 1, nb));
+                if (pub_ov == 3u)
+                    cat(t, " (ENDS)");
+            } else
+                cat(t, loop_on ? "LOOPING" : "PLAYING");
+            vg_text(t, 16, 150, VG_BIG, 0xFF8A1F, 0);
+            vg_text(vg_ftoa((float)pub_pos / 1000.0f, 1, nb), 464, 120, VG_BIG, C_INK, 2);
+        } else if (pub_dirty)
+            vg_text("NOT SAVED: F4", 16, 150, VG_MED, 0xFF8A1F, 0);
+        t[0] = 0;
+        cat(t, "HISTORY ");
+        cat(t, vg_ftoa((float)pub_hist_ms / 1000.0f, 1, nb));
+        cat(t, " S");
+        if (pub_full)
+            cat(t, "   FULL: SAVE");
+        vg_text(t, 16, 180, VG_SMALL, pub_full ? 0xFF8A1F : C_DIM, 0);
+        vg_text("REC: LAST PHRASE (HELD: ALL)   LOOPING: OVERDUB (HELD: UNDO)", 16, 194, VG_SMALL, C_DIM, 0);
+    } else {                             /* ARP: the step to come */
+        vg_text("THE ARP", 16, 72, VG_BIG | VG_X2, C_FAINT, 0);
+        vg_text("A STEP TO COME: ON THE AUDIO'S CLOCK, THE DAW'S TEMPO", 16, 130, VG_MED, C_DIM, 0);
         transport_text(t);
         vg_text(t[0] ? t : "NO DAW CLOCK: ITS OWN TEMPO", 464, 80, VG_BIG, t[0] ? 0x4FD88A : C_FAINT, 2);
         draw_sounding(150);
@@ -1250,7 +1693,7 @@ void vibe_on_draw(uint16_t *fb)
     vf_key(VB_F3, 164, 292, 74, 24);
     if (page == PG_SOUND)
         vf_key(VB_F6, 398, 292, 74, 24);
-    if (page == PG_SOUND || page == PG_SCALE)
+    if (page == PG_SOUND || page == PG_SCALE || page == PG_SEQ)
         vf_key(VB_F4, 242, 292, 74, 24);
     vf_end(0xFF8A1F);
 }

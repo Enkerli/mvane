@@ -30,7 +30,9 @@ int main(int argc, char **argv)
             synth_event(st, d1, d2);
             have = scanf("%u %u %u %u", &eb, &st, &d1, &d2) == 4;
         }
-        synth_render(lr, 128, 4096u);
+        for (i = 0; i < 128u; i += 32u)  /* (the port renders 32 frames at a time, its recorder's step: YARD's output
+                                          * depends a little on the step, -90 dB at most, the FM-1's being 256) */
+            synth_render(lr + 2u * i, 32, 4096u);
         fwrite(lr, sizeof lr, 1, out);
     }
     fclose(out);

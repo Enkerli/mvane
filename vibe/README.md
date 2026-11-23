@@ -64,5 +64,15 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    once on VIBE_EV_SAVE (the DAW keeps its project). `vibe/store1.json` then `vibe/store2.json` (wasmtest, `"store"`):
    keep a sound and a scale, change the key; the second run finds them; `tools/ysb.py` reads the bank. Recordings
    (`.mvt`) come with the recorder (step 7).
-7. The recorder (`core/rec.c`) on the audio's clock: REC, loops, overdub.
-8. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).
+7. **Done:** the recorder, the FM-1's (`core/rec.c`), all in the audio flow, which alone writes the history: what
+   the events queue is played and kept there on the audio's clock (frames as ms); the player plays a recording
+   there too, 32 frames at a time, in the key and scale now set (a note to the same degree); LOOP; overdub (REC
+   while it loops: a layer a pass, REC held undoes the last); the eight slots as the FM-1's files `take1.mvt` ...
+   `take8.mvt` (the SEQ page: SLOT, LOOP, F4 SAVE; a slot left with a recording not saved warns first). **REC**
+   tapped: the last phrase, held: everything; **PLAY**, **STOP**. The events only send commands and read what the
+   audio publishes; to save, the audio copies the recording into a file image and plays from it, the events write
+   that file. `vibe/rec1.json` then `rec2.json`: two chords kept with REC, played, looped with an overdub (three
+   layers), saved; found again. Not yet: MIDI in moved to a free channel while a recording plays (the FM-1's 0.13.2,
+   for a wind controller's overdubs); SAVE's copy spread over blocks (now one: 17 % of a block at most in Node).
+8. The ARP, on the audio's clock and the DAW's tempo.
+9. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).
