@@ -42,8 +42,9 @@ VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
 
 Alex: low-hanging fruit first, then "basic Vane" (wavetables, attack transients), then waveguides and WindCore; and
 Alex's own ideas already here, which the first sort left out: the demo MIDI preloaded, the ARP's next steps, bassline
-generation, ProgGenie. The assessment behind the Vane items: [VANE.md](VANE.md). `app/synth.c` is shared by the FM-1
-and the native port, so YARD's additions land in both.
+generation, ProgGenie; then six more from Alex the same day (program changes, a random ARP by degree weights, a loose
+chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The assessment behind the Vane items:
+[VANE.md](VANE.md). `app/synth.c` is shared by the FM-1 and the native port, so YARD's additions land in both.
 
 **Small, a session or less each**
 1. **Native: MIDI in on a free channel while a recording plays** (the FM-1's 0.13.2, for the Diosynth's overdubs).
@@ -53,32 +54,53 @@ and the native port, so YARD's additions land in both.
    SCRATCH TICK, `gen_inharmonic.py`'s recipes) as a burst per note over its envelope, ONSET and ONSET LVL on YARD's
    third EDIT page (CC 27, 28), kept with the sound; no samples, both places (`app/tests/onset.txt`, `make onset-cal`;
    `dist/onset-demo.wav` to hear). Next, by ear: its tone (the band) and length as values, pitched ones.
-5. **The demo MIDI preloaded** (Alex): a demo recording in the firmware's slots on a first start (MPE chords, glide,
+5. **Program changes followed** (Alex): a program change on MIDI in picks the sound (YARD's factory and user sounds,
+   then Clipper's, in the PRESETS order; bank select for the rest), and the recorder keeps it, so a recording replays
+   its changes of sound; sending one when the sound changes on the device, as an option. Today none are read.
+6. **The overdub's playflow made clear** (Alex): what REC does in each state (playing, looping, overdubbing, undo),
+   shown on the screen as it happens (LOOP, +DUB, the layer count), the MIDI-in overdub's channel shown, the manual's
+   page as a small diagram; then whatever playing shows to change (a count-in, punch in and out, a layer muted).
+7. **The demo MIDI preloaded** (Alex): a demo recording in the firmware's slots on a first start (MPE chords, glide,
    combined qualities, a lead, a wind take; 1980s-demo cheesy is fine), as a `.mvt` in flash, on both.
-6. **The FM-1's history at 64 KB as an option** (16,384 events): 64 KB of pool for what follows.
+8. **The FM-1's history at 64 KB as an option** (16,384 events): 64 KB of pool for what follows.
 
 **A few sessions each**
-7. **The ARP, tweaked** (Alex): its degrees from the expression (pressure or slide: how far up the run, which
+9. **The ARP, tweaked** (Alex): its degrees from the expression (pressure or slide: how far up the run, which
    degree), rhythms that are not even (lengths, rests, accents; Serpe-like notation for a pattern as text), steps of
    two or three notes and the full chord on chosen steps (comping), steps through the scale's degrees above the held
-   notes.
-8. **Bassline generation** (Alex): the ARP's machinery on the bass alone, from the chord and the scale (roots, fifths,
-   passing tones, approach notes into the next chord), on its own channel; with multitimbral, a bass sound of its own.
-9. **Wavetables, natively**: Vane's AKWF tables (CC0) as a YARD oscillator, the morph on a knob and on pressure or
-   slide.
-10. **A simple waveguide**: plucked string and blown pipe (Karplus-Strong, a one-delay flute), polyphonic, both places:
+   notes; and **a RANDOM mode in the current scale**, each degree weighted (the root most, then the fifth, the third,
+   and so on: a histogram of degree frequency, a default from the corpus, editable on the page), a run never leaving
+   the scale and the key it follows.
+10. **Quantize to the current chord, loosely** (Alex): a QUANT setting between FULL (the scale) and CHORD (the held
+    chord's notes only): notes on the beat or held long pulled to the chord's tones, quick ones between left as
+    passing tones in the scale; the looseness on a value (how long a note may stay off the chord), for MIDI in as
+    for the keys.
+11. **Bassline generation** (Alex): the ARP's machinery on the bass alone, from the chord and the scale (roots,
+    fifths, passing tones, approach notes into the next chord), on its own channel; with multitimbral, a bass sound
+    of its own.
+12. **Wavetables, natively**: Vane's AKWF tables (CC0) as a YARD oscillator, the morph on a knob and on pressure or
+    slide.
+13. **A simple waveguide**: plucked string and blown pipe (Karplus-Strong, a one-delay flute), polyphonic, both places:
     the FM-1's budget for delay lines measured before WindCore's.
-11. **Wavetables on the FM-1**, compact (256-sample frames, 16-bit, three or four levels, built for the table in use).
-12. **The recorded transients** (VSCO-2-CE, VCSL: CC0): natively; on the FM-1 if Alex wants them there (about 100 KB
+14. **Wavetables on the FM-1**, compact (256-sample frames, 16-bit, three or four levels, built for the table in use).
+15. **The recorded transients** (VSCO-2-CE, VCSL: CC0): natively; on the FM-1 if Alex wants them there (about 100 KB
     of flash, and the Hub's sounds line becomes a CC0 statement).
 
 **Bigger**
-13. **ProgGenie on the device** (Alex; M3 below): its progressions in C (`core/proggen`: the corpus's transition tables,
+16. **ProgGenie on the device** (Alex; M3 below): its progressions in C (`core/proggen`: the corpus's transition tables,
     compact, in flash), suggesting the next chord on the black keys or a pad, the voice leading as now.
-14. **WindCore in C** (from `Vane/WindCore/WindCore.h`): native first, compared with Vane's render; then on the FM-1
+17. **Lead sheet input** (Alex): a progression from ProgGenie or a lead sheet (chord symbols and bars, as text: a
+    ChordPro-like or iReal-like line, through the web page or a file) loaded as a chart; the device then steps through
+    it (on the beat, on a pad, or on each new key pressed), the keys playing its chords and scales, the ARP and the
+    bass following it; and recordings keeping the chart's place.
+18. **WindCore in C** (from `Vane/WindCore/WindCore.h`): native first, compared with Vane's render; then on the FM-1
     as a mono WIND engine, single precision, judged by ear at one times the rate, probably on two cores.
-15. Then what was already listed: ENV and LFO as drawn qurves (13 below), editable chord qualities (14), multitimbral
-    (2), the plugin and app of its own (3).
+19. **mvane yard as an indie plugin of its own** (Alex; 3 below), beyond the VIBE FM card: the same C, with room the
+    FM-1's screen lacks: explanatory text for each control and mode, a separate chord display (a piano roll of the
+    voices: what moved, what held, the chart's next chord), other inputs (Serpe-like UPI patterns typed in, the
+    computer keyboard, a lead sheet), the same sounds and recordings as the FM-1.
+20. Then what was already listed: ENV and LFO as drawn qurves (13 below), editable chord qualities (14), multitimbral
+    (2).
 
 ## After the submission (proposed, 2026-11-22)
 
