@@ -41,7 +41,12 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    tones from the key); the key, scale, QUANT and play mode; encoders 1–4's values with bars; F1–F6's captions
    (F1 says NOTES or CHORDS, F3 the play mode, F2 lit while HOLD). `vibe/pages.json` (wasmtest) shoots every page;
    the longest draw 0.7 ms in Node.
-4. FOCUS (DATA + ENTER reaches every control).
+4. **Done:** FOCUS (SDK 10): every control on the screen reachable with DATA (it walks, in reading order: the sound,
+   the six pages, the page's own, the scale, the four values, the F keys) and ENTER (presses, or edits: DATA turns
+   it then). CHORD's ten qualities are buttons (ENTER: as a black key tapped, Coral Flower's latch), SCALE's eleven
+   tones above the key too (ENTER adds or takes one). DATA has no other job here, so it always walks (`VF_ALWAYS`);
+   in the plugin and the browser a click on a control does the same (`vf_clicks`). `vibe/focus.json` walks to M7 and
+   presses it.
 5. The DAW: YARD's parameters (automatable), the ARP and the loops on the song position.
 6. Storage: settings, your sounds and scales (`yard.ysb`), recordings (`.mvt`), as on the FM-1.
 7. The recorder (`core/rec.c`) on the audio's clock: REC, loops, overdub.

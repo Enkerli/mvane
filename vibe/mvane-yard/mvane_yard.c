@@ -473,6 +473,7 @@ void vibe_on_init(float sample_rate)
     page = PG_PLAY;
     labels();
     lights();
+    vf_clicks(1);                        /* (SDK 18: in the plugin and the browser, a click on a control too) */
 }
 
 static const char *const HELP[] = {
@@ -484,6 +485,7 @@ static const char *const HELP[] = {
     "F1  F2  F3",    "NOTES / CHORDS, HOLD, POLY / MONO / +BREATH",
     "F6",            "MORE: the page's next four (SOUND)",
     "MIDI / DAW",    "notes on their channels (MPE); QUANT FULL: to the scale",
+    "DATA + ENTER",  "every control on the screen: DATA walks to it, ENTER presses it or edits it (DATA turns)",
     "HOME",          "this overview"};
 
 static void midi_note(const vibe_event *e)   /* a note from MIDI or the DAW: as it is (QUANT FULL: to the scale) */
@@ -522,8 +524,22 @@ static void key_note(const vibe_event *e)    /* a key, NOTES: a note on its own 
     }
 }
 
+#define FX_QUAL 100                      /* (FOCUS's buttons: the qualities, the scale's tones) */
+#define FX_TONE 200
 void vibe_on_event(const vibe_event *e)
 {
+    {                                    /* FOCUS first (SDK 10): DATA walks, ENTER presses */
+        int id, r = vf_event(e, &id);
+        if (r == VF_PRESS && id >= FX_QUAL && id < FX_QUAL + (int)CHORD_BANK) {
+            qual_key((uint32_t)(id - FX_QUAL), 1);
+            qual_key((uint32_t)(id - FX_QUAL), 0);
+        } else if (r == VF_PRESS && id > FX_TONE && id < FX_TONE + 12) {
+            set.pcs = (uint16_t)((set.pcs ^ (1u << (id - FX_TONE))) | 1u);
+            harmony_changed();
+        }
+        if (r != VF_NO)
+            return;
+    }
     if (e->type == VIBE_EV_BUTTON && e->down && (e->id == VB_HOME || e->id == VB_RETURN)) {
         help = e->id == VB_HOME ? !help : 0;
         return;
@@ -801,4 +817,29 @@ void vibe_on_draw(uint16_t *fb)
     }
     draw_values();
     draw_fkeys();
+    /* FOCUS (SDK 10): every control drawn, reachable with DATA (walk, then turn) and ENTER (press), in reading order */
+    vf_begin();
+    vf_encoder(VE_A, 330, 6, 142, 30);   /* the sound */
+    for (i = 0; i < PG_N; i++)
+        vf_key(VB_K1 + (int)i, 8 + (int)i * 78, 44, 74, 18);
+    if (page == PG_CHORD)                /* the qualities: ENTER latches one, as a black key tapped */
+        for (i = 0; i < CHORD_BANK; i++)
+            vf_button(FX_QUAL + (int)i, 16 + (int)(i % 5u) * 90, 158 + (int)(i / 5u) * 26, 84, 22);
+    if (page == PG_SCALE)                /* the twelve tones: ENTER adds or takes one (the key's stays) */
+        for (i = 1; i < 12u; i++)
+            vf_button(FX_TONE + (int)i, 16 + (int)i * 38, 140, 34, 34);
+    vf_encoder(VE_B, 8, 206, 260, 22);   /* the scale */
+    for (i = 0; i < 4u; i++) {
+        const char *lb;
+        char v[24];
+        page_value(i, &lb, v);
+        if (lb[0])
+            vf_encoder(VE_1 + (int)i, 8 + (int)i * 118, 230, 112, 54);
+    }
+    vf_key(VB_F1, 8, 292, 74, 24);
+    vf_key(VB_F2, 86, 292, 74, 24);
+    vf_key(VB_F3, 164, 292, 74, 24);
+    if (page == PG_SOUND)
+        vf_key(VB_F6, 398, 292, 74, 24);
+    vf_end(0xFF8A1F);
 }
