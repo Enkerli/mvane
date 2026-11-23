@@ -45,22 +45,24 @@ const char *const SYNTH_ONSET_NAMES[SYNTH_ONSETS] = {"OFF", "TONGUE", "CLICK", "
 
 /* YARD's own sounds (0.10, Alex 2026-11-22: the light synth to build on), first on PRESETS: TONE REL GLIDE ATTACK DECAY
  * RES DETUNE SUB PLUCK (GLIDE, the PLAY page's, stays as it is); mono: one voice, legato, whatever PLAY says */
+/* (0.16) each one's LEVEL measured (make loud: the same ordinary phrase's loudest moment to -26 dB, as Clipper's
+ * trims): they were 16 dB apart, CLAV the quietest, SAW the loudest */
 const synth_sound_t SYNTH_SOUNDS[] = {
-    {"SAW", 0, {56, 60, 30, 24, 64, 0, 0, 0, 0}},          /* (0.9's saw, as it was) */
-    {"PAD", 0, {48, 96, 30, 86, 64, 20, 72, 0, 0}},
-    {"ENSEMBLE", 0, {62, 82, 30, 62, 64, 8, 110, 0, 0}},
-    {"KEYS", 0, {70, 52, 30, 4, 74, 16, 22, 0, 72}},
-    {"PLUCK", 0, {44, 42, 30, 0, 44, 46, 0, 0, 112}},
-    {"BRASS", 0, {40, 42, 30, 30, 60, 22, 52, 24, 38}},
-    {"LEAD", 1, {76, 30, 30, 6, 64, 52, 40, 0, 20}},
-    {"BASS", 1, {34, 26, 30, 0, 40, 40, 0, 92, 60}},
+    {"SAW", 0, {56, 60, 30, 24, 64, 0, 0, 0, 0, [SP_LEVEL] = 52}},          /* (0.9's saw, as it was; 0.16: 6 dB down) */
+    {"PAD", 0, {48, 96, 30, 86, 64, 20, 72, 0, 0, [SP_LEVEL] = 56}},
+    {"ENSEMBLE", 0, {62, 82, 30, 62, 64, 8, 110, 0, 0, [SP_LEVEL] = 55}},
+    {"KEYS", 0, {70, 52, 30, 4, 74, 16, 22, 0, 72, [SP_LEVEL] = 58}},
+    {"PLUCK", 0, {44, 42, 30, 0, 44, 46, 0, 0, 112, [SP_LEVEL] = 68}},
+    {"BRASS", 0, {40, 42, 30, 30, 60, 22, 52, 24, 38, [SP_LEVEL] = 59}},
+    {"LEAD", 1, {76, 30, 30, 6, 64, 52, 40, 0, 20, [SP_LEVEL] = 71}},
+    {"BASS", 1, {34, 26, 30, 0, 40, 40, 0, 92, 60, [SP_LEVEL] = 77}},
     /* WIND (0.11): a triangle and its breath's noise (with POLY+BR or MONO+BR: the breath the level) */
-    {"WIND", 1, {52, 32, 30, 22, 64, 16, 26, 0, 0, 127, 0, 40, 0}},
+    {"WIND", 1, {52, 32, 30, 22, 64, 16, 26, 0, 0, 127, 0, 40, 0, [SP_LEVEL] = 66}},
     /* (0.11) the oscillators' choices: TONE REL GLIDE ATTACK DECAY RES DETUNE SUB PLUCK WAVE PW NOISE FILTER */
-    {"HOLLOW", 0, {60, 80, 30, 40, 64, 10, 30, 0, 0, 64, 40, 0, 0}},     /* a pulse pad: pressure narrows it */
-    {"FLUTE", 1, {64, 30, 30, 30, 64, 5, 0, 0, 0, 127, 0, 55, 0}},       /* a triangle, breath noise */
-    {"REED", 1, {58, 28, 30, 12, 64, 35, 10, 0, 0, 64, 110, 20, 64}},    /* a narrow pulse through the bandpass */
-    {"CLAV", 0, {80, 20, 30, 0, 30, 40, 0, 0, 100, 64, 100, 0, 127}},    /* a narrow pulse, highpassed, plucked */
+    {"HOLLOW", 0, {60, 80, 30, 40, 64, 10, 30, 0, 0, 64, 40, 0, 0, [SP_LEVEL] = 53}},     /* a pulse pad: pressure narrows it */
+    {"FLUTE", 1, {64, 30, 30, 30, 64, 5, 0, 0, 0, 127, 0, 55, 0, [SP_LEVEL] = 67}},       /* a triangle, breath noise */
+    {"REED", 1, {58, 28, 30, 12, 64, 35, 10, 0, 0, 64, 110, 20, 64, [SP_LEVEL] = 64}},    /* a narrow pulse through the bandpass */
+    {"CLAV", 0, {80, 20, 30, 0, 30, 40, 0, 0, 100, 64, 100, 0, 127, [SP_LEVEL] = 83}},    /* a narrow pulse, highpassed, plucked */
 };
 const unsigned SYNTH_NSOUNDS = sizeof SYNTH_SOUNDS / sizeof SYNTH_SOUNDS[0];
 
@@ -356,6 +358,8 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
             prm[SP_ONSET] = (uint8_t)d2;
         else if (d1 == SYNTH_CC_ONSET_LVL && !ch)
             prm[SP_ONSET_LVL] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_LEVEL && !ch)
+            prm[SP_LEVEL] = (uint8_t)d2;
         else if (d1 == 101u)
             rpn_msb[ch] = (uint8_t)d2;
         else if (d1 == 100u)
@@ -547,6 +551,8 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     /* each voice: a seven-note chord at full velocity peaks near -10 dBFS (the FM-1's output stage distorts well
      * before digital full scale: Alex, 2026-11-21) */
     float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.06f;
+    if (prm[SP_LEVEL] && prm[SP_LEVEL] != 64u)  /* LEVEL: the sound's own (0 and 64: 0 dB, as before it) */
+        gain *= fm_exp2f(SYNTH_LEVEL_DB(prm[SP_LEVEL]) * (1.0f / 6.0206f));
     float rel_s = 0.005f * fm_exp2f((float)prm[SP_REL] * (8.6f / 127.0f));      /* 5 ms .. 2 s */
     float att_s = 0.002f * fm_exp2f((float)prm[SP_ATTACK] * (10.0f / 127.0f));  /* 2 ms .. 2 s */
     float dec_s = 0.03f * fm_exp2f((float)prm[SP_DECAY] * (7.0f / 127.0f));     /* 30 ms .. 3.8 s */

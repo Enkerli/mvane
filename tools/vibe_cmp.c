@@ -13,7 +13,7 @@ int main(int argc, char **argv)
     static const uint8_t SP_CC[SP_N] = {SYNTH_CC_TONE, SYNTH_CC_REL, SYNTH_CC_GLIDE, SYNTH_CC_ATTACK, SYNTH_CC_DECAY,
                                         SYNTH_CC_RES, SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_PLUCK, SYNTH_CC_WAVE,
                                         SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE, SYNTH_CC_ONSET,
-                                        SYNTH_CC_ONSET_LVL};
+                                        SYNTH_CC_ONSET_LVL, SYNTH_CC_LEVEL};
     static int32_t lr[2 * 128];
     unsigned blocks = argc > 2 ? (unsigned)atoi(argv[2]) : 0, b, i, eb, st, d1, d2;
     int have;

@@ -89,6 +89,7 @@ static void settings_defaults(void)
     for (i = 0; i < SP_N_SET; i++)
         set.p[i] = P[i];
     set.onset = set.onset_lvl = 0;
+    set.level = 64;
     set.type = 0;
     set.style = CHORD_OPEN;
     set.bass = 1;
@@ -155,7 +156,7 @@ static void settings_load(void)
         bad = 1;
     for (i = 0; i < SP_N_SET; i++)
         bad |= set.p[i] > 127u;
-    bad |= set.onset > 127u || set.onset_lvl > 127u;
+    bad |= set.onset > 127u || set.onset_lvl > 127u || set.level > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES + 16u || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
@@ -683,14 +684,14 @@ static void set_p_get(uint8_t p[SP_N])
     uint32_t i;
     for (i = 0; i < SP_N_SET; i++)
         p[i] = set.p[i];
-    p[SP_ONSET] = set.onset, p[SP_ONSET_LVL] = set.onset_lvl;
+    p[SP_ONSET] = set.onset, p[SP_ONSET_LVL] = set.onset_lvl, p[SP_LEVEL] = set.level;
 }
 static void set_p_put(const uint8_t p[SP_N])
 {
     uint32_t i;
     for (i = 0; i < SP_N_SET; i++)
         set.p[i] = p[i];
-    set.onset = p[SP_ONSET], set.onset_lvl = p[SP_ONSET_LVL];
+    set.onset = p[SP_ONSET], set.onset_lvl = p[SP_ONSET_LVL], set.level = p[SP_LEVEL];
 }
 
 #define FROM_ARP 16u                     /* (bus: the ARP's own notes, not arpeggiated again) */
@@ -1902,9 +1903,9 @@ static void knob_info(uint32_t i, const char **label, char *val)
     static const char *const SAW_N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
     static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
     static const char *const YFX_N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
-                                            {"ONSET", "ONSET LVL", "-", "-"}};
+                                            {"ONSET", "ONSET LVL", "LEVEL", "-"}};
     static const uint8_t YFX_P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
-                                        {SP_ONSET, SP_ONSET_LVL, SP_N, SP_N}};
+                                        {SP_ONSET, SP_ONSET_LVL, SP_LEVEL, SP_N}};
     static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
     static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
@@ -1955,7 +1956,19 @@ static void knob_info(uint32_t i, const char **label, char *val)
             ;
         else if (YFX_P[pg][i] == SP_ONSET)
             text_cat(val, SYNTH_ONSET_NAMES[SYNTH_ONSET(v) % SYNTH_ONSETS]);
-        else if (YFX_P[pg][i] == SP_WAVE)
+        else if (YFX_P[pg][i] == SP_LEVEL) {   /* in dB, half steps */
+            int32_t h = v ? (int32_t)v - 64 : 0;
+            char t[8];
+            if (h > 0)
+                text_cat(val, "+");
+            else if (h < 0)
+                text_cat(val, "-"), h = -h;
+            int_text(h / 2, t);
+            text_cat(val, t);
+            if (h & 1)
+                text_cat(val, ".5");
+            text_cat(val, " DB");
+        } else if (YFX_P[pg][i] == SP_WAVE)
             text_cat(val, WAVE_N[SYNTH_WAVE(v)]);
         else if (YFX_P[pg][i] == SP_FMODE)
             text_cat(val, FMODE_N[SYNTH_FMODE(v)]);
@@ -2087,18 +2100,24 @@ static void knob_turn(uint32_t i, int32_t e)
         static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
         if (!clp_on()) {                 /* YARD: no effects; its pages (SELECT between) */
             static const uint8_t P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
-                                            {SP_ONSET, SP_ONSET_LVL, SP_N, SP_N}};
+                                            {SP_ONSET, SP_ONSET_LVL, SP_LEVEL, SP_N}};
             static const uint8_t YC[3][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
                                              {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE},
-                                             {SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL, 0, 0}};
+                                             {SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL, SYNTH_CC_LEVEL, 0}};
             static const char *const N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
-                                                {"ONSET", "ONSET LVL", "-", "-"}};
+                                                {"ONSET", "ONSET LVL", "LEVEL", "-"}};
             uint32_t pg = ui.yfx % 3u, w = P[pg][i];
             if (w == SP_N)
                 return;
             if (w == SP_ONSET) {         /* ONSET: OFF and the ten, a turn a step (each one's middle value) */
                 int32_t t = clamp((int32_t)SYNTH_ONSET(synth_param(w)) + (e > 0 ? 1 : -1), 0, (int32_t)SYNTH_ONSETS - 1);
                 knob_set(w, YC[pg][i], ((uint32_t)t * 128u + 64u) / SYNTH_ONSETS, N[pg][i]);
+                knob_info(i, &label, val);
+                app_say(label, val);
+            } else if (w == SP_LEVEL) {  /* LEVEL: half a dB a turn, -12 to +12 dB (0, from before it: 0 dB) */
+                uint32_t v = synth_param(w);
+                int32_t nv = clamp((int32_t)(v ? v : 64u) + (e > 0 ? 1 : -1), (int32_t)SYNTH_LEVEL_LO, (int32_t)SYNTH_LEVEL_HI);
+                knob_set(w, YC[pg][i], nv, N[pg][i]);
                 knob_info(i, &label, val);
                 app_say(label, val);
             } else if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
@@ -2235,7 +2254,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         if (clp_on())
             app_say("REVERB", clp_reverb_step(d));
         else {
-            static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET ONSET LVL"};
+            static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET ONSET LVL LEVEL"};
             ui.yfx = (uint8_t)((ui.yfx + 3u + (uint32_t)d) % 3u);
             app_say("YARD", PG[ui.yfx]);
             ui.redraw = 1;
@@ -3266,6 +3285,8 @@ int app_expect(const char *what, int *got)
         *got = (int)SYNTH_ONSET(synth_param(SP_ONSET));
     else if (!strcmp(what, "onset_lvl"))
         *got = (int)synth_param(SP_ONSET_LVL);
+    else if (!strcmp(what, "level"))     /* YARD's LEVEL, 64 0 dB */
+        *got = (int)synth_param(SP_LEVEL);
     else if (!strcmp(what, "yfx"))       /* YARD's FX page */
         *got = ui.yfx;
     else if (!strcmp(what, "yard_split"))   /* YARD's blocks the second core took part in */

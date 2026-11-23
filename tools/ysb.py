@@ -32,9 +32,9 @@ SIZE2 = SIZE1 + 8 + 64 * CN
 SIZE = SIZE2 + 8 + 16 * SN
 PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck",   # synth.h SP_*
           "wave", "pw", "noise", "filter",          # (0.11: 0 leaves a sound as 0.10 made it)
-          "onset", "onset_level"]                   # (0.15: ONSET, 0..127 as the panel steps it, 0..11 OFF..TICK; 0 none)
+          "onset", "onset_level", "level"]   # (0.16: LEVEL, half dB from 64; 0, from before it: 0 dB)                   # (0.15: ONSET, 0..127 as the panel steps it, 0..11 OFF..TICK; 0 none)
 DEFAULT = {"tone": 56, "release": 60, "glide": 30, "attack": 24, "decay": 64, "res": 0, "detune": 0, "sub": 0,
-           "pluck": 0, "wave": 0, "pw": 0, "noise": 0, "filter": 0, "onset": 0, "onset_level": 0}
+           "pluck": 0, "wave": 0, "pw": 0, "noise": 0, "filter": 0, "onset": 0, "onset_level": 0, "level": 0}
 NAMES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web", "clp_names.json")
 _names = None
 

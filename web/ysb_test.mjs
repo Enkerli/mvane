@@ -11,7 +11,7 @@ const names = JSON.parse(readFileSync(new URL("./clp_names.json", import.meta.ur
 const d = mkdtempSync(join(tmpdir(), "ysb-"));
 const mine = { format: "mvane-yard-sounds", version: 2, sounds: [
   { slot: 3, name: "Glass Keys", mono: false, tone: 80, release: 70, glide: 30, attack: 2, decay: 50, res: 30, detune: 40, sub: 0, pluck: 90,
-    wave: 64, pw: 30, noise: 5, filter: 127, onset: 40, onset_level: 90 },
+    wave: 64, pw: 30, noise: 5, filter: 127, onset: 40, onset_level: 90, level: 70 },
   { name: "reed", mono: true, tone: 45, res: 10 }],
   clipper: [{ name: "Glassy", sound: "GLASS PAD", reverb: "hall", changes: [{ name: "BRITE", value: 84 }, { id: 34, value: 6 }] },
             { slot: 5, name: "Organ+", sound: "SOUL ORGAN", changes: [] }],
@@ -24,7 +24,7 @@ const py = new Uint8Array(readFileSync(join(d, "py.ysb")));
 if (Buffer.compare(Buffer.from(js), Buffer.from(py))) throw new Error("ysb.js and ysb.py differ");
 const back = toJson(js, names);
 if (back.sounds.length !== 2 || back.sounds[0].name !== "REED" || back.sounds[1].pluck !== 90 || back.sounds[1].filter !== 127 ||
-    back.sounds[1].onset !== 40 || back.sounds[1].onset_level !== 90 || back.sounds[0].onset !== 0 ||
+    back.sounds[1].onset !== 40 || back.sounds[1].level !== 70 || back.sounds[1].onset_level !== 90 || back.sounds[0].onset !== 0 ||
     back.sounds[0].wave !== 0) throw new Error(`back: ${JSON.stringify(back.sounds)}`);
 const c = back.clipper;
 if (c.length !== 2 || c[0].name !== "GLASSY" || c[0].sound !== "GLASS PAD" || c[0].reverb !== "HALL" || c[0].changes[0].id !== 122 ||

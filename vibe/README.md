@@ -66,7 +66,9 @@ picture, `vibe/mvane-yard-native/icon.png` (960 × 540): `tools/vibe_icon.py`.
    DAW is applied as the panel would (a sound brings its values, which go back to the DAW); after every event, what
    moved on the panel goes to the DAW (`params_push`). The DAW's tempo and place (`vibe_transport`) show on ARP and
    SEQ, and a green > in the header while it plays: the ARP and the loops will follow them (steps 7, 8).
-   `vibe/daw.json` (wasmtest) sets the key, the sound and the scale from outside, with a DAW at 96 BPM.
+   `vibe/daw.json` (wasmtest) sets the key, the sound and the scale from outside, with a DAW at 96 BPM. The DAW's
+   parameters keep 0.15's numbers: ONSET, ONSET LEVEL and LEVEL (0.16) come after the ARP's (`vibe/level.json`:
+   LEVEL at +6 dB, twice 0 dB's RMS).
 6. **Done:** storage, in the FM-1's own files. `settings`: the FM-1's 52-byte record (now `app/settings.h`, shared
    by the two): the mode, the key, the scale, the sound and its values as left, QUANT, the chord's voicing, the play
    mode, the octave are read and written; the FM-1's own (PHONES MAX, the ARP's, MPE OUT ...) are kept as they came,
