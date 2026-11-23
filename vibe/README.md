@@ -54,6 +54,15 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    moved on the panel goes to the DAW (`params_push`). The DAW's tempo and place (`vibe_transport`) show on ARP and
    SEQ, and a green > in the header while it plays: the ARP and the loops will follow them (steps 7, 8).
    `vibe/daw.json` (wasmtest) sets the key, the sound and the scale from outside, with a DAW at 96 BPM.
-6. Storage: settings, your sounds and scales (`yard.ysb`), recordings (`.mvt`), as on the FM-1.
+6. **Done:** storage, in the FM-1's own files. `settings`: the FM-1's 52-byte record (now `app/settings.h`, shared
+   by the two): the mode, the key, the scale, the sound and its values as left, QUANT, the chord's voicing, the play
+   mode, the octave are read and written; the FM-1's own (PHONES MAX, the ARP's, MPE OUT ...) are kept as they came,
+   so the file moves between the two. `yard.ysb`: the bank, version 3, byte for byte (0.10's and 0.11's grow to it);
+   your YARD sounds come after YARD's thirteen on A (and in the DAW's Sound), your scales after the named list on B;
+   the Clipper part is kept as it is, for when Clipper comes. **F4 KEEP**: on SOUND these values as yours (USER n),
+   on SCALE the number in your list (as the FM-1's FX + SAVE and SEL + SAVE). Saved a second after a change, and at
+   once on VIBE_EV_SAVE (the DAW keeps its project). `vibe/store1.json` then `vibe/store2.json` (wasmtest, `"store"`):
+   keep a sound and a scale, change the key; the second run finds them; `tools/ysb.py` reads the bank. Recordings
+   (`.mvt`) come with the recorder (step 7).
 7. The recorder (`core/rec.c`) on the audio's clock: REC, loops, overdub.
 8. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).

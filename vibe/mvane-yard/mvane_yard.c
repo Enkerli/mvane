@@ -16,6 +16,8 @@
 #include <stddef.h>
 size_t strlen(const char *s);   /* (the SDK's: vibe_sdk.c) */
 char *strcpy(char *d, const char *s);
+void *memset(void *d, int c, size_t n);
+void *memcpy(void *d, const void *s, size_t n);
 #include "vibe_dsp.h"
 #include "vibe_gfx.h"
 /* YARD as the FM-1 computes it: the SDK builds with -ffast-math, the FM-1 without it and without fused multiply-adds;
@@ -25,6 +27,7 @@ char *strcpy(char *d, const char *s);
 #pragma clang fp reassociate(on) contract(fast)
 #include "../../core/chords.c"
 #include "../../core/scale_names.h"
+#include "../../app/settings.h"
 
 VIBE_PARALLEL_AUDIO
 
@@ -73,12 +76,29 @@ static const char *const NOTE_N[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G"
 
 static void cat(char *d, const char *src) { strcpy(d + strlen(d), src); }   /* (the SDK has no strcat) */
 static uint16_t scale_mask(void) { return (uint16_t)((set.pcs & 0xFFFu) | 1u); }
+/* (the bank, below: yard.ysb) */
+#define YB_N 32u
+#define US_N 16u
+#define YB_V1 1032u
+#define YB_V2 3088u
+#define YB_V3 3352u
+#define YB_SOUND(i) (8u + 32u * (i))
+#define YB_SCALE(i) (YB_V2 + 8u + 16u * (i))
+static uint8_t bank[YB_V3];
+static uint32_t us_pcs(uint32_t i);
+static void bank_name(const uint8_t *b, char *out);
 static const char *scale_name(void)      /* the list's name, else a known one, else 0 */
 {
     uint32_t i;
     for (i = 0; i < CHORD_NSCALES; i++)
         if ((CHORD_SCALES[i].mask | 1u) == scale_mask())
             return CHORD_SCALES[i].name;
+    for (i = 0; i < US_N; i++)           /* yours, by the name the page gave it */
+        if ((us_pcs(i) & 0x8000u) && ((us_pcs(i) & 0xFFFu) | 1u) == scale_mask() && bank[YB_SCALE(i)]) {
+            static char nm[13];
+            bank_name(bank + YB_SCALE(i), nm);
+            return nm;
+        }
     for (i = 0; i < SCALE_NNAMES; i++)
         if ((SCALE_NAMES[i].pcs | 1u) == scale_mask())
             return SCALE_NAMES[i].name;
@@ -307,41 +327,202 @@ static const uint8_t SOUND_P[3][4] = {{SP_TONE, SP_ATTACK, SP_DECAY, SP_REL}, {S
 static const char *const SOUND_N[3][4] = {{"TONE", "ATTACK", "DECAY", "RELEASE"}, {"DETUNE", "SUB", "RES", "PLUCK"},
                                           {"WAVE", "PW", "NOISE", "FILTER"}};
 
+/* ---- your sounds and scales (step 6): the FM-1's bank, yard.ysb, version 3, byte for byte (app.c yard_bank_t,
+ * tools/ysb.py): "MVYB", version, 32; 32 YARD sounds of 32 bytes (a name, flags: 1 used, 2 mono, the thirteen
+ * values); "MVCB", 32; 32 Clipper sounds of 64 (kept as they are, for when Clipper comes); "MVSB", 16; 16 scales of
+ * 16 (a name, 0x8000 | the number). A bank from 0.10 or 0.11 grows to version 3, as on the FM-1 ---- */
+static void le32(uint8_t *b, uint32_t v) { b[0] = (uint8_t)v, b[1] = (uint8_t)(v >> 8), b[2] = (uint8_t)(v >> 16), b[3] = (uint8_t)(v >> 24); }
+static uint32_t rd32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
+static void bank_load(void)
+{
+    int n = vibe_store_read("yard.ysb", bank, (int)YB_V3);
+    uint32_t v = n >= (int)YB_V1 ? bank[4] : 0u;
+    if (n < (int)YB_V1 || rd32(bank) != 0x4259564Du || v < 1u || v > 3u)
+        memset(bank, 0, sizeof bank), v = 0;
+    if (v < 2u || n < (int)YB_V2) {      /* (0.10's, or none: no Clipper part yet) */
+        memset(bank + YB_V1, 0, YB_V3 - YB_V1);
+        le32(bank + YB_V1, 0x4243564Du), bank[YB_V1 + 4u] = YB_N;
+    }
+    if (v < 3u || n < (int)YB_V3) {      /* (0.11's: no scales yet) */
+        memset(bank + YB_V2, 0, YB_V3 - YB_V2);
+        le32(bank + YB_V2, 0x4253564Du), bank[YB_V2 + 4u] = US_N;
+    }
+    le32(bank, 0x4259564Du), bank[4] = 3, bank[5] = YB_N;
+}
+static int bank_save(void) { return vibe_store_write("yard.ysb", bank, (int)YB_V3); }
+static int user_used(uint32_t slot) { return slot < YB_N && (bank[YB_SOUND(slot) + 12u] & 1u); }
+static void bank_name(const uint8_t *b, char *out)   /* 12 bytes, NUL-padded, ASCII (others as '?') */
+{
+    uint32_t k;
+    for (k = 0; k < 12u && b[k]; k++)
+        out[k] = b[k] >= ' ' && b[k] <= '~' ? (char)b[k] : '?';
+    out[k] = 0;
+}
+static uint32_t us_pcs(uint32_t i) { const uint8_t *b = bank + YB_SCALE(i) + 12u; return (uint32_t)(b[0] | b[1] << 8); }
+
+/* the sounds A steps through: YARD's thirteen (0..12), then yours (13 + the slot) */
+#define SOUNDS_N (SYNTH_NSOUNDS + YB_N)
+static int sound_exists(uint32_t n) { return n < SYNTH_NSOUNDS || user_used(n - SYNTH_NSOUNDS); }
+static void sound_of(uint32_t n, uint8_t *p, uint8_t *mono, char *name)   /* its values, mono, name */
+{
+    uint32_t i;
+    if (n < SYNTH_NSOUNDS) {
+        for (i = 0; i < SP_N; i++)
+            p[i] = SYNTH_SOUNDS[n].p[i];
+        *mono = SYNTH_SOUNDS[n].mono;
+        strcpy(name, SYNTH_SOUNDS[n].name);
+    } else {
+        const uint8_t *b = bank + YB_SOUND(n - SYNTH_NSOUNDS);
+        for (i = 0; i < SP_N; i++)
+            p[i] = b[13u + i] > 127u ? 127u : b[13u + i];
+        *mono = (uint8_t)((b[12] >> 1) & 1u);
+        bank_name(b, name);
+        if (!name[0])
+            strcpy(name, "USER");
+    }
+}
+static const char *sound_name(void)
+{
+    static char nm[16];
+    uint8_t p[SP_N], mono;
+    sound_of(set.sound, p, &mono, nm);
+    return nm;
+}
+static int sound_mono(void) { uint8_t p[SP_N], mono; char nm[16]; sound_of(set.sound, p, &mono, nm); return mono; }
+
+/* the scales B steps through: the named list, bright to dark, then yours (in slot order) */
+static uint32_t scale_list(uint32_t *nums)   /* the numbers, in order; how many */
+{
+    uint32_t n = 0, i;
+    for (i = 0; i < CHORD_NSCALES; i++)
+        nums[n++] = CHORD_SCALES[i].mask;
+    for (i = 0; i < US_N; i++)
+        if (us_pcs(i) & 0x8000u)
+            nums[n++] = us_pcs(i) & 0xFFFu;
+    return n;
+}
+
+/* a short message on top, for a moment (KEEP, a full list) */
+static char msg[40];
+static uint64_t msg_until;
+static float srate = 48000.0f;
+static void say(const char *a, const char *b)
+{
+    msg[0] = 0;
+    cat(msg, a);
+    if (b && b[0]) {
+        cat(msg, ": ");
+        cat(msg, b);
+    }
+    msg_until = vibe_frames() + (uint64_t)(srate * 1.6f);
+}
+
 static void param_set(uint32_t p, int32_t v)
 {
     set.val[p] = (uint8_t)(v < 0 ? 0 : v > 127 ? 127 : v);
     send(0xB0u, SP_CC[p], set.val[p]);
 }
-static void sound_pick(uint32_t n)
+static void sound_pick(uint32_t n)       /* one of the list's, its values sent as YARD's controllers (as the FM-1) */
 {
     uint32_t i, glide = set.val[SP_GLIDE];
-    set.sound = n % SYNTH_NSOUNDS;
+    uint8_t p[SP_N], mono;
+    char nm[16];
+    set.sound = sound_exists(n) ? n : 0u;
+    sound_of(set.sound, p, &mono, nm);
     for (i = 0; i < SP_N; i++)
-        set.val[i] = SYNTH_SOUNDS[set.sound].p[i];
-    send(Q_SOUND, set.sound, 0);
+        param_set(i, p[i]);
     if (set.started)                     /* the PLAY page's GLIDE is the player's: every sound gets it (as the FM-1) */
         param_set(SP_GLIDE, (int32_t)glide);
     set.started = 1;
-    send(Q_MODE, (set.play & 1u) || SYNTH_SOUNDS[set.sound].mono, set.play >> 1);
+    send(Q_MODE, (set.play & 1u) || mono, set.play >> 1);
+}
+static void sound_step(int d)            /* A: the next or previous that exists */
+{
+    uint32_t n = set.sound, k;
+    for (k = 0; k < SOUNDS_N; k++) {
+        n = (n + SOUNDS_N + (uint32_t)d) % SOUNDS_N;
+        if (sound_exists(n))
+            break;
+    }
+    sound_pick(n);
 }
 static void play_set(uint32_t p)
 {
     all_off();
     set.play = (uint8_t)(p & 3u);
-    send(Q_MODE, (set.play & 1u) || SYNTH_SOUNDS[set.sound].mono, set.play >> 1);
+    send(Q_MODE, (set.play & 1u) || sound_mono(), set.play >> 1);
 }
-static void scale_step(int d)            /* B: the list's next or previous */
+static void scale_step(int d)            /* B: the list's next or previous (the named, then yours) */
 {
-    uint32_t i, n = CHORD_NSCALES;
+    uint32_t nums[CHORD_NSCALES + US_N], i, n = scale_list(nums);
     int32_t at = -1;
     for (i = 0; i < n; i++)
-        if ((CHORD_SCALES[i].mask | 1u) == scale_mask())
+        if ((nums[i] | 1u) == scale_mask())
             at = (int32_t)i;
     if (at < 0)
         at = d > 0 ? (int32_t)set.scale - 1 : (int32_t)set.scale + 1;
     set.scale = (uint8_t)((((at + d) % (int32_t)n) + (int32_t)n) % (int32_t)n);
-    set.pcs = CHORD_SCALES[set.scale].mask;
+    set.pcs = (uint16_t)nums[set.scale];
     harmony_changed();
+}
+static void keep_sound(void)             /* F4 on SOUND: these values kept as yours (as the FM-1's FX + SAVE) */
+{
+    uint32_t slot = set.sound >= SYNTH_NSOUNDS ? set.sound - SYNTH_NSOUNDS : YB_N, i;
+    char nm[16];
+    for (i = 0; i < YB_N && slot == YB_N; i++)
+        if (!user_used(i))
+            slot = i;
+    if (slot >= YB_N) {
+        say("YARD", "32 SOUNDS: FULL");
+        return;
+    }
+    if (!user_used(slot)) {              /* a new one: USER n */
+        uint8_t *b = bank + YB_SOUND(slot);
+        memset(b, 0, 32);
+        nm[0] = 0;
+        cat(nm, "USER ");
+        vg_itoa((int)slot + 1, nm + 5);
+        memcpy(b, nm, strlen(nm));
+        b[12] = (uint8_t)(1u | (sound_mono() ? 2u : 0u));
+    }
+    for (i = 0; i < SP_N; i++)
+        bank[YB_SOUND(slot) + 13u + i] = set.val[i];
+    if (bank_save()) {
+        say("YARD", "NOT KEPT");
+        return;
+    }
+    set.sound = SYNTH_NSOUNDS + slot;
+    bank_name(bank + YB_SOUND(slot), nm);
+    say("KEPT", nm);
+}
+static void keep_scale(void)             /* F4 on SCALE: the number kept in your list, once (as SEL + SAVE) */
+{
+    uint32_t i, slot = US_N, num = set.pcs & 0xFFFu;
+    char nb[8];
+    for (i = 0; i < US_N; i++)
+        if ((us_pcs(i) & 0x8000u) && ((us_pcs(i) & 0xFFFu) | 1u) == scale_mask()) {
+            say("SCALE", "ALREADY KEPT");
+            return;
+        }
+    for (i = 0; i < CHORD_NSCALES; i++)
+        if ((CHORD_SCALES[i].mask | 1u) == scale_mask()) {
+            say("SCALE", "IN THE LIST");
+            return;
+        }
+    for (i = 0; i < US_N && slot == US_N; i++)
+        if (!(us_pcs(i) & 0x8000u))
+            slot = i;
+    if (slot >= US_N) {
+        say("SCALES", "16 KEPT: FULL");
+        return;
+    }
+    memset(bank + YB_SCALE(slot), 0, 16);
+    bank[YB_SCALE(slot) + 12u] = (uint8_t)num, bank[YB_SCALE(slot) + 13u] = (uint8_t)(0x80u | num >> 8);
+    if (bank_save()) {
+        say("SCALE", "NOT KEPT");
+        return;
+    }
+    say("SCALE KEPT", vg_itoa((int)num, nb));
 }
 
 static void page_value(uint32_t i, const char **label, char *val)   /* encoder i's on this page */
@@ -443,7 +624,7 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
 
 static void labels(void)                 /* the captions under the keys (the keys carry no print) */
 {
-    static const char *const F[6] = {"MODE", "HOLD", "PLAY", "", "", "MORE"};
+    static const char *const F[6] = {"MODE", "HOLD", "PLAY", "KEEP", "", "MORE"};
     int i;
     for (i = 0; i < PG_N; i++)
         vibe_label(VB_K1 + i, PG_NAME[i]);
@@ -463,8 +644,10 @@ static void lights(void)
  * Editor tab A: YARD (the sound, its values, the play mode); tab B: the harmony (NOTES / CHORDS, the key, QUANT, the
  * scale's number, the chord's voicing). The panel and the DAW stay in step: a change from the DAW comes as
  * VIBE_EV_PARAM and is applied as the panel would; after every event params_push tells the DAW what moved here. */
-static const char *const SOUND_NAMES[13] = {"SAW", "PAD", "ENSEMBLE", "KEYS", "PLUCK", "BRASS", "LEAD", "BASS", "WIND",
-                                            "HOLLOW", "FLUTE", "REED", "CLAV"};
+#define SOUNDS_MAX 45u                   /* (YARD's thirteen and the 32 slots: the arrays' size; SOUNDS_N in use) */
+static char sound_names_buf[SOUNDS_MAX][16];
+static const char *SOUND_NAMES[SOUNDS_MAX];  /* the DAW's choices: YARD's thirteen, then your 32 slots (as they were at
+                                            * the start: "-" an empty one) */
 static const char *const WAVE_C[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_C[3] = {"LOW", "BAND", "HIGH"};
 static const char *const MODE_C[2] = {"NOTES", "CHORDS"}, *const ONOFF_C[2] = {"OFF", "ON"};
 static const char *const BANK_C[2] = {"SCALE", "QUALITY"}, *const VOICES_C[4] = {"3", "4", "5", "6"};
@@ -482,7 +665,16 @@ static void params_declare(void)
                                             "A · TONE", "A · OSCILLATORS", "A · OSCILLATORS", "A · ENVELOPE",
                                             "A · OSCILLATORS", "A · OSCILLATORS", "A · OSCILLATORS", "A · TONE"};
     uint32_t i;
-    PRM[PR_SOUND] = (vibe_param){"sound", "Sound", 0, 12, 0, "", 13, SOUND_NAMES}, GRP[PR_SOUND] = "A · PLAY";
+    for (i = 0; i < SOUNDS_N && i < SOUNDS_MAX; i++) {
+        uint8_t pp[SP_N], mono;
+        if (sound_exists(i))
+            sound_of(i, pp, &mono, sound_names_buf[i]);
+        else
+            strcpy(sound_names_buf[i], "-");
+        SOUND_NAMES[i] = sound_names_buf[i];
+    }
+    PRM[PR_SOUND] = (vibe_param){"sound", "Sound", 0, SOUNDS_N - 1, 0, "", SOUNDS_N, (const char *const *)SOUND_NAMES};
+    GRP[PR_SOUND] = "A · PLAY";
     PRM[PR_PLAY] = (vibe_param){"play", "Play mode", 0, 3, 0, "", 4, PLAY_N}, GRP[PR_PLAY] = "A · PLAY";
     for (i = 0; i < SP_N; i++) {
         PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 127, (float)SYNTH_SOUNDS[0].p[i], "", 128, 0};
@@ -564,6 +756,62 @@ static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped contr
     }
 }
 
+/* ---- the settings (step 6): the FM-1's record (app/settings.h), the file "settings": what the two share is read
+ * and written (the mode, the key, the scale, the sound and its values, QUANT, the chord's voicing, the play mode, the
+ * octave); the FM-1's own (PHONES MAX, the ARP's, MPE OUT ...) kept as they came. Saved a second after a change, and
+ * at once when the host keeps the state (VIBE_EV_SAVE: a DAW's project, a preset) ---- */
+static settings_t rec;
+static uint8_t set_dirty;
+static uint64_t set_dirty_at;
+static void settings_save(void)
+{
+    int o = vibe_keys_octave_get() - 1;
+    uint32_t i;
+    rec.magic = SET_MAGIC;
+    rec.mode = set.mode, rec.tonic = set.tonic, rec.octave = (int8_t)(o < -2 ? -2 : o > 2 ? 2 : o);
+    rec.scale = set.scale, rec.pcs = (uint16_t)(0x8000u | (set.pcs & 0xFFFu));
+    for (i = 0; i < SP_N; i++)
+        rec.p[i] = set.val[i];
+    rec.type = set.type, rec.style = set.style, rec.bass = set.bass, rec.voices = set.voices, rec.bank = set.bank;
+    rec.play = set.play, rec.quant = set.quant;
+    rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound : 0x4100u | (set.sound - SYNTH_NSOUNDS));
+    rec.page = (uint8_t)(page == PG_SOUND);
+    vibe_store_write("settings", &rec, (int)sizeof rec);
+    set_dirty = 0;
+}
+static void settings_touch(void) { set_dirty = 1, set_dirty_at = vibe_frames(); }
+static void settings_load(void)          /* (the defaults are set; a good record over them) */
+{
+    uint32_t i, bad = 0;
+    int n = vibe_store_read("settings", &rec, (int)sizeof rec);
+    if (n != (int)sizeof rec || rec.magic != SET_MAGIC) {
+        memset(&rec, 0, sizeof rec);     /* (none, or an older FM-1's: the FM-1's first-start values for its own) */
+        rec.usb_full = 1, rec.mpe_out = 1, rec.bend = 2, rec.phones = 20;
+        rec.arp_rate = 3, rec.arp_gate = 50, rec.arp_oct = 1, rec.arp_bpm = 120;
+        return;
+    }
+    for (i = 0; i < SP_N; i++)
+        bad |= rec.p[i] > 127u;
+    if (bad || rec.mode > 1u || rec.tonic > 11u || !(rec.pcs & 0x8000u) || rec.quant > 2u || rec.voices < 3u
+        || rec.voices > CHORD_MAX || rec.style >= CHORD_STYLES || rec.bass > 1u || rec.bank > 1u
+        || rec.type >= CHORD_NTYPES || rec.play > 3u)
+        return;
+    set.mode = rec.mode, set.tonic = rec.tonic, set.pcs = rec.pcs & 0xFFFu, set.scale = rec.scale;
+    set.quant = rec.quant, set.voices = rec.voices, set.style = rec.style, set.bass = rec.bass, set.bank = rec.bank;
+    set.type = rec.type, set.play = rec.play;
+    if ((rec.sound & 0xFF00u) == 0x4000u && (rec.sound & 0xFFu) < SYNTH_NSOUNDS)
+        set.sound = rec.sound & 0xFFu;
+    else if ((rec.sound & 0xFF00u) == 0x4100u && user_used(rec.sound & 0xFFu))
+        set.sound = SYNTH_NSOUNDS + (rec.sound & 0xFFu);
+    else
+        set.sound = 0;                   /* (a Clipper sound on the FM-1: YARD's SAW here, until Clipper comes) */
+    sound_pick(set.sound);
+    for (i = 0; i < SP_N; i++)           /* the values as they were left (a sound edited, not kept) */
+        param_set(i, rec.p[i]);
+    vibe_keys_octave(rec.octave + 1);
+    page = rec.page ? PG_SOUND : PG_PLAY;
+}
+
 void vibe_on_init(float sample_rate)
 {
     static const uint8_t START_P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (as the FM-1's first start) */
@@ -574,8 +822,11 @@ void vibe_on_init(float sample_rate)
     set.voices = 5, set.style = CHORD_OPEN, set.bass = 1, set.bank = 1, set.type = CHORD_BANK + 1u;   /* M7 */
     ch.key = -1;
     ch.qlatch = (uint16_t)(1u << 1);     /* (M7 latched, as the FM-1 starts) */
-    sound_pick(0);
+    srate = sample_rate;
     page = PG_PLAY;
+    bank_load();
+    sound_pick(0);
+    settings_load();
     labels();
     lights();
     params_declare();
@@ -587,7 +838,8 @@ static const char *const HELP[] = {
     "KEYS",          "NOTES: notes. CHORDS: white keys the degrees, black keys the qualities (latched; together: combined)",
     "K1 - K6",       "the pages: SOUND, PLAY, CHORD, ARP, SCALE, SEQ",
     "ENCODERS 1 - 4", "the page's four values",
-    "A",             "the sound (YARD's thirteen)",
+    "A",             "the sound: YARD's thirteen, then yours (F4 on SOUND keeps one)",
+    "F4",            "KEEP: on SOUND these values as yours; on SCALE the number in your list",
     "B",             "the scale, from bright to dark",
     "F1  F2  F3",    "NOTES / CHORDS, HOLD, POLY / MONO / +BREATH",
     "F6",            "MORE: the page's next four (SOUND)",
@@ -636,12 +888,19 @@ static void key_note(const vibe_event *e)    /* a key, NOTES: a note on its own 
 static void event(const vibe_event *e);
 void vibe_on_event(const vibe_event *e)
 {
+    if (e->type == VIBE_EV_SAVE) {       /* the host keeps the state now: everything, in this call */
+        settings_save();
+        bank_save();
+        return;
+    }
     if (e->type == VIBE_EV_PARAM) {      /* the DAW's: applied, then what it moved besides (a sound: its values) */
         param_apply(e->id, e->value);
         lights();
     } else
         event(e);
     params_push();
+    if (e->type == VIBE_EV_PARAM || e->type == VIBE_EV_ENCODER || (e->type == VIBE_EV_BUTTON && e->down))
+        settings_touch();
 }
 static void event(const vibe_event *e)
 {
@@ -678,7 +937,7 @@ static void event(const vibe_event *e)
         if (e->id <= VE_4)
             page_turn(e->id, e->value);
         else if (e->id == VE_A && d)
-            sound_pick(set.sound + SYNTH_NSOUNDS + (uint32_t)d);
+            sound_step(d);
         else if (e->id == VE_B && d)
             scale_step(d);
     } else if (e->type == VIBE_EV_BUTTON && e->down) {
@@ -694,6 +953,10 @@ static void event(const vibe_event *e)
                 chord_release();
         } else if (e->id == VB_F3)
             play_set(set.play + 1u);
+        else if (e->id == VB_F4 && page == PG_SOUND)
+            keep_sound();
+        else if (e->id == VB_F4 && page == PG_SCALE)
+            keep_scale();
         else if (e->id == VB_F6)
             more = (uint8_t)((more + 1u) % (page == PG_SOUND ? 3u : 1u));
         lights();
@@ -813,7 +1076,7 @@ static void draw_frame(void)
     vg_rect(0, 0, 480, 4, c);
     vg_text(PG_NAME[page], 16, 10, VG_BIG, c, 0);
     vg_text(set.mode ? "CHORDS" : "NOTES", 150, 10, VG_BIG, C_INK, 0);
-    vg_text(SYNTH_SOUNDS[set.sound].name, 464, 10, VG_BIG, PG_COLOR[PG_SOUND], 2);
+    vg_text(sound_name(), 464, 10, VG_BIG, PG_COLOR[PG_SOUND], 2);
     if (vibe_transport()->has && vibe_transport()->playing)   /* the DAW plays */
         vg_text(">", 276, 12, VG_BIG, 0x4FD88A, 0);
     for (i = 0; i < PG_N; i++) {         /* K1..K6 */
@@ -859,12 +1122,12 @@ static void draw_values(void)
 }
 static void draw_fkeys(void)
 {
-    static const char *const F[6] = {"MODE", "HOLD", "PLAY", "", "", "MORE"};
+    static const char *const F[6] = {"MODE", "HOLD", "PLAY", "KEEP", "", "MORE"};
     uint32_t i;
     for (i = 0; i < 6u; i++) {
         int x = 8 + (int)i * 78, lit = (i == 0u && set.mode) || (i == 1u && set.hold);
         const char *t = F[i];
-        if (i == 5u && page != PG_SOUND)
+        if ((i == 5u && page != PG_SOUND) || (i == 3u && page != PG_SOUND && page != PG_SCALE))
             t = "";
         if (!t[0])
             continue;
@@ -911,15 +1174,22 @@ void vibe_on_draw(uint16_t *fb)
     uint32_t i;
     char t[48];
     (void)fb;
+    if (set_dirty && vibe_frames() - set_dirty_at > (uint64_t)srate)   /* (a second after the last change) */
+        settings_save();
     if (help) {
         vg_controls("MVANE YARD", HELP, (int)(sizeof HELP / sizeof HELP[0] / 2u));
         return;
     }
     draw_frame();
+    if (msg[0] && vibe_frames() < msg_until) {   /* KEEP and its kind: a moment, over the header */
+        vg_rect(0, 4, 480, 36, C_BG);
+        vg_text(msg, 240, 10, VG_BIG, 0xFF8A1F, 1);
+    }
     if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
         static const char *const SUB[3] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER"};
-        vg_text(SYNTH_SOUNDS[set.sound].name, 16, 72, VG_BIG | VG_X2, C_INK, 0);
-        vg_text(SYNTH_SOUNDS[set.sound].mono ? "YARD, MONO" : "YARD", 16, 124, VG_MED, C_DIM, 0);
+        vg_text(sound_name(), 16, 72, VG_BIG | VG_X2, C_INK, 0);
+        vg_text(set.sound >= SYNTH_NSOUNDS ? (sound_mono() ? "YOURS, YARD, MONO" : "YOURS, YARD") : sound_mono() ? "YARD, MONO" : "YARD",
+                16, 124, VG_MED, C_DIM, 0);
         for (i = 0; i < 3u; i++) {
             int y = 150 + (int)i * 18;
             vg_text(SUB[i], 16, y, VG_SMALL, i == more % 3u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
@@ -980,5 +1250,7 @@ void vibe_on_draw(uint16_t *fb)
     vf_key(VB_F3, 164, 292, 74, 24);
     if (page == PG_SOUND)
         vf_key(VB_F6, 398, 292, 74, 24);
+    if (page == PG_SOUND || page == PG_SCALE)
+        vf_key(VB_F4, 242, 292, 74, 24);
     vf_end(0xFF8A1F);
 }
