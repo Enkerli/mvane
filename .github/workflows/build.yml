@@ -80,6 +80,9 @@ jobs:
           ./build.sh
           for f in app/build/*.fwsc; do mv "$f" "${f%.fwsc}-$VER.fwsc"; done
 
+      - name: The native VIBE FM firmware (vibe/, Zig and the SDK pinned; vibe-check)
+        run: sh vibe/ci.sh build/vibe "$VER"
+
       - uses: actions/upload-artifact@v4   # (to pin by commit, as fm1-base does)
         with:
           name: mvane-yard-${{ env.VER }}
@@ -87,4 +90,5 @@ jobs:
             app/build/*.fwsc
             app/build/firmware.json
             app/build/host/*.png
+            build/vibe/mvane-yard-vibe.zip
           if-no-files-found: error

@@ -16,6 +16,14 @@ works too).
 Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or the `.wasm` onto the Playground
 (<https://play.thefirmwarehub.com/>).
 
+## Releases
+
+Every release carries **`mvane-yard-vibe.zip`** (a fixed name: `mvane-yard.wasm`, its `.json` with the release's
+version, `mvane-yard.png` at the top) and `mvane-yard-vibe.wasm` beside it: The Firmware Hub's native card takes
+them (Sven, 2026-11-23). `vibe/ci.sh` builds them on Linux with Zig 0.13.0 and the SDK at a fixed commit, both
+checked, then runs vibe-check; the CI does the same on every push (the zip in the run's artifact). The card's
+picture, `vibe/mvane-yard/icon.png` (960 × 540): `tools/vibe_icon.py`.
+
 ## The steps (FROM-FM1.md)
 
 1. **Done:** a skeleton that makes the sound. YARD on the keys, MIDI and the DAW's notes, each on its own channel
