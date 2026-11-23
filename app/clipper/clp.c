@@ -145,8 +145,8 @@ static uint32_t cpu1_ticks(void) { return 0; }
 #include "slicer.c"
 /* (mvane yard) each sound's trim (Q15, 32768 none): Clipper's levels suit a few notes, mvane yard's chords are six
  * (a bass and five), and the master limiter worked 11 dB on the median chord sound, audible as grit (Alex,
- * 2026-11-22). tools/clp_trim.c measures each sound's chord (a mono sound's note) and writes gen/clp_trim.h: the gain
- * that keeps it under the limiter, never above 1. clp_load sets it */
+ * 2026-11-22). tools/clp_trim.c measures each sound (0.16: by loudness, its ordinary playing to one level, the
+ * hardest held to 6 dB of limiting; above 32768 a boost) and writes gen/clp_trim.h. clp_load sets it */
 static int32_t clp_trim = 32768;
 #define CLP_TRIM clp_trim
 #include "fx.c"
@@ -254,9 +254,9 @@ static void clp_expr_fill(track_t *t, uint32_t e, uint32_t pi)
 }
 
 #if __has_include("clp_trim.h")
-#include "clp_trim.h"                           /* CLP_TRIM_Q15[engine][preset] (0: none measured, 32768) */
+#include "clp_trim.h"                           /* CLP_TRIM_Q15[engine][preset] (Q15, above 32768 a boost; 0: none measured) */
 #else
-static const uint16_t CLP_TRIM_Q15[NENGINES][40];
+static const uint32_t CLP_TRIM_Q15[NENGINES][40];
 #endif
 static uint8_t clp_trim_enabled = 1;
 void clp_trim_on(int on) { clp_trim_enabled = (uint8_t)(on != 0); }

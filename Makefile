@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim clp-names
+.PHONY: loud check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim clp-names
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -44,6 +44,14 @@ vibe-cmp: vibe   # the port's YARD against the FM-1's, sample for sample (44.1 k
 	$(CC) -O2 -ffp-contract=off -std=c99 -w -Ibase/include tools/vibe_cmp.c -o $(B)/vibe_cmp -lm
 	python3 tools/vibe_events.py vibe/cmp.json | $(B)/vibe_cmp $(B)/vibe/native.raw 517
 	python3 tools/vibe_cmp.py $(B)/vibe/audio.wav $(B)/vibe/native.raw
+
+loud:   # every sound's loudness, Clipper's (trims on) and YARD's, for the same ordinary phrase (tools/loud_phrase.h)
+	@mkdir -p $(B)
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal tools/clp_loud.c -o $(B)/clp_loud -lm
+	$(CC) -O2 -std=c99 -w -Ibase/include tools/yard_loud.c -o $(B)/yard_loud -lm
+	$(B)/clp_loud > $(B)/clp_loud.txt
+	$(B)/yard_loud > $(B)/yard_loud.txt
+	cat $(B)/clp_loud.txt $(B)/yard_loud.txt | awk '{print $$NF, $$0}' | sort -n | cut -d' ' -f2- | sed -n '1,5p;$$p'   # the quietest five, the loudest
 
 onset-cal:   # ONSET's levels (app/synth.c's table): each burst's mean peak, the gain to 0.85
 	@mkdir -p $(B)

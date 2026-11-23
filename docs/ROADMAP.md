@@ -54,6 +54,16 @@ chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The
    SCRATCH TICK, `gen_inharmonic.py`'s recipes) as a burst per note over its envelope, ONSET and ONSET LVL on YARD's
    third EDIT page (CC 27, 28), kept with the sound; no samples, both places (`app/tests/onset.txt`, `make onset-cal`;
    `dist/onset-demo.wav` to hear). Next, by ear: its tone (the band) and length as values, pitched ones.
+4b. **Loudness matched. Clipper's done (0.15.N):** Alex, by ear: "patches vary widely in overall loudness, some
+   almost inaudible, with the same MIDI". Measured (`make loud`: the same phrase, its loudest 400 ms K-weighted):
+   Clipper's sounds spread from -40.6 to -11.8 dB, plucks and keys quietest, because each trim only kept the
+   hardest playing (velocity 127, full pressure, chords of six) under the limiter. `make clp-trim` now trims by
+   loudness: ordinary playing (velocity 100, pressure 64: Alex's recordings, median velocity 87, pressure 31, at most
+   112) to -26 dB, the hardest playing (pressure 100) limited 6 dB at most; now -32.3 to -23.6 dB, ordinary playing
+   limited under 0.4 dB for nine sounds in ten. The loudest monos (808s, ACID) come down about 14 dB.
+   `dist/loudness-demo.wav`: eight sounds, before then after. **YARD next:** its factory sounds spread 16 dB (CLAV
+   -35.6, BASS -32.3, SAW -19.9; a mono voice about 6 dB under a chord); a LEVEL per sound on the ONSET page's free
+   slot (CC 29), its factory values measured, would match them and the user's.
 5. **Program changes followed** (Alex): a program change on MIDI in picks the sound (YARD's factory and user sounds,
    then Clipper's, in the PRESETS order; bank select for the rest), and the recorder keeps it, so a recording replays
    its changes of sound; sending one when the sound changes on the device, as an option. Today none are read.
