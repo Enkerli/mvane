@@ -1000,13 +1000,9 @@ static void mpe_config(void)             /* MPE configuration message: lower zon
 
 /* ------------------------------------------------------------- VIBE FM --- */
 /* VIBE FM's converter (TheFirmwareHub) builds the firmware to WebAssembly on a platform of its own, in one unit with
- * it (so a weak definition is still a second one). Since 2026-11-22 that platform has the second core's calls
- * (one core there) and the USB host's state and messages; it lacks the USB host's switch and the microsecond ticks:
- * stand-ins for those two only, in that build only (a WebAssembly build that is not fm1-base's emulator) */
-#if defined(__wasm__) && !defined(PLAT_HOST)
-__attribute__((weak)) uint32_t plat_ticks24(void) { return plat_ms() * 24000u; }
-__attribute__((weak)) void plat_usb_host(int on) { (void)on; }
-#endif
+ * the app. Its platform now has every call mvane yard makes (the second core's, the USB host's, the microsecond
+ * ticks, as its errors after 0.13-beta said), so the app defines none of them for it: a weak stand-in in the same unit is still a second
+ * definition, which the converter refuses */
 
 /* -------------------------------------------------------------- the takes --- */
 /* Takes kept in the flash: TAKE_SLOTS slots (takes.c). A WebAssembly build that is not fm1-base's own emulator
