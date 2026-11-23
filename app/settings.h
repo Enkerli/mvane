@@ -19,7 +19,7 @@ typedef struct {
     uint8_t tonic;                       /* 0 C .. 11 B */
     uint8_t scale;                       /* CHORD_SCALES */
     int8_t octave;                       /* -2 .. +2 */
-    uint8_t p[SP_N];                     /* YARD's: tone, release, glide, attack, decay, res, detune, sub, pluck, wave,
+    uint8_t p[SP_N_SET];                 /* YARD's: tone, release, glide, attack, decay, res, detune, sub, pluck, wave,
                                           * pw, noise, filter: 0..127 */
     uint8_t type, style, bass, usb_full;
     uint8_t voices;                      /* upper voices, 3..6 */
@@ -42,7 +42,8 @@ typedef struct {
     uint8_t arp_mode, arp_rate, arp_gate, arp_oct;   /* the ARP's (ARP held): ARP_MODES, ARP_RATES, 5..100 %, 1..4 */
     uint8_t arp_bpm;                     /* its tempo, 40..240 (below 40: a record from before it, the defaults) */
     uint8_t arp_latch;                   /* 1: ARP on keeps the notes let go (its LATCH, the layer's second page) */
-    uint8_t room[5];                    /* (for settings to come: 0 their default, so no new record is needed) */
+    uint8_t onset, onset_lvl;            /* (0.15) YARD's ONSET and ONSET LVL (its p[]'s fourteenth and fifteenth) */
+    uint8_t room[3];                    /* (for settings to come: 0 their default, so no new record is needed) */
 } settings_t;
 typedef char settings_same_size[sizeof(settings_t) == 52u ? 1 : -1];   /* (MVA: as 0.11 wrote it: pcs took room) */
 

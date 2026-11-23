@@ -45,6 +45,11 @@ vibe-cmp: vibe   # the port's YARD against the FM-1's, sample for sample (44.1 k
 	python3 tools/vibe_events.py vibe/cmp.json | $(B)/vibe_cmp $(B)/vibe/native.raw 517
 	python3 tools/vibe_cmp.py $(B)/vibe/audio.wav $(B)/vibe/native.raw
 
+onset-cal:   # ONSET's levels (app/synth.c's table): each burst's mean peak, the gain to 0.85
+	@mkdir -p $(B)
+	$(CC) -O2 -std=c99 -w -Ibase/include tools/onset_cal.c -o $(B)/onset_cal -lm
+	$(B)/onset_cal
+
 scale-names:   # the known scales' names, for the screen and the page (core/scale_names.h, web/scale_names.json)
 	python3 tools/scale_names.py
 

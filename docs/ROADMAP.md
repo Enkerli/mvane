@@ -40,33 +40,45 @@ VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
 
 ## Next, sorted (2026-11-23)
 
-Alex: low-hanging fruit first, then "basic Vane" (wavetables, attack transients), then waveguides and WindCore. The
-assessment behind this order: [VANE.md](VANE.md). `app/synth.c` is shared by the FM-1 and the native port, so YARD's
-additions land in both.
+Alex: low-hanging fruit first, then "basic Vane" (wavetables, attack transients), then waveguides and WindCore; and
+Alex's own ideas already here, which the first sort left out: the demo MIDI preloaded, the ARP's next steps, bassline
+generation, ProgGenie. The assessment behind the Vane items: [VANE.md](VANE.md). `app/synth.c` is shared by the FM-1
+and the native port, so YARD's additions land in both.
 
 **Small, a session or less each**
 1. **Native: MIDI in on a free channel while a recording plays** (the FM-1's 0.13.2, for the Diosynth's overdubs).
 2. **Native: SAVE's copy spread over blocks** (now one block, up to 17% of it in Node).
 3. **The loop's length to its last note's end**, not to where REC was tapped (both).
-4. **YARD's ATTACK layer**: Vane's ten synthesised transients (tongue, key click, air chiff, wood knock, pick, reed
-   buzz, ping, squeak, scratch, tick) as a noise burst through a band-pass per note, its type and level; no samples,
-   both places.
-5. **The FM-1's history at 64 KB as an option** (16,384 events): 64 KB of pool for what follows.
+4. **YARD's ONSET. Done (0.15.N):** Vane's ten synthesised transients (TONGUE CLICK CHIFF KNOCK PICK BUZZ PING SQUEAK
+   SCRATCH TICK, `gen_inharmonic.py`'s recipes) as a burst per note over its envelope, ONSET and ONSET LVL on YARD's
+   third EDIT page (CC 27, 28), kept with the sound; no samples, both places (`app/tests/onset.txt`, `make onset-cal`;
+   `dist/onset-demo.wav` to hear). Next, by ear: its tone (the band) and length as values, pitched ones.
+5. **The demo MIDI preloaded** (Alex): a demo recording in the firmware's slots on a first start (MPE chords, glide,
+   combined qualities, a lead, a wind take; 1980s-demo cheesy is fine), as a `.mvt` in flash, on both.
+6. **The FM-1's history at 64 KB as an option** (16,384 events): 64 KB of pool for what follows.
 
-**Basic Vane, a few sessions**
-6. **Wavetables, natively**: Vane's AKWF tables (CC0) as a YARD oscillator, the morph on a knob and on pressure or
+**A few sessions each**
+7. **The ARP, tweaked** (Alex): its degrees from the expression (pressure or slide: how far up the run, which
+   degree), rhythms that are not even (lengths, rests, accents; Serpe-like notation for a pattern as text), steps of
+   two or three notes and the full chord on chosen steps (comping), steps through the scale's degrees above the held
+   notes.
+8. **Bassline generation** (Alex): the ARP's machinery on the bass alone, from the chord and the scale (roots, fifths,
+   passing tones, approach notes into the next chord), on its own channel; with multitimbral, a bass sound of its own.
+9. **Wavetables, natively**: Vane's AKWF tables (CC0) as a YARD oscillator, the morph on a knob and on pressure or
    slide.
-7. **A simple waveguide**: plucked string and blown pipe (Karplus-Strong, a one-delay flute), polyphonic, both places:
-   the FM-1's budget for delay lines measured before WindCore's.
-8. **Wavetables on the FM-1**, compact (256-sample frames, 16-bit, three or four levels, built for the table in use).
-9. **The recorded transients** (VSCO-2-CE, VCSL: CC0): natively; on the FM-1 if Alex wants them there (about 100 KB
-   of flash, and the Hub's sounds line becomes a CC0 statement).
+10. **A simple waveguide**: plucked string and blown pipe (Karplus-Strong, a one-delay flute), polyphonic, both places:
+    the FM-1's budget for delay lines measured before WindCore's.
+11. **Wavetables on the FM-1**, compact (256-sample frames, 16-bit, three or four levels, built for the table in use).
+12. **The recorded transients** (VSCO-2-CE, VCSL: CC0): natively; on the FM-1 if Alex wants them there (about 100 KB
+    of flash, and the Hub's sounds line becomes a CC0 statement).
 
 **Bigger**
-10. **WindCore in C** (from `Vane/WindCore/WindCore.h`): native first, compared with Vane's render; then on the FM-1
+13. **ProgGenie on the device** (Alex; M3 below): its progressions in C (`core/proggen`: the corpus's transition tables,
+    compact, in flash), suggesting the next chord on the black keys or a pad, the voice leading as now.
+14. **WindCore in C** (from `Vane/WindCore/WindCore.h`): native first, compared with Vane's render; then on the FM-1
     as a mono WIND engine, single precision, judged by ear at one times the rate, probably on two cores.
-11. Then what was already listed: the ARP's rhythms and comping (12), ENV and LFO as drawn qurves (13), editable
-    chord qualities (14), multitimbral (2), the plugin and app of its own (3).
+15. Then what was already listed: ENV and LFO as drawn qurves (13 below), editable chord qualities (14), multitimbral
+    (2), the plugin and app of its own (3).
 
 ## After the submission (proposed, 2026-11-22)
 

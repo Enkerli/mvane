@@ -76,11 +76,24 @@ sound CLAV
 wait 100
 expect family 2
 expect fmode 127
+# the third page (0.15): ONSET, a type a turn (OFF, TONGUE, CLICK, CHIFF ...), and its level; then back to the first
 press FX
+turn SELECT 1
+wait 30
+expect yfx 2
+turn K1 3
+turn K2 20
+release FX
+wait 50
+expect onset 3
+expect onset_lvl >30
+press FX
+turn K1 -3
 turn SELECT 1
 release FX
 wait 50
 expect yfx 0
+expect onset 0
 # back to SAW
 sound SAW
 wait 100

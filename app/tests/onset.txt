@@ -1,0 +1,32 @@
+# ONSET (0.15, Vane's attack transients): a noise burst at each note's start over the note whatever its envelope.
+# PAD opens slowly: its first 40 ms near silent alone, a CHIFF heard with ONSET at full; a legato note in MONO has none.
+# app/build/host/mvane-yard_host app/tests/onset.txt app/build/host
+wait 600
+spin ALGO -1
+sound PAD
+wait 200
+peakreset
+midi 90 3C 7F
+wait 40
+expect peak_db_max -40
+midi 80 3C 00
+wait 1500
+# CHIFF (CC 27: its type, the middle of its range; CC 28: its level)
+midi B0 1B 28
+midi B0 1C 7F
+wait 20
+expect onset 3
+peakreset
+midi 90 3C 7F
+wait 40
+expect peak_db_min -37
+midi 80 3C 00
+wait 1500
+# its level 0: none again
+midi B0 1C 00
+wait 20
+peakreset
+midi 90 3C 7F
+wait 40
+expect peak_db_max -40
+midi 80 3C 00

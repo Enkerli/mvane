@@ -16,7 +16,32 @@ typedef struct {
     float phase2, phsub, cont;           /* DETUNE's second saw, SUB's square (two octaves down), PLUCK's contour (1 at
                                           * the note's start, falling at DECAY) */
     uint32_t age;
+    /* ONSET's burst: samples left, its envelope (rising, then each sample's fall), its two filters' coefficients and
+     * states (a high-pass, then a low-pass: Vane's band), its drive, its level, its noise */
+    uint32_t on_n, on_rise, on_fade;
+    float on_e, on_ai, on_dm, on_amp, on_drive, on_g1, on_g2, h1, h2, l1, l2;
+    uint8_t on_lp, on_hp;
+    uint32_t on_nz;
 } voice_t;
+
+/* ONSET's ten (Vane's Assets/transients/gen_inharmonic.py, its recipes): the band (a high-pass at lo, a low-pass at
+ * hi: 0 none), the envelope's rise and fall (ms), the length (ms), the drive (tanh, 0 none), and the level that makes
+ * each one's peak about the same (measured: tools/onset_cal.c) */
+static const struct { float lo, hi, rise, fall, len, drive, gain; } ONSET[SYNTH_ONSETS] = {
+    {0, 0, 0, 0, 0, 0, 0},                       /* OFF */
+    {700, 2200, 1.0f, 28, 90, 0, 1.27f},          /* TONGUE: a wind's "tut" */
+    {1500, 0, 0.2f, 5, 18, 0, 0.49f},             /* CLICK: a key, mechanical */
+    {2500, 0, 5.0f, 75, 130, 0, 0.37f},           /* CHIFF: breath, a soft start */
+    {300, 1400, 0.5f, 40, 95, 0, 1.45f},          /* KNOCK: wood */
+    {2500, 6000, 0.3f, 16, 45, 0, 0.87f},         /* PICK: a string's friction */
+    {900, 3000, 2.0f, 42, 95, 3.0f, 0.89f},       /* BUZZ: a reed's bite */
+    {3500, 5000, 0.3f, 90, 150, 0, 1.02f},        /* PING: metallic */
+    {1800, 3200, 8.0f, 55, 110, 0, 1.09f},        /* SQUEAK: a finger */
+    {400, 1800, 3.0f, 45, 90, 2.5f, 0.97f},       /* SCRATCH: a bow */
+    {1200, 0, 0.2f, 14, 35, 0, 0.47f},            /* TICK: a snare's */
+};
+const char *const SYNTH_ONSET_NAMES[SYNTH_ONSETS] = {"OFF", "TONGUE", "CLICK", "CHIFF", "KNOCK", "PICK", "BUZZ",
+                                                     "PING", "SQUEAK", "SCRATCH", "TICK"};
 
 /* YARD's own sounds (0.10, Alex 2026-11-22: the light synth to build on), first on PRESETS: TONE REL GLIDE ATTACK DECAY
  * RES DETUNE SUB PLUCK (GLIDE, the PLAY page's, stays as it is); mono: one voice, legato, whatever PLAY says */
@@ -126,6 +151,7 @@ void synth_panic(void)
         vc[i].gate = 0, vc[i].level = 0.0f;
 }
 
+static void onset_start(voice_t *v, uint32_t vel);
 static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
 {
     uint32_t i, best = 0, half[2] = {0, 0};
@@ -168,6 +194,63 @@ static void voice_on(uint32_t ch, uint32_t note, uint32_t vel)
     v->gate = 1;
     v->used = 1;
     v->age = ++clock_age;
+    onset_start(v, vel);
+}
+
+/* (ONSET) a note's burst from its start: the type's band, envelope and length at this sample rate, its level by
+ * ONSET LVL (squared: a gentle start) and the velocity; a legato note has none */
+static void onset_start(voice_t *v, uint32_t vel)
+{
+    uint32_t t = SYNTH_ONSET(prm[SP_ONSET]);
+    float lv = (float)prm[SP_ONSET_LVL] * (1.0f / 127.0f), rise;
+    v->on_n = 0;
+    if (!t || t >= SYNTH_ONSETS || lv <= 0.0f)
+        return;
+    rise = fm_maxf(1.0f, ONSET[t].rise * 0.001f * SR);
+    v->on_n = (uint32_t)(ONSET[t].len * 0.001f * SR);
+    v->on_rise = (uint32_t)rise;
+    v->on_fade = (uint32_t)(0.003f * SR);           /* (a 3 ms fade at its end: no click) */
+    v->on_e = 0.0f, v->on_ai = 1.0f / rise;
+    v->on_dm = fm_exp2f(-1.4427f / (ONSET[t].fall * 0.001f * SR));
+    v->on_amp = 1.6f * lv * lv * ONSET[t].gain * (0.4f + 0.6f * (float)vel * (1.0f / 127.0f));   /* (full: a note's peak) */
+    v->on_drive = ONSET[t].drive;
+    v->on_hp = ONSET[t].lo > 0.0f, v->on_lp = ONSET[t].hi > 0.0f;
+    v->on_g1 = fm_tanf(3.14159265f * fm_minf(ONSET[t].lo, 0.45f * SR) / SR);
+    v->on_g2 = fm_tanf(3.14159265f * fm_minf(ONSET[t].hi, 0.45f * SR) / SR);
+    v->h1 = v->h2 = v->l1 = v->l2 = 0.0f;
+    if (!v->on_nz)
+        v->on_nz = 0x2545F491u ^ (uint32_t)(v - vc) * 0x9E3779B9u;
+}
+static inline float onset_tick(voice_t *v)   /* its next sample */
+{
+    float x, a1, a2, a3, w1, w2, w3, e;
+    const float k = 1.41421356f;     /* (Butterworth: two poles each) */
+    uint32_t n = v->on_n--;
+    v->on_nz = v->on_nz * 1664525u + 1013904223u;
+    x = (float)(int32_t)v->on_nz * (1.0f / 2147483648.0f) * 1.7320508f;   /* (unit spread, as Vane's normal noise) */
+    if (v->on_hp) {                  /* the band's low edge: the SVF's high-pass */
+        a1 = 1.0f / (1.0f + v->on_g1 * (v->on_g1 + k)), a2 = v->on_g1 * a1, a3 = v->on_g1 * a2;
+        w3 = x - v->h2, w1 = a1 * v->h1 + a2 * w3, w2 = v->h2 + a2 * v->h1 + a3 * w3;
+        v->h1 = 2.0f * w1 - v->h1, v->h2 = 2.0f * w2 - v->h2;
+        x = x - k * w1 - w2;
+    }
+    if (v->on_lp) {                  /* its high edge: the low-pass */
+        a1 = 1.0f / (1.0f + v->on_g2 * (v->on_g2 + k)), a2 = v->on_g2 * a1, a3 = v->on_g2 * a2;
+        w3 = x - v->l2, w1 = a1 * v->l1 + a2 * w3, w2 = v->l2 + a2 * v->l1 + a3 * w3;
+        v->l1 = 2.0f * w1 - v->l1, v->l2 = 2.0f * w2 - v->l2;
+        x = w2;
+    }
+    if (v->on_drive > 0.0f)          /* BUZZ, SCRATCH: grit */
+        x = fm_tanhf(x * v->on_drive);
+    if (v->on_rise) {
+        v->on_rise--;
+        v->on_e += v->on_ai;
+        e = v->on_e;
+    } else
+        e = v->on_e *= v->on_dm;
+    if (n <= v->on_fade)
+        e *= (float)n / (float)v->on_fade;
+    return x * e * v->on_amp;
 }
 
 /* mono: one voice; a note played while another is held slides to it (legato: the envelope goes on), its release
@@ -183,6 +266,7 @@ static void mono_to(uint32_t ch, uint32_t note, uint32_t vel, int legato)
         v->cont = 1.0f;
         v->gate = 1;
         v->age = ++clock_age;
+        onset_start(v, vel);             /* (a new note, not a legato one: its burst) */
     }
     v->ch = (uint8_t)ch;
     v->note = (uint8_t)note;
@@ -268,6 +352,10 @@ void synth_event(uint32_t st, uint32_t d1, uint32_t d2)
             prm[SP_NOISE] = (uint8_t)d2;
         else if (d1 == SYNTH_CC_FMODE && !ch)
             prm[SP_FMODE] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_ONSET && !ch)
+            prm[SP_ONSET] = (uint8_t)d2;
+        else if (d1 == SYNTH_CC_ONSET_LVL && !ch)
+            prm[SP_ONSET_LVL] = (uint8_t)d2;
         else if (d1 == 101u)
             rpn_msb[ch] = (uint8_t)d2;
         else if (d1 == 100u)
@@ -332,7 +420,7 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
         float p, b, k = bk.k, tone = bk.tone,
                     shape = -1.5f + 9.0f * tone * tone * (3.0f - 2.0f * tone) + 0.8f * (v->vel - 0.4f);
         uint32_t i0;
-        if (!v->gate && v->level < 1e-4f)
+        if (!v->gate && v->level < 1e-4f && !v->on_n)
             continue;
         p = fm_maxf(fm_maxf(press[v->ch], press[0]), v->poly);
         b = bend[v->ch] + (v->ch ? bend[0] : 0.0f);
@@ -431,6 +519,8 @@ static void render_voices(uint32_t j0, uint32_t j1, float *acc)
                     v->lp = bk.fmode == 1u ? 3.0f * v1 : 4.0f * (s - k * v1 - v2);
                 v->level += v->gate ? (tv - v->level) * a : -v->level * bk.rel;
                 acc[i] += v->lp * v->level;
+                if (v->on_n)             /* ONSET: its burst, over the note whatever its envelope */
+                    acc[i] += onset_tick(v);
             }
             }
         }

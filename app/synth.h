@@ -14,11 +14,17 @@
  * pressure narrows it too), NOISE (white noise into the filter; with breath, the breath's), FILTER (0..42 LOWPASS,
  * 43..84 BANDPASS, 85..127 HIGHPASS). Each at 0 leaves a sound as 0.10 made it */
 enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB, SP_PLUCK,
-       SP_WAVE, SP_PW, SP_NOISE, SP_FMODE, SP_N };
+       SP_WAVE, SP_PW, SP_NOISE, SP_FMODE, SP_ONSET, SP_ONSET_LVL, SP_N };
+#define SP_N_SET 13u                     /* (the settings record keeps the first thirteen in p[]; the rest: their own fields) */
 #define SP_N_09 4u                       /* (0.9's settings had the first four) */
 #define SP_N_10 9u                       /* (0.10's, the first nine) */
 #define SYNTH_WAVE(v) ((v) < 43u ? 0u : (v) < 85u ? 1u : 2u)   /* 0 saw, 1 pulse, 2 triangle */
 #define SYNTH_FMODE(v) ((v) < 43u ? 0u : (v) < 85u ? 1u : 2u)  /* 0 lowpass, 1 bandpass, 2 highpass */
+/* ONSET (0.15, Alex: Vane's attack transients): a noise burst at each note's start, Vane's ten synthesised ones
+ * (Assets/transients/gen_inharmonic.py, its recipes), over the note whatever its envelope; ONSET LVL its level */
+#define SYNTH_ONSETS 11u                 /* OFF, then the ten */
+#define SYNTH_ONSET(v) ((v) * SYNTH_ONSETS / 128u)
+extern const char *const SYNTH_ONSET_NAMES[SYNTH_ONSETS];
 #define SYNTH_CC_TONE 74u
 #define SYNTH_CC_REL 72u
 #define SYNTH_CC_GLIDE 5u
@@ -32,6 +38,8 @@ enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB
 #define SYNTH_CC_PW 24u
 #define SYNTH_CC_NOISE 25u
 #define SYNTH_CC_FMODE 26u
+#define SYNTH_CC_ONSET 27u
+#define SYNTH_CC_ONSET_LVL 28u
 
 /* YARD's own sounds (app.c: first on PRESETS): their parameters; mono, one voice whatever PLAY says */
 typedef struct {

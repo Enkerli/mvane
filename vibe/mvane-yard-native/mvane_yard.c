@@ -65,7 +65,7 @@ static void send(uint32_t st, uint32_t d1, uint32_t d2)   /* (control flow) full
 
 static const uint8_t SP_CC[SP_N] = {SYNTH_CC_TONE, SYNTH_CC_REL, SYNTH_CC_GLIDE, SYNTH_CC_ATTACK, SYNTH_CC_DECAY,
                                     SYNTH_CC_RES, SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_PLUCK, SYNTH_CC_WAVE,
-                                    SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE};
+                                    SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE, SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL};
 static void sound_load(uint32_t n)       /* (audio flow) one of YARD's sounds, as the FM-1 loads it */
 {
     const synth_sound_t *s = &SYNTH_SOUNDS[n % SYNTH_NSOUNDS];
@@ -339,10 +339,11 @@ static const char *const PG_NAME[PG_N] = {"SOUND", "PLAY", "CHORD", "ARP", "SCAL
 static const uint32_t PG_COLOR[PG_N] = {0x2F8F78, 0xE0A040, 0x8A7FD8, 0xD86A8A, 0x4FA8D8, 0x9AA040};
 static uint8_t page, more, help;
 static uint8_t in_map[16][128];          /* MIDI in, QUANT FULL: 1 + the note it became */
-static const uint8_t SOUND_P[3][4] = {{SP_TONE, SP_ATTACK, SP_DECAY, SP_REL}, {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK},
-                                      {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}};
-static const char *const SOUND_N[3][4] = {{"TONE", "ATTACK", "DECAY", "RELEASE"}, {"DETUNE", "SUB", "RES", "PLUCK"},
-                                          {"WAVE", "PW", "NOISE", "FILTER"}};
+#define SOUND_PAGES 4u                   /* YARD's: TONE.., DETUNE.., WAVE.., ONSET (F6 between) */
+static const uint8_t SOUND_P[SOUND_PAGES][4] = {{SP_TONE, SP_ATTACK, SP_DECAY, SP_REL}, {SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK},
+                                                {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}, {SP_ONSET, SP_ONSET_LVL, SP_N, SP_N}};
+static const char *const SOUND_N[SOUND_PAGES][4] = {{"TONE", "ATTACK", "DECAY", "RELEASE"}, {"DETUNE", "SUB", "RES", "PLUCK"},
+                                                    {"WAVE", "PW", "NOISE", "FILTER"}, {"ONSET", "ONSET LVL", "", ""}};
 
 /* ---- your sounds and scales (step 6): the FM-1's bank, yard.ysb, version 3, byte for byte (app.c yard_bank_t,
  * tools/ysb.py): "MVYB", version, 32; 32 YARD sounds of 32 bytes (a name, flags: 1 used, 2 mono, the thirteen
@@ -672,9 +673,13 @@ static void page_value(uint32_t i, const char **label, char *val)   /* encoder i
         *label = N[more % 2u][i];
         vg_itoa((int)(more % 2u ? clp_fx(i) : clp_macro(i)), val);
     } else if (page == PG_SOUND) {
-        uint32_t p = SOUND_P[more % 3u][i];
-        *label = SOUND_N[more % 3u][i];
-        if (p == SP_WAVE) {
+        uint32_t p = SOUND_P[more % SOUND_PAGES][i];
+        *label = SOUND_N[more % SOUND_PAGES][i];
+        if (p == SP_N)
+            ;
+        else if (p == SP_ONSET)
+            strcpy(val, SYNTH_ONSET_NAMES[SYNTH_ONSET(set.val[p]) % SYNTH_ONSETS]);
+        else if (p == SP_WAVE) {
             static const char *const W[3] = {"SAW", "PULSE", "TRI"};
             strcpy(val, W[SYNTH_WAVE(set.val[p])]);
         } else if (p == SP_FMODE) {
@@ -754,8 +759,14 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
         int v = (int)(more % 2u ? clp_fx(i) : clp_macro(i)) + 2 * de;
         send(0xB0u, more % 2u ? FXC[i] : 16u + i, (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v));
     } else if (page == PG_SOUND) {
-        uint32_t p = SOUND_P[more % 3u][i];
-        if (p == SP_WAVE || p == SP_FMODE) {   /* a choice of three: a step a turn (0, 64, 127) */
+        uint32_t p = SOUND_P[more % SOUND_PAGES][i];
+        if (p == SP_N)
+            ;
+        else if (p == SP_ONSET) {         /* OFF and the ten, a step a turn (each one's middle value) */
+            int t = (int)SYNTH_ONSET(set.val[p]) + d;
+            t = t < 0 ? 0 : t > (int)SYNTH_ONSETS - 1 ? (int)SYNTH_ONSETS - 1 : t;
+            param_set(p, (int32_t)(((uint32_t)t * 128u + 64u) / SYNTH_ONSETS));
+        } else if (p == SP_WAVE || p == SP_FMODE) {   /* a choice of three: a step a turn (0, 64, 127) */
             int z = (int)SYNTH_WAVE(set.val[p]) + d;
             z = z < 0 ? 0 : z > 2 ? 2 : z;
             param_set(p, z == 0 ? 0 : z == 1 ? 64 : 127);
@@ -866,12 +877,13 @@ static const char *GRP[PR_N];
 static void params_declare(void)
 {
     static const char *const SP_ID[SP_N] = {"tone", "release", "glide", "attack", "decay", "res", "detune", "sub",
-                                            "pluck", "wave", "pw", "noise", "filter"};
+                                            "pluck", "wave", "pw", "noise", "filter", "onset", "onset_level"};
     static const char *const SP_NM[SP_N] = {"Tone", "Release", "Glide", "Attack", "Decay", "Resonance", "Detune", "Sub",
-                                            "Pluck", "Wave", "Pulse width", "Noise", "Filter"};
+                                            "Pluck", "Wave", "Pulse width", "Noise", "Filter", "Onset", "Onset level"};
     static const char *const SP_GR[SP_N] = {"A · TONE", "A · ENVELOPE", "A · PLAY", "A · ENVELOPE", "A · ENVELOPE",
                                             "A · TONE", "A · OSCILLATORS", "A · OSCILLATORS", "A · ENVELOPE",
-                                            "A · OSCILLATORS", "A · OSCILLATORS", "A · OSCILLATORS", "A · TONE"};
+                                            "A · OSCILLATORS", "A · OSCILLATORS", "A · OSCILLATORS", "A · TONE",
+                                            "A · ONSET", "A · ONSET"};
     uint32_t i;
     for (i = 0; i < SOUNDS_N && i < SOUNDS_MAX; i++) {
         if (sound_exists(i))
@@ -889,6 +901,8 @@ static void params_declare(void)
             PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 2, 0, "", 3, WAVE_C};
         if (i == SP_FMODE)
             PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 2, 0, "", 3, FMODE_C};
+        if (i == SP_ONSET)
+            PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, (float)(SYNTH_ONSETS - 1u), 0, "", (int)SYNTH_ONSETS, SYNTH_ONSET_NAMES};
         GRP[PR_SP0 + i] = SP_GR[i];
     }
     PRM[PR_MODE] = (vibe_param){"mode", "Mode", 0, 1, 1, "", 2, MODE_C}, GRP[PR_MODE] = "B · HARMONY";
@@ -918,7 +932,7 @@ static float param_now(uint32_t i)       /* a parameter's value as the panel has
 {
     if (i >= PR_SP0 && i < PR_SP0 + SP_N) {
         uint32_t p = i - PR_SP0, v = set.val[p];
-        return p == SP_WAVE || p == SP_FMODE ? (float)SYNTH_WAVE(v) : (float)v;
+        return p == SP_WAVE || p == SP_FMODE ? (float)SYNTH_WAVE(v) : p == SP_ONSET ? (float)SYNTH_ONSET(v) : (float)v;
     }
     switch (i) {
     case PR_SOUND: return (float)set.sound;
@@ -956,7 +970,8 @@ static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped contr
     int v = (int)(value + 0.5f);
     if (i >= PR_SP0 && i < PR_SP0 + SP_N) {
         uint32_t p = i - PR_SP0;
-        param_set(p, p == SP_WAVE || p == SP_FMODE ? (v <= 0 ? 0 : v == 1 ? 64 : 127) : v);
+        param_set(p, p == SP_WAVE || p == SP_FMODE ? (v <= 0 ? 0 : v == 1 ? 64 : 127)
+                     : p == SP_ONSET ? (int32_t)(((uint32_t)(v < 0 ? 0 : v) * 128u + 64u) / SYNTH_ONSETS) : v);
         return;
     }
     switch (i) {
@@ -1007,8 +1022,9 @@ static void settings_save(void)
     rec.magic = SET_MAGIC;
     rec.mode = set.mode, rec.tonic = set.tonic, rec.octave = (int8_t)(o < -2 ? -2 : o > 2 ? 2 : o);
     rec.scale = set.scale, rec.pcs = (uint16_t)(0x8000u | (set.pcs & 0xFFFu));
-    for (i = 0; i < SP_N; i++)
+    for (i = 0; i < SP_N_SET; i++)
         rec.p[i] = set.val[i];
+    rec.onset = set.val[SP_ONSET], rec.onset_lvl = set.val[SP_ONSET_LVL];
     rec.type = set.type, rec.style = set.style, rec.bass = set.bass, rec.voices = set.voices, rec.bank = set.bank;
     rec.play = set.play, rec.quant = set.quant;
     rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound       /* (the FM-1's codes: app.c) */
@@ -1032,8 +1048,9 @@ static void settings_load(void)          /* (the defaults are set; a good record
         rec.arp_rate = 3, rec.arp_gate = 50, rec.arp_oct = 1, rec.arp_bpm = 120;
         return;
     }
-    for (i = 0; i < SP_N; i++)
+    for (i = 0; i < SP_N_SET; i++)
         bad |= rec.p[i] > 127u;
+    bad |= rec.onset > 127u || rec.onset_lvl > 127u;
     if (bad || rec.mode > 1u || rec.tonic > 11u || !(rec.pcs & 0x8000u) || rec.quant > 2u || rec.voices < 3u
         || rec.voices > CHORD_MAX || rec.style >= CHORD_STYLES || rec.bass > 1u || rec.bank > 1u
         || rec.type >= CHORD_NTYPES || rec.play > 3u)
@@ -1052,8 +1069,10 @@ static void settings_load(void)          /* (the defaults are set; a good record
     else
         set.sound = 0;
     sound_pick(set.sound);
-    for (i = 0; i < SP_N && !sound_clp(set.sound); i++)   /* the values as they were left (a sound edited, not kept) */
+    for (i = 0; i < SP_N_SET && !sound_clp(set.sound); i++)   /* the values as they were left (a sound edited, not kept) */
         param_set(i, rec.p[i]);
+    if (!sound_clp(set.sound))
+        param_set(SP_ONSET, rec.onset), param_set(SP_ONSET_LVL, rec.onset_lvl);
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
     slot = (uint8_t)(rec.slot & 7u), loop_on = (uint8_t)(rec.loop != 0);
@@ -1239,7 +1258,7 @@ static void event(const vibe_event *e)
         else if (e->id == VB_REC)
             rec_press(1);
         else if (e->id == VB_F6)
-            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? (sound_clp(set.sound) ? 2u : 3u) : page == PG_ARP ? 2u : 1u));
+            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? (sound_clp(set.sound) ? 2u : SOUND_PAGES) : page == PG_ARP ? 2u : 1u));
         lights();
     }
 }
@@ -2049,7 +2068,7 @@ static void draw_values(void)
         if (page == PG_SOUND && sound_clp(set.sound))
             fill = (int)(more % 2u ? clp_fx(i) : clp_macro(i));
         else if (page == PG_SOUND)
-            fill = set.val[SOUND_P[more % 3u][i]];
+            fill = SOUND_P[more % SOUND_PAGES][i] < SP_N ? set.val[SOUND_P[more % SOUND_PAGES][i]] : -1;
         else if (page == PG_PLAY && i == 3u)
             fill = set.val[SP_GLIDE];
         if (fill >= 0) {
@@ -2153,13 +2172,14 @@ void vibe_on_draw(uint16_t *fb)
             vg_text(SUB[i], 16, 150 + (int)i * 18, VG_SMALL, i == more % 2u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
         vg_text("A: THE SOUND   F6: THE OTHER FOUR   F4: KEEP", 464, 186, VG_SMALL, C_DIM, 2);
     } else if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
-        static const char *const SUB[3] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER"};
+        static const char *const SUB[SOUND_PAGES] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER",
+                                                     "ONSET: A BURST AT EACH NOTE'S START (VANE'S TEN)"};
         vg_text(sound_name(), 16, 72, VG_BIG | VG_X2, C_INK, 0);
         vg_text(set.sound >= SYNTH_NSOUNDS ? (sound_mono() ? "YOURS, YARD, MONO" : "YOURS, YARD") : sound_mono() ? "YARD, MONO" : "YARD",
                 16, 124, VG_MED, C_DIM, 0);
-        for (i = 0; i < 3u; i++) {
-            int y = 150 + (int)i * 18;
-            vg_text(SUB[i], 16, y, VG_SMALL, i == more % 3u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
+        for (i = 0; i < SOUND_PAGES; i++) {
+            int y = 146 + (int)i * 15;
+            vg_text(SUB[i], 16, y, VG_SMALL, i == more % SOUND_PAGES ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
         }
         vg_text("A: THE SOUND   F6: THE NEXT FOUR", 464, 186, VG_SMALL, C_DIM, 2);
     } else if (page == PG_PLAY) {        /* what sounds, the scale on the keyboard */

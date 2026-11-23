@@ -22,6 +22,7 @@ app/build/host/mvane-yard_host app/tests/overdub.txt app/build/host >> build/hos
 app/build/host/mvane-yard_host app/tests/arp.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/dub_ch.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/breath.txt app/build/host >> build/host.log
+app/build/host/mvane-yard_host app/tests/onset.txt app/build/host >> build/host.log
 if grep -q '^FAIL' build/host.log; then grep '^FAIL' build/host.log; exit 1; fi
 python3 tools/yard_test.py
 node web/take_test.mjs

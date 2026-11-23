@@ -42,7 +42,7 @@ typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX
     uint32_t magic;
     uint8_t mode, tonic, scale;
     int8_t octave;
-    uint8_t p[SP_N];
+    uint8_t p[SP_N_SET];
     uint8_t type, style, bass, usb_full, voices, bank, play, slot;
     uint16_t sound;
     uint8_t quant, mpe_out, bend, page, phones;
@@ -51,7 +51,7 @@ typedef struct {                         /* (MVA8, a 0.11 build's: the same with
     uint32_t magic;
     uint8_t mode, tonic, scale;
     int8_t octave;
-    uint8_t p[SP_N];
+    uint8_t p[SP_N_SET];
     uint8_t type, style, bass, usb_full, voices, bank, play, slot;
     uint16_t sound;
     uint8_t quant, mpe_out, bend, page;
@@ -79,15 +79,16 @@ static uint8_t set_dirty;
 
 static void settings_defaults(void)
 {
-    static const uint8_t P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (YARD SAW: SYNTH_SOUNDS' first) */
+    static const uint8_t P[SP_N_SET] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (YARD SAW: SYNTH_SOUNDS' first) */
     uint32_t i;
     set.magic = SET_MAGIC;
     set.mode = 1;
     set.tonic = 0;
     set.scale = 1;                       /* MAJOR (CHORD_SCALES, bright to dark: LYDIAN first) */
     set.octave = 0;
-    for (i = 0; i < SP_N; i++)
+    for (i = 0; i < SP_N_SET; i++)
         set.p[i] = P[i];
+    set.onset = set.onset_lvl = 0;
     set.type = 0;
     set.style = CHORD_OPEN;
     set.bass = 1;
@@ -152,8 +153,9 @@ static void settings_load(void)
         set.quant = o.quant, set.mpe_out = o.mpe_out, set.bend = o.bend, set.page = o.page;
     } else
         bad = 1;
-    for (i = 0; i < SP_N; i++)
+    for (i = 0; i < SP_N_SET; i++)
         bad |= set.p[i] > 127u;
+    bad |= set.onset > 127u || set.onset_lvl > 127u;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES + 16u || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
@@ -674,6 +676,22 @@ static uint8_t take_dirty;
 static uint8_t ch_notes[16];             /* notes sounding per channel (out): the MPE allocator's view */
 static uint32_t ch_free_at[16];
 static uint8_t knob[SP_N];               /* the knobs as the panel last sent them */
+/* YARD's values in the settings record: its first thirteen in p[], ONSET's two in their own fields (0.15: the record
+ * kept its size) */
+static void set_p_get(uint8_t p[SP_N])
+{
+    uint32_t i;
+    for (i = 0; i < SP_N_SET; i++)
+        p[i] = set.p[i];
+    p[SP_ONSET] = set.onset, p[SP_ONSET_LVL] = set.onset_lvl;
+}
+static void set_p_put(const uint8_t p[SP_N])
+{
+    uint32_t i;
+    for (i = 0; i < SP_N_SET; i++)
+        set.p[i] = p[i];
+    set.onset = p[SP_ONSET], set.onset_lvl = p[SP_ONSET_LVL];
+}
 
 #define FROM_ARP 16u                     /* (bus: the ARP's own notes, not arpeggiated again) */
 #define FROM_TAKE 32u                    /* (a recording playing: never arpeggiated) */
@@ -1035,13 +1053,11 @@ static int take_save(void)               /* the RAM take into the current slot *
 
 void app_init(void)
 {
-    uint32_t i;
     settings_load();
     phones_apply();
     sq_forget();
-    synth_init(set.p);
-    for (i = 0; i < SP_N; i++)
-        knob[i] = set.p[i];
+    set_p_get(knob);                     /* (the settings' YARD values, ONSET's two with them) */
+    synth_init(knob);
     rec_init(&hist, hist_buf, HIST_WORDS);
     hist.sleep_ms = SLEEP_MS;
     if (set.slot >= TAKE_SLOTS)
@@ -1140,7 +1156,7 @@ static struct {
      * chord_build_qualities; the other bank takes the last); the only latched key tapped again unlatches, and the
      * white keys play single notes. qheld the keys down, qgest the press under way, qlatch the latched set */
     uint16_t qheld, qgest, qlatch;
-    uint8_t yfx;                         /* YARD's FX layer: 0 DETUNE SUB RES PLUCK, 1 WAVE PW NOISE FILTER (SELECT) */
+    uint8_t yfx;                         /* YARD's pages: 0 DETUNE SUB RES PLUCK, 1 WAVE PW NOISE FILTER, 2 ONSET (SELECT) */
     uint8_t cedit;                       /* a Clipper sound's editing: 0 ENGINE 1-4, 1 ENGINE 5-8, 2 ENVELOPE (SELECT) */
     uint8_t qtoggle;
     uint32_t qstamp[CHORD_BANK], qclock;
@@ -1885,8 +1901,10 @@ static void knob_info(uint32_t i, const char **label, char *val)
 {
     static const char *const SAW_N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
     static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
-    static const char *const YFX_N[2][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"}};
-    static const uint8_t YFX_P[2][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}};
+    static const char *const YFX_N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
+                                            {"ONSET", "ONSET LVL", "-", "-"}};
+    static const uint8_t YFX_P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
+                                        {SP_ONSET, SP_ONSET_LVL, SP_N, SP_N}};
     static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
     static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
@@ -1929,10 +1947,14 @@ static void knob_info(uint32_t i, const char **label, char *val)
         else
             text_cat(val, set.bank ? "QUALITY" : "SCALE");
     } else if (l == B_FX) {
-        uint32_t pg = ui.yfx & 1u, v = synth_param(YFX_P[pg][i]);   /* (YARD: its two pages, SELECT between) */
+        uint32_t pg = ui.yfx % 3u, v = synth_param(YFX_P[pg][i]);   /* (YARD: its three pages, SELECT between) */
         *label = clp_on() ? FX_N[i] : YFX_N[pg][i];
         if (clp_on())
             int_text((int32_t)clp_fx(i), val);
+        else if (YFX_P[pg][i] == SP_N)
+            ;
+        else if (YFX_P[pg][i] == SP_ONSET)
+            text_cat(val, SYNTH_ONSET_NAMES[SYNTH_ONSET(v) % SYNTH_ONSETS]);
         else if (YFX_P[pg][i] == SP_WAVE)
             text_cat(val, WAVE_N[SYNTH_WAVE(v)]);
         else if (YFX_P[pg][i] == SP_FMODE)
@@ -2064,12 +2086,22 @@ static void knob_turn(uint32_t i, int32_t e)
         static const uint8_t CC[4] = {12, 93, 94, 91};   /* DRIVE (mvane yard's CC 12), CHORUS, DELAY, REVERB */
         static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
         if (!clp_on()) {                 /* YARD: no effects; its pages (SELECT between) */
-            static const uint8_t P[2][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE}};
-            static const uint8_t YC[2][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
-                                             {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE}};
-            static const char *const N[2][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"}};
-            uint32_t pg = ui.yfx & 1u, w = P[pg][i];
-            if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
+            static const uint8_t P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
+                                            {SP_ONSET, SP_ONSET_LVL, SP_N, SP_N}};
+            static const uint8_t YC[3][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
+                                             {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE},
+                                             {SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL, 0, 0}};
+            static const char *const N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
+                                                {"ONSET", "ONSET LVL", "-", "-"}};
+            uint32_t pg = ui.yfx % 3u, w = P[pg][i];
+            if (w == SP_N)
+                return;
+            if (w == SP_ONSET) {         /* ONSET: OFF and the ten, a turn a step (each one's middle value) */
+                int32_t t = clamp((int32_t)SYNTH_ONSET(synth_param(w)) + (e > 0 ? 1 : -1), 0, (int32_t)SYNTH_ONSETS - 1);
+                knob_set(w, YC[pg][i], ((uint32_t)t * 128u + 64u) / SYNTH_ONSETS, N[pg][i]);
+                knob_info(i, &label, val);
+                app_say(label, val);
+            } else if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
                 uint32_t z = SYNTH_WAVE(synth_param(w));
                 int32_t nz = clamp((int32_t)z + (e > 0 ? 1 : -1), 0, 2);
                 knob_set(w, YC[pg][i], nz == 0 ? 0 : nz == 1 ? 64 : 127, N[pg][i]);
@@ -2203,8 +2235,9 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         if (clp_on())
             app_say("REVERB", clp_reverb_step(d));
         else {
-            ui.yfx ^= 1u;
-            app_say("YARD", ui.yfx ? "WAVE PW NOISE FILTER" : "DETUNE SUB RES PLUCK");
+            static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET ONSET LVL"};
+            ui.yfx = (uint8_t)((ui.yfx + 3u + (uint32_t)d) % 3u);
+            app_say("YARD", PG[ui.yfx]);
             ui.redraw = 1;
         }
     } else if (l == B_GLO) {             /* USB: a computer, or host to a MIDI device (the Diosynth) */
@@ -2442,8 +2475,8 @@ static void input(void)
             int bad;
             rt_flash();
             uint32_t i;
-            for (i = 0; i < SP_N; i++)
-                set.p[i] = knob[i];      /* the knobs as set, not as a take left them */
+            (void)i;
+            set_p_put(knob);             /* the knobs as set, not as a take left them */
             {
                 settings_t st = set;
                 st.sound = sound_to_store();
@@ -2627,10 +2660,13 @@ static void draw(void)
         for (i = 0; i < CLP_EDIT_PAGES; i++)
             x = cv_text(x, 4, &FONT_S, PG[i], i == ui.cedit ? C_WHITE : C_GRAY) + 12;
         cv_text(10, 44, &FONT_XS, "SELECT: THE NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
-    } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's two pages */
-        cv_text(10, 4, &FONT_S, ui.yfx ? "WAVE  PW  NOISE  FILTER" : "DETUNE  SUB  RES  PLUCK", C_WHITE);
-        cv_text(10, 22, &FONT_S, ui.yfx ? "DETUNE  SUB  RES  PLUCK" : "WAVE  PW  NOISE  FILTER", C_GRAY);
-        cv_text(10, 44, &FONT_XS, "SELECT: THE OTHER PAGE   SAVE: KEEP THE SOUND", C_GRAY);
+    } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's three pages */
+        static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET"};
+        int32_t x = 10;
+        for (i = 0; i < 3u; i++)
+            x = cv_text(x, 4 + (int32_t)(i / 2u) * 18, &FONT_S, PG[i], i == ui.yfx % 3u ? C_WHITE : C_GRAY) + 12,
+            x = i == 1u ? 10 : x;
+        cv_text(10, 44, &FONT_XS, "SELECT: THE NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_EDIT) {          /* CHORD: the black keys' types in this bank */
         int32_t x = 10;
         for (i = 0; i < CHORD_BANK; i++) {
@@ -2958,8 +2994,9 @@ void app_file_changed(uint32_t obj)
     settings_load();
     phones_apply();
     sound_from_store();
+    set_p_get(knob);
     for (i = 0; i < SP_N; i++)
-        synth_set(i, set.p[i]), knob[i] = set.p[i];
+        synth_set(i, knob[i]);
     set_dirty = 0;
     ui.redraw = 1;
 }
@@ -3225,6 +3262,10 @@ int app_expect(const char *what, int *got)
         *got = (int)app_gain(4096u);
     else if (!strcmp(what, "cedit"))     /* a Clipper sound's editing page */
         *got = ui.cedit;
+    else if (!strcmp(what, "onset"))     /* YARD's ONSET: its type, 0 OFF .. 10 */
+        *got = (int)SYNTH_ONSET(synth_param(SP_ONSET));
+    else if (!strcmp(what, "onset_lvl"))
+        *got = (int)synth_param(SP_ONSET_LVL);
     else if (!strcmp(what, "yfx"))       /* YARD's FX page */
         *got = ui.yfx;
     else if (!strcmp(what, "yard_split"))   /* YARD's blocks the second core took part in */
