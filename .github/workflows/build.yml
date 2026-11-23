@@ -90,5 +90,5 @@ jobs:
             app/build/*.fwsc
             app/build/firmware.json
             app/build/host/*.png
-            build/vibe/mvane-yard-vibe.zip
+            build/vibe/mvane-yard-native.zip
           if-no-files-found: error

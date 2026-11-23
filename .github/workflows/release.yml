@@ -102,8 +102,8 @@ jobs:
         cp app/build/firmware.json build/release-assets/
         # <- yours: any other assets, into build/release-assets/
         # the native VIBE FM firmware (vibe/: Zig 0.13.0 and the VIBE FM SDK pinned in vibe/ci.sh, vibe-check passed):
-        # mvane-yard-vibe.zip, a fixed name, the .wasm and its .json at the top, as The Firmware Hub takes it for the
-        # native card (Sven, 2026-11-23); the .wasm beside it
+        # mvane-yard-native.zip, a fixed name, the .wasm and its .json at the top, as The Firmware Hub takes it for the
+        # native card (Sven, 2026-11-23; "native": apart from the converted FM-1 firmware's mvane-yard); the .wasm beside it
         sh vibe/ci.sh build/release-assets "${version:-dev}"
       test: |
         set -euo pipefail

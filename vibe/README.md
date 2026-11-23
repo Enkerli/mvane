@@ -10,19 +10,20 @@ firmware's sources: `app/synth.c` (YARD) now, `core/` (chords, the recorder) nex
 Needs the SDK (a clone; `VIBE_SDK`, by default `../vibe-fm-sdk-ref/sdk`) and Zig (0.13.0 as the SDK says; 0.17.1
 works too).
 
-    make vibe        # vibe/build.sh: build/mvane-yard.zip in the SDK's folder, then vibe-check (PASSED)
+    make vibe        # vibe/build.sh: build/mvane-yard-native.zip in the SDK's folder, then vibe-check (PASSED)
     make vibe-cmp    # YARD in the .wasm against YARD as the FM-1 computes it: bit for bit at 44.1 kHz
 
-Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or the `.wasm` onto the Playground
+Drop `build/mvane-yard-native.zip` (in the SDK's folder) onto VIBE FM VST's window, or the `.wasm` onto the Playground
 (<https://play.thefirmwarehub.com/>).
 
 ## Releases
 
-Every release carries **`mvane-yard-vibe.zip`** (a fixed name: `mvane-yard.wasm`, its `.json` with the release's
-version, `mvane-yard.png` at the top) and `mvane-yard-vibe.wasm` beside it: The Firmware Hub's native card takes
-them (Sven, 2026-11-23). `vibe/ci.sh` builds them on Linux with Zig 0.13.0 and the SDK at a fixed commit, both
+Every release carries **`mvane-yard-native.zip`** (a fixed name: `mvane-yard-native.wasm`, its `.json` with the
+release's version, its `.png` at the top) and `mvane-yard-native.wasm` beside it: The Firmware Hub's native card
+takes them (Sven, 2026-11-23). Its id is `mvane-yard-native`, apart from the converted FM-1 firmware's `mvane-yard`
+(the Hub's VST converter), so the two live side by side in VIBE FM VST. `vibe/ci.sh` builds them on Linux with Zig 0.13.0 and the SDK at a fixed commit, both
 checked, then runs vibe-check; the CI does the same on every push (the zip in the run's artifact). The card's
-picture, `vibe/mvane-yard/icon.png` (960 × 540): `tools/vibe_icon.py`.
+picture, `vibe/mvane-yard-native/icon.png` (960 × 540): `tools/vibe_icon.py`.
 
 ## The steps (FROM-FM1.md)
 
@@ -93,7 +94,7 @@ picture, `vibe/mvane-yard/icon.png` (960 × 540): `tools/vibe_icon.py`.
    or F4: on, off. Its own tempo; while the DAW plays, the DAW's, each step on the DAW's grid (`vibe/arp_daw.json`:
    at 90 BPM, 1/16, the steps at 0.632, 0.800, 0.968 s ... against 0.633, 0.800, 0.967 on the grid). Seven DAW
    parameters (Editor tab C); the settings' ARP fields are the FM-1's. `vibe/arp.json`: on, a chord, LATCH.
-9. **Done:** Clipper's sounds, its own unit (`vibe/mvane-yard/clipper.c` around `app/clipper`, the FM-1's vendored
+9. **Done:** Clipper's sounds, its own unit (`vibe/mvane-yard-native/clipper.c` around `app/clipper`, the FM-1's vendored
    copy, unchanged; `vibe/build.sh`: the SDK's build with Clipper's include paths). It runs at its own 44.1 kHz,
    32 frames at a time into a ring read out at the host's rate (cubic Hermite; at 44.1 kHz its samples as they are),
    one core (the FM-1's second core answered "none"). A steps through YARD's thirteen, your YARD sounds, Clipper's 337

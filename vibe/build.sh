@@ -3,11 +3,11 @@
 # mvane yard's VIBE FM firmware: the SDK's tools/build.sh (its flags, its link, its package), with the include paths
 # Clipper's sources need (app/clipper and its src, gen, hal: they include each other by name, as on the FM-1).
 # VIBE_VERSION: the version on the card (a release's); ZIG: the compiler (the SDK names 0.13.0).
-#   sh vibe/build.sh [SDK]   (SDK: the VIBE FM SDK's folder, by default ../vibe-fm-sdk-ref/sdk) -> SDK/build/mvane-yard.zip
+#   sh vibe/build.sh [SDK]   (SDK: the VIBE FM SDK's folder, by default ../vibe-fm-sdk-ref/sdk) -> SDK/build/mvane-yard-native.zip
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SDK="$(cd "${1:-$ROOT/../vibe-fm-sdk-ref/sdk}" && pwd)"
-DIR="$ROOT/vibe/mvane-yard"; ID=mvane-yard
+DIR="$ROOT/vibe/mvane-yard-native"; ID=mvane-yard-native
 ZIG="${ZIG:-zig}"
 command -v "$ZIG" >/dev/null 2>&1 || [ -x "$ZIG" ] || { echo "zig not found (the SDK's README: Zig 0.13.0; ZIG=/path/to/zig)"; exit 1; }
 cd "$SDK"

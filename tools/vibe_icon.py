@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""The VIBE FM card (vibe/mvane-yard/icon.png, 960 x 540, 16:9): rolling hills (the yard) over a keyboard with a
+"""The VIBE FM card (vibe/mvane-yard-native/icon.png, 960 x 540, 16:9): rolling hills (the yard) over a keyboard with a
 chord lit as the PLAY page lights it, the bass in red; a small wordmark. python3 tools/vibe_icon.py (Pillow)"""
 import math
 import os
@@ -51,6 +51,6 @@ for f in ("/System/Library/Fonts/Avenir Next.ttc", "/System/Library/Fonts/Helvet
 d.ellipse([70 * S, 92 * S, 96 * S, 118 * S], fill=AMBER)
 d.text((112 * S, 70 * S), "mvane yard", font=font, fill=INK)
 
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vibe", "mvane-yard", "icon.png")
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vibe", "mvane-yard-native", "icon.png")
 im.resize((W, H), Image.LANCZOS).save(out, optimize=True)
 print(f"vibe_icon: {out} ({os.path.getsize(out) // 1024} KB)")
