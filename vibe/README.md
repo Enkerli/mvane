@@ -47,7 +47,13 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    tones above the key too (ENTER adds or takes one). DATA has no other job here, so it always walks (`VF_ALWAYS`);
    in the plugin and the browser a click on a control does the same (`vf_clicks`). `vibe/focus.json` walks to M7 and
    presses it.
-5. The DAW: YARD's parameters (automatable), the ARP and the loops on the song position.
+5. **Done:** the DAW. 26 parameters, their ids permanent (automation hangs on them): Editor tab A, YARD (the sound
+   by name, the play mode, its thirteen values: WAVE and FILTER as their three choices), tab B, the harmony (NOTES /
+   CHORDS, the key, QUANT, the scale's number, voicing, voices, bass, the black keys' bank, HOLD). A change from the
+   DAW is applied as the panel would (a sound brings its values, which go back to the DAW); after every event, what
+   moved on the panel goes to the DAW (`params_push`). The DAW's tempo and place (`vibe_transport`) show on ARP and
+   SEQ, and a green > in the header while it plays: the ARP and the loops will follow them (steps 7, 8).
+   `vibe/daw.json` (wasmtest) sets the key, the sound and the scale from outside, with a DAW at 96 BPM.
 6. Storage: settings, your sounds and scales (`yard.ysb`), recordings (`.mvt`), as on the FM-1.
 7. The recorder (`core/rec.c`) on the audio's clock: REC, loops, overdub.
 8. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).

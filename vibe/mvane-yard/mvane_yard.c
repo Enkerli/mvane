@@ -459,6 +459,111 @@ static void lights(void)
     vibe_led_button(VB_F2, 0xFF7A00, set.hold ? 1.0f : 0.0f);
 }
 
+/* ---- the DAW (step 5): the parameters it automates and a controller maps; their ids never change ----
+ * Editor tab A: YARD (the sound, its values, the play mode); tab B: the harmony (NOTES / CHORDS, the key, QUANT, the
+ * scale's number, the chord's voicing). The panel and the DAW stay in step: a change from the DAW comes as
+ * VIBE_EV_PARAM and is applied as the panel would; after every event params_push tells the DAW what moved here. */
+static const char *const SOUND_NAMES[13] = {"SAW", "PAD", "ENSEMBLE", "KEYS", "PLUCK", "BRASS", "LEAD", "BASS", "WIND",
+                                            "HOLLOW", "FLUTE", "REED", "CLAV"};
+static const char *const WAVE_C[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_C[3] = {"LOW", "BAND", "HIGH"};
+static const char *const MODE_C[2] = {"NOTES", "CHORDS"}, *const ONOFF_C[2] = {"OFF", "ON"};
+static const char *const BANK_C[2] = {"SCALE", "QUALITY"}, *const VOICES_C[4] = {"3", "4", "5", "6"};
+enum { PR_SOUND, PR_PLAY, PR_SP0, PR_MODE = PR_SP0 + SP_N, PR_KEY, PR_QUANT, PR_PCS, PR_STYLE, PR_VOICES, PR_BASS,
+       PR_BANK, PR_HOLD, PR_N };
+static vibe_param PRM[PR_N];
+static const char *GRP[PR_N];
+static void params_declare(void)
+{
+    static const char *const SP_ID[SP_N] = {"tone", "release", "glide", "attack", "decay", "res", "detune", "sub",
+                                            "pluck", "wave", "pw", "noise", "filter"};
+    static const char *const SP_NM[SP_N] = {"Tone", "Release", "Glide", "Attack", "Decay", "Resonance", "Detune", "Sub",
+                                            "Pluck", "Wave", "Pulse width", "Noise", "Filter"};
+    static const char *const SP_GR[SP_N] = {"A · TONE", "A · ENVELOPE", "A · PLAY", "A · ENVELOPE", "A · ENVELOPE",
+                                            "A · TONE", "A · OSCILLATORS", "A · OSCILLATORS", "A · ENVELOPE",
+                                            "A · OSCILLATORS", "A · OSCILLATORS", "A · OSCILLATORS", "A · TONE"};
+    uint32_t i;
+    PRM[PR_SOUND] = (vibe_param){"sound", "Sound", 0, 12, 0, "", 13, SOUND_NAMES}, GRP[PR_SOUND] = "A · PLAY";
+    PRM[PR_PLAY] = (vibe_param){"play", "Play mode", 0, 3, 0, "", 4, PLAY_N}, GRP[PR_PLAY] = "A · PLAY";
+    for (i = 0; i < SP_N; i++) {
+        PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 127, (float)SYNTH_SOUNDS[0].p[i], "", 128, 0};
+        if (i == SP_WAVE)
+            PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 2, 0, "", 3, WAVE_C};
+        if (i == SP_FMODE)
+            PRM[PR_SP0 + i] = (vibe_param){SP_ID[i], SP_NM[i], 0, 2, 0, "", 3, FMODE_C};
+        GRP[PR_SP0 + i] = SP_GR[i];
+    }
+    PRM[PR_MODE] = (vibe_param){"mode", "Mode", 0, 1, 1, "", 2, MODE_C}, GRP[PR_MODE] = "B · HARMONY";
+    PRM[PR_KEY] = (vibe_param){"key", "Key", 0, 11, 0, "", 12, NOTE_N}, GRP[PR_KEY] = "B · HARMONY";
+    PRM[PR_QUANT] = (vibe_param){"quant", "Quant", 0, 2, 1, "", 3, QUANT_N}, GRP[PR_QUANT] = "B · HARMONY";
+    PRM[PR_PCS] = (vibe_param){"scale", "Scale (number)", 0, 4095, 2741, "", 4096, 0}, GRP[PR_PCS] = "B · HARMONY";
+    PRM[PR_STYLE] = (vibe_param){"voicing", "Voicing", 0, CHORD_STYLES - 1, CHORD_OPEN, "", CHORD_STYLES, CHORD_STYLE_NAMES};
+    PRM[PR_VOICES] = (vibe_param){"voices", "Voices", 3, 6, 5, "", 4, VOICES_C};
+    PRM[PR_BASS] = (vibe_param){"bass", "Bass", 0, 1, 1, "", 2, ONOFF_C};
+    PRM[PR_BANK] = (vibe_param){"bank", "Black keys", 0, 1, 1, "", 2, BANK_C};
+    PRM[PR_HOLD] = (vibe_param){"hold", "Hold", 0, 1, 0, "", 2, ONOFF_C};
+    for (i = PR_STYLE; i <= PR_HOLD; i++)
+        GRP[i] = "B · CHORD";
+    vibe_params(PRM, PR_N);
+    vibe_param_groups(GRP);
+}
+static float param_now(uint32_t i)       /* a parameter's value as the panel has it */
+{
+    if (i >= PR_SP0 && i < PR_SP0 + SP_N) {
+        uint32_t p = i - PR_SP0, v = set.val[p];
+        return p == SP_WAVE || p == SP_FMODE ? (float)SYNTH_WAVE(v) : (float)v;
+    }
+    switch (i) {
+    case PR_SOUND: return (float)set.sound;
+    case PR_PLAY: return (float)set.play;
+    case PR_MODE: return (float)set.mode;
+    case PR_KEY: return (float)set.tonic;
+    case PR_QUANT: return (float)set.quant;
+    case PR_PCS: return (float)(set.pcs & 0xFFFu);
+    case PR_STYLE: return (float)set.style;
+    case PR_VOICES: return (float)set.voices;
+    case PR_BASS: return (float)set.bass;
+    case PR_BANK: return (float)set.bank;
+    default: return (float)set.hold;
+    }
+}
+static void params_push(void)            /* what moved on the panel, to the DAW */
+{
+    uint32_t i;
+    for (i = 0; i < PR_N; i++)
+        if (vibe_param_get((int)i) != param_now(i))
+            vibe_param_set((int)i, param_now(i));
+}
+static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped controller) moved one: as the panel would
+                                                    * (the event carries the value the host stored) */
+{
+    int v = (int)(value + 0.5f);
+    if (i >= PR_SP0 && i < PR_SP0 + SP_N) {
+        uint32_t p = i - PR_SP0;
+        param_set(p, p == SP_WAVE || p == SP_FMODE ? (v <= 0 ? 0 : v == 1 ? 64 : 127) : v);
+        return;
+    }
+    switch (i) {
+    case PR_SOUND: if ((uint32_t)v != set.sound) sound_pick((uint32_t)v); break;
+    case PR_PLAY: if ((uint32_t)v != set.play) play_set((uint32_t)v); break;
+    case PR_MODE: if ((uint32_t)v != set.mode) all_off(), set.mode = (uint8_t)(v != 0); break;
+    case PR_KEY: set.tonic = (uint8_t)((uint32_t)v % 12u), harmony_changed(); break;
+    case PR_QUANT: set.quant = (uint8_t)(v < 0 ? 0 : v > 2 ? 2 : v); break;
+    case PR_PCS: set.pcs = (uint16_t)(v < 0 ? 0 : v > 4095 ? 4095 : v), harmony_changed(); break;
+    case PR_STYLE: set.style = (uint8_t)((uint32_t)v % CHORD_STYLES), harmony_changed(); break;
+    case PR_VOICES: set.voices = (uint8_t)(v < 3 ? 3 : v > 6 ? 6 : v), harmony_changed(); break;
+    case PR_BASS: set.bass = (uint8_t)(v != 0), harmony_changed(); break;
+    case PR_BANK:
+        set.bank = (uint8_t)(v != 0);
+        set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
+        harmony_changed();
+        break;
+    default:
+        set.hold = (uint8_t)(v != 0);
+        if (!set.hold && ch.key >= 0 && !key_role[ch.key & 127])
+            chord_release();
+    }
+}
+
 void vibe_on_init(float sample_rate)
 {
     static const uint8_t START_P[SP_N] = {56, 60, 30, 24, 64, 0, 0, 0, 0, 0, 0, 0, 0};   /* (as the FM-1's first start) */
@@ -473,6 +578,8 @@ void vibe_on_init(float sample_rate)
     page = PG_PLAY;
     labels();
     lights();
+    params_declare();
+    params_push();
     vf_clicks(1);                        /* (SDK 18: in the plugin and the browser, a click on a control too) */
 }
 
@@ -526,7 +633,17 @@ static void key_note(const vibe_event *e)    /* a key, NOTES: a note on its own 
 
 #define FX_QUAL 100                      /* (FOCUS's buttons: the qualities, the scale's tones) */
 #define FX_TONE 200
+static void event(const vibe_event *e);
 void vibe_on_event(const vibe_event *e)
+{
+    if (e->type == VIBE_EV_PARAM) {      /* the DAW's: applied, then what it moved besides (a sound: its values) */
+        param_apply(e->id, e->value);
+        lights();
+    } else
+        event(e);
+    params_push();
+}
+static void event(const vibe_event *e)
 {
     {                                    /* FOCUS first (SDK 10): DATA walks, ENTER presses */
         int id, r = vf_event(e, &id);
@@ -671,6 +788,24 @@ static void keyboard(int x0, int y0, int w, int h, uint32_t lo, uint32_t whites,
     }
     (void)WI;
 }
+static void transport_text(char *t)     /* the DAW's (or a MIDI clock's) tempo and place: "120 BPM  > 5.2", or "" */
+{
+    const vibe_transport_info *tp = vibe_transport();
+    char nb[12];
+    t[0] = 0;
+    if (!tp->has || tp->bpm <= 0.0f)
+        return;
+    cat(t, vg_itoa((int)(tp->bpm + 0.5f), nb));
+    cat(t, " BPM  ");
+    cat(t, tp->playing ? "> " : "|| ");
+    {
+        double bar_len = tp->sig_den ? tp->sig_num * 4.0 / tp->sig_den : 4.0;
+        int bar = (int)(tp->bar_start / bar_len + 0.5) + 1, beat = (int)((tp->beat - tp->bar_start) * tp->sig_den / 4.0) + 1;
+        cat(t, vg_itoa(bar, nb));
+        cat(t, ".");
+        cat(t, vg_itoa(beat, nb));
+    }
+}
 static void draw_frame(void)
 {
     uint32_t i, c = PG_COLOR[page];
@@ -679,6 +814,8 @@ static void draw_frame(void)
     vg_text(PG_NAME[page], 16, 10, VG_BIG, c, 0);
     vg_text(set.mode ? "CHORDS" : "NOTES", 150, 10, VG_BIG, C_INK, 0);
     vg_text(SYNTH_SOUNDS[set.sound].name, 464, 10, VG_BIG, PG_COLOR[PG_SOUND], 2);
+    if (vibe_transport()->has && vibe_transport()->playing)   /* the DAW plays */
+        vg_text(">", 276, 12, VG_BIG, 0x4FD88A, 0);
     for (i = 0; i < PG_N; i++) {         /* K1..K6 */
         int x = 8 + (int)i * 78;
         if (i == page)
@@ -813,6 +950,8 @@ void vibe_on_draw(uint16_t *fb)
         vg_text(page == PG_ARP ? "THE ARP" : "RECORDINGS", 16, 72, VG_BIG | VG_X2, C_FAINT, 0);
         vg_text(page == PG_ARP ? "A STEP TO COME: ON THE AUDIO'S CLOCK, THE DAW'S TEMPO" : "A STEP TO COME: THE RECORDER, LOOPS, OVERDUB",
                 16, 130, VG_MED, C_DIM, 0);
+        transport_text(t);
+        vg_text(t[0] ? t : "NO DAW CLOCK: ITS OWN TEMPO", 464, 80, VG_BIG, t[0] ? 0x4FD88A : C_FAINT, 2);
         draw_sounding(150);
     }
     draw_values();
