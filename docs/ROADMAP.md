@@ -38,6 +38,36 @@ tools (https://enkerli.github.io/mvane-yard/).
 the release and its `.fwsc`, identity `FM-1_53001200`): "waiting for Sven", who reviews every firmware himself.
 VIBE FM is not a gate: the SDK's issue #3 asks for the converter's log.
 
+## Next, sorted (2026-11-23)
+
+Alex: low-hanging fruit first, then "basic Vane" (wavetables, attack transients), then waveguides and WindCore. The
+assessment behind this order: [VANE.md](VANE.md). `app/synth.c` is shared by the FM-1 and the native port, so YARD's
+additions land in both.
+
+**Small, a session or less each**
+1. **Native: MIDI in on a free channel while a recording plays** (the FM-1's 0.13.2, for the Diosynth's overdubs).
+2. **Native: SAVE's copy spread over blocks** (now one block, up to 17% of it in Node).
+3. **The loop's length to its last note's end**, not to where REC was tapped (both).
+4. **YARD's ATTACK layer**: Vane's ten synthesised transients (tongue, key click, air chiff, wood knock, pick, reed
+   buzz, ping, squeak, scratch, tick) as a noise burst through a band-pass per note, its type and level; no samples,
+   both places.
+5. **The FM-1's history at 64 KB as an option** (16,384 events): 64 KB of pool for what follows.
+
+**Basic Vane, a few sessions**
+6. **Wavetables, natively**: Vane's AKWF tables (CC0) as a YARD oscillator, the morph on a knob and on pressure or
+   slide.
+7. **A simple waveguide**: plucked string and blown pipe (Karplus-Strong, a one-delay flute), polyphonic, both places:
+   the FM-1's budget for delay lines measured before WindCore's.
+8. **Wavetables on the FM-1**, compact (256-sample frames, 16-bit, three or four levels, built for the table in use).
+9. **The recorded transients** (VSCO-2-CE, VCSL: CC0): natively; on the FM-1 if Alex wants them there (about 100 KB
+   of flash, and the Hub's sounds line becomes a CC0 statement).
+
+**Bigger**
+10. **WindCore in C** (from `Vane/WindCore/WindCore.h`): native first, compared with Vane's render; then on the FM-1
+    as a mono WIND engine, single precision, judged by ear at one times the rate, probably on two cores.
+11. Then what was already listed: the ARP's rhythms and comping (12), ENV and LFO as drawn qurves (13), editable
+    chord qualities (14), multitimbral (2), the plugin and app of its own (3).
+
 ## After the submission (proposed, 2026-11-22)
 
 In order, each to judge by ear on the FM-1:
