@@ -43,6 +43,9 @@ VIBE_PARALLEL_AUDIO
 #define Q_TONIC 0xF6u                    /* d1: the key */
 #define Q_TAKE 0xF7u                     /* d1: the file image to play from (0, 1), d2: 1 none (an empty slot) */
 #define Q_EXPORT 0xF8u                   /* d1: the file image to copy the recording into (and play from) */
+#define Q_ARP 0xF9u                      /* (the ARP, step 8) d1: 0 off, 1 on, 2 on with LATCH */
+#define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 3, d2: GATE (5..100) */
+#define Q_ARP_B 0xFBu                    /* d1: OCTAVES | (TEMPO - 40) >> 7 << 3, d2: (TEMPO - 40) & 127 */
 static uint8_t q_st[QN], q_d1[QN], q_d2[QN], q_rec[QN];
 static uint8_t q_live = 1;               /* (send's: 0 while a sound loads, which the history does not keep) */
 static volatile uint32_t qw, qr;
@@ -77,6 +80,7 @@ static struct {
     uint8_t voices, style, bass, bank, type;
     uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BR, 3 MONO+BR */
     uint8_t hold, started;
+    uint8_t arp_on, arp_mode, arp_rate, arp_gate, arp_oct, arp_bpm, arp_latch;   /* (the ARP's, as the FM-1's) */
     uint32_t sound;
     uint8_t val[SP_N];                   /* YARD's values as last sent */
 } set;
@@ -537,6 +541,22 @@ static void keep_scale(void)             /* F4 on SCALE: the number kept in your
     say("SCALE KEPT", vg_itoa((int)num, nb));
 }
 
+/* (the ARP's names, with it below) */
+static const char *const ARP_MODES[8];
+static const char *const ARP_RATES[6];
+static void all_off(void);
+static void arp_send(void)               /* its settings, to the audio */
+{
+    uint32_t t = (uint32_t)set.arp_bpm - 40u;
+    send(Q_ARP_A, set.arp_mode | set.arp_rate << 3, set.arp_gate);
+    send(Q_ARP_B, set.arp_oct | (t >> 7) << 3, t & 127u);
+}
+static void arp_switch(uint32_t on)      /* on or off: what sounds stops first (its offs would not find it) */
+{
+    all_off();
+    set.arp_on = (uint8_t)(on != 0);
+    send(Q_ARP, set.arp_on ? (set.arp_latch ? 2u : 1u) : 0u, 0);
+}
 /* (the recorder's, below: the slot, LOOP, and what the SEQ page's controls do) */
 static uint8_t slot, loop_on;
 static void slot_step(int d);
@@ -586,6 +606,26 @@ static void page_value(uint32_t i, const char **label, char *val)   /* encoder i
             strcpy(val, set.bass ? "ON" : "OFF");
         else
             strcpy(val, set.bank ? "QUALITY" : "SCALE");
+    } else if (page == PG_ARP && more % 2u) {   /* (F6: its second page) */
+        if (i == 0) {
+            *label = "TEMPO";
+            vg_itoa(set.arp_bpm, val);
+        } else if (i == 1) {
+            *label = "LATCH";
+            strcpy(val, set.arp_latch ? "ON" : "OFF");
+        }
+    } else if (page == PG_ARP) {
+        static const char *const N[4] = {"MODE", "RATE", "GATE", "OCTAVES"};
+        *label = N[i];
+        if (i == 0)
+            strcpy(val, ARP_MODES[set.arp_mode % 8u]);
+        else if (i == 1)
+            strcpy(val, ARP_RATES[set.arp_rate % 6u]);
+        else if (i == 2) {
+            vg_itoa(set.arp_gate, val);
+            cat(val, "%");
+        } else
+            vg_itoa(set.arp_oct, val);
     } else if (page == PG_SEQ) {
         if (i == 0) {
             *label = "SLOT";
@@ -638,6 +678,30 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
             set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
         }
         harmony_changed();
+    } else if (page == PG_ARP && more % 2u) {
+        if (i == 0) {
+            int t = (int)set.arp_bpm + de;
+            set.arp_bpm = (uint8_t)(t < 40 ? 40 : t > 240 ? 240 : t);
+        } else if (i == 1) {
+            set.arp_latch = (uint8_t)(d > 0);
+            if (set.arp_on)
+                send(Q_ARP, set.arp_latch ? 2u : 1u, 0);
+        }
+        arp_send();
+    } else if (page == PG_ARP) {
+        if (i == 0)
+            set.arp_mode = (uint8_t)((set.arp_mode + 8u + (uint32_t)d) % 8u);
+        else if (i == 1) {
+            int r = (int)set.arp_rate + d;
+            set.arp_rate = (uint8_t)(r < 0 ? 0 : r > 5 ? 5 : r);
+        } else if (i == 2) {
+            int g = (int)set.arp_gate + 5 * de;
+            set.arp_gate = (uint8_t)(g < 5 ? 5 : g > 100 ? 100 : g);
+        } else {
+            int o = (int)set.arp_oct + d;
+            set.arp_oct = (uint8_t)(o < 1 ? 1 : o > 4 ? 4 : o);
+        }
+        arp_send();
     } else if (page == PG_SEQ) {
         if (i == 0)
             slot_step(d);
@@ -689,7 +753,7 @@ static const char *const WAVE_C[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_C[3] 
 static const char *const MODE_C[2] = {"NOTES", "CHORDS"}, *const ONOFF_C[2] = {"OFF", "ON"};
 static const char *const BANK_C[2] = {"SCALE", "QUALITY"}, *const VOICES_C[4] = {"3", "4", "5", "6"};
 enum { PR_SOUND, PR_PLAY, PR_SP0, PR_MODE = PR_SP0 + SP_N, PR_KEY, PR_QUANT, PR_PCS, PR_STYLE, PR_VOICES, PR_BASS,
-       PR_BANK, PR_HOLD, PR_N };
+       PR_BANK, PR_HOLD, PR_ARP, PR_ARP_MODE, PR_ARP_RATE, PR_ARP_GATE, PR_ARP_OCT, PR_ARP_LATCH, PR_ARP_BPM, PR_N };
 static vibe_param PRM[PR_N];
 static const char *GRP[PR_N];
 static void params_declare(void)
@@ -732,6 +796,15 @@ static void params_declare(void)
     PRM[PR_HOLD] = (vibe_param){"hold", "Hold", 0, 1, 0, "", 2, ONOFF_C};
     for (i = PR_STYLE; i <= PR_HOLD; i++)
         GRP[i] = "B · CHORD";
+    PRM[PR_ARP] = (vibe_param){"arp", "Arp", 0, 1, 0, "", 2, ONOFF_C};
+    PRM[PR_ARP_MODE] = (vibe_param){"arp_mode", "Arp mode", 0, 7, 0, "", 8, ARP_MODES};
+    PRM[PR_ARP_RATE] = (vibe_param){"arp_rate", "Arp rate", 0, 5, 3, "", 6, ARP_RATES};
+    PRM[PR_ARP_GATE] = (vibe_param){"arp_gate", "Arp gate", 5, 100, 50, "%", 96, 0};
+    PRM[PR_ARP_OCT] = (vibe_param){"arp_octaves", "Arp octaves", 1, 4, 1, "", 4, 0};
+    PRM[PR_ARP_LATCH] = (vibe_param){"arp_latch", "Arp latch", 0, 1, 0, "", 2, ONOFF_C};
+    PRM[PR_ARP_BPM] = (vibe_param){"arp_tempo", "Arp tempo", 40, 240, 120, "BPM", 201, 0};
+    for (i = PR_ARP; i <= PR_ARP_BPM; i++)
+        GRP[i] = "C · ARP";
     vibe_params(PRM, PR_N);
     vibe_param_groups(GRP);
 }
@@ -752,7 +825,14 @@ static float param_now(uint32_t i)       /* a parameter's value as the panel has
     case PR_VOICES: return (float)set.voices;
     case PR_BASS: return (float)set.bass;
     case PR_BANK: return (float)set.bank;
-    default: return (float)set.hold;
+    case PR_HOLD: return (float)set.hold;
+    case PR_ARP: return (float)set.arp_on;
+    case PR_ARP_MODE: return (float)set.arp_mode;
+    case PR_ARP_RATE: return (float)set.arp_rate;
+    case PR_ARP_GATE: return (float)set.arp_gate;
+    case PR_ARP_OCT: return (float)set.arp_oct;
+    case PR_ARP_LATCH: return (float)set.arp_latch;
+    default: return (float)set.arp_bpm;
     }
 }
 static void send_scale(void);
@@ -788,16 +868,28 @@ static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped contr
         set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
         harmony_changed();
         break;
-    default:
+    case PR_HOLD:
         set.hold = (uint8_t)(v != 0);
         if (!set.hold && ch.key >= 0 && !key_role[ch.key & 127])
             chord_release();
+        break;
+    case PR_ARP: if ((v != 0) != set.arp_on) arp_switch((uint32_t)(v != 0)); break;
+    case PR_ARP_MODE: set.arp_mode = (uint8_t)((uint32_t)v % 8u), arp_send(); break;
+    case PR_ARP_RATE: set.arp_rate = (uint8_t)(v < 0 ? 0 : v > 5 ? 5 : v), arp_send(); break;
+    case PR_ARP_GATE: set.arp_gate = (uint8_t)(v < 5 ? 5 : v > 100 ? 100 : v), arp_send(); break;
+    case PR_ARP_OCT: set.arp_oct = (uint8_t)(v < 1 ? 1 : v > 4 ? 4 : v), arp_send(); break;
+    case PR_ARP_LATCH:
+        set.arp_latch = (uint8_t)(v != 0);
+        if (set.arp_on)
+            send(Q_ARP, set.arp_latch ? 2u : 1u, 0);
+        break;
+    default: set.arp_bpm = (uint8_t)(v < 40 ? 40 : v > 240 ? 240 : v), arp_send();
     }
 }
 
 /* ---- the settings (step 6): the FM-1's record (app/settings.h), the file "settings": what the two share is read
  * and written (the mode, the key, the scale, the sound and its values, QUANT, the chord's voicing, the play mode, the
- * octave); the FM-1's own (PHONES MAX, the ARP's, MPE OUT ...) kept as they came. Saved a second after a change, and
+ * octave, the recording's slot and LOOP, the ARP's); the FM-1's own (PHONES MAX, MPE OUT ...) kept as they came. Saved a second after a change, and
  * at once when the host keeps the state (VIBE_EV_SAVE: a DAW's project, a preset) ---- */
 static settings_t rec;
 static uint8_t set_dirty;
@@ -816,6 +908,8 @@ static void settings_save(void)
     rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound : 0x4100u | (set.sound - SYNTH_NSOUNDS));
     rec.page = (uint8_t)(page == PG_SOUND);
     rec.slot = slot, rec.loop = loop_on;
+    rec.arp_mode = set.arp_mode, rec.arp_rate = set.arp_rate, rec.arp_gate = set.arp_gate, rec.arp_oct = set.arp_oct;
+    rec.arp_bpm = set.arp_bpm, rec.arp_latch = set.arp_latch;
     vibe_store_write("settings", &rec, (int)sizeof rec);
     set_dirty = 0;
 }
@@ -851,6 +945,11 @@ static void settings_load(void)          /* (the defaults are set; a good record
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
     slot = (uint8_t)(rec.slot & 7u), loop_on = (uint8_t)(rec.loop != 0);
+    if (rec.arp_bpm >= 40u && rec.arp_bpm <= 240u && rec.arp_mode < 8u && rec.arp_rate < 6u && rec.arp_gate >= 5u
+        && rec.arp_gate <= 100u && rec.arp_oct >= 1u && rec.arp_oct <= 4u && rec.arp_latch <= 1u) {   /* (the ARP's: as the FM-1 left them) */
+        set.arp_mode = rec.arp_mode, set.arp_rate = rec.arp_rate, set.arp_gate = rec.arp_gate, set.arp_oct = rec.arp_oct;
+        set.arp_bpm = rec.arp_bpm, set.arp_latch = rec.arp_latch;
+    }
 }
 
 void vibe_on_init(float sample_rate)
@@ -861,6 +960,7 @@ void vibe_on_init(float sample_rate)
     vibe_notes(VIBE_NOTES);
     set.mode = 1, set.tonic = 0, set.scale = 1, set.pcs = 2741u, set.quant = 1;   /* (the FM-1's defaults) */
     set.voices = 5, set.style = CHORD_OPEN, set.bass = 1, set.bank = 1, set.type = CHORD_BANK + 1u;   /* M7 */
+    set.arp_mode = 0, set.arp_rate = 3, set.arp_gate = 50, set.arp_oct = 1, set.arp_bpm = 120;   /* (the FM-1's) */
     ch.key = -1;
     ch.qlatch = (uint16_t)(1u << 1);     /* (M7 latched, as the FM-1 starts) */
     srate = sample_rate;
@@ -869,6 +969,7 @@ void vibe_on_init(float sample_rate)
     sound_pick(0);
     settings_load();
     recorder_init();
+    arp_send();
     labels();
     lights();
     params_declare();
@@ -886,6 +987,7 @@ static const char *const HELP[] = {
     "F1  F2  F3",    "NOTES / CHORDS, HOLD, POLY / MONO / +BREATH",
     "F6",            "MORE: the page's next four (SOUND)",
     "MIDI / DAW",    "notes on their channels (MPE); QUANT FULL: to the scale",
+    "ARP (K4)",      "K4 again or F4: on, off. MODE RATE GATE OCTAVES; F6: TEMPO, LATCH. The DAW playing: its tempo, its grid",
     "REC  PLAY  STOP", "REC: the last phrase (held: everything); while it loops: overdub (held: undo). SEQ: the slot, LOOP, SAVE (F4)",
     "DATA + ENTER",  "every control on the screen: DATA walks to it, ENTER presses it or edits it (DATA turns)",
     "HOME",          "this overview"};
@@ -989,7 +1091,9 @@ static void event(const vibe_event *e)
         else if (e->id == VE_B && d)
             scale_step(d);
     } else if (e->type == VIBE_EV_BUTTON && e->down) {
-        if (e->id >= VB_K1 && e->id < VB_K1 + PG_N) {
+        if (e->id == VB_K1 + PG_ARP && page == PG_ARP)   /* K4 on the ARP page: on, off (as the FM-1's ARP tapped) */
+            arp_switch(!set.arp_on);
+        else if (e->id >= VB_K1 && e->id < VB_K1 + PG_N) {
             page = (uint8_t)(e->id - VB_K1);
             more = 0;
         } else if (e->id == VB_F1) {
@@ -1007,6 +1111,8 @@ static void event(const vibe_event *e)
             keep_scale();
         else if (e->id == VB_F4 && page == PG_SEQ)
             slot_save();
+        else if (e->id == VB_F4 && page == PG_ARP)
+            arp_switch(!set.arp_on);
         else if (e->id == VB_PLAY)
             send(Q_PLAY, 1, 0);
         else if (e->id == VB_STOP)
@@ -1014,7 +1120,7 @@ static void event(const vibe_event *e)
         else if (e->id == VB_REC)
             rec_press(1);
         else if (e->id == VB_F6)
-            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? 3u : 1u));
+            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? 3u : page == PG_ARP ? 2u : 1u));
         lights();
     }
 }
@@ -1045,6 +1151,7 @@ static struct { uint8_t armed, on, ending, has_undo, layers; uint32_t mark; } ov
 static uint16_t pl_mask;
 static uint8_t pl_tonic, pl_map[16][128];
 /* published by the audio, read by the events and the screen */
+static volatile uint32_t pub_arp, pub_arp_n, pub_arp_note;   /* (the ARP's: on, its notes, the last it played) */
 static volatile uint32_t pub_count, pub_dur, pub_pos, pub_layers, pub_hist_ms, pub_full, pub_dirty, pub_img = 2,
     pub_export;
 
@@ -1160,6 +1267,179 @@ static int ov_pass_end(uint32_t b)       /* a looping recording at its end: the 
         ov.mark = rec_mark(&hist, b);
     return got;
 }
+/* ---- the ARP (step 8): the FM-1's (app.c), line for line, in the audio flow: it takes the notes that would sound
+ * (the keys, the chords' voices, MIDI in: the queue's, before YARD and the history get them) and plays them a step at
+ * a time, each on its source's channel (its MPE expression follows); what it plays goes to YARD and into the history
+ * (a recording keeps it, and plays back as it was). Its own tempo; while the DAW plays, the DAW's, its steps on the
+ * DAW's grid (1/4 .. 1/32 of its beats) ---- */
+static struct { uint8_t mode, rate, gate, oct, bpm; } acfg = {0, 3, 50, 1, 120};
+static const uint8_t ARP_DIV[6];        /* (below: steps a beat for each RATE) */
+static uint32_t a_chunk;                 /* (the frames into this block, for the DAW's position) */
+static void arp_out(uint32_t st, uint32_t d1, uint32_t d2)
+{
+    synth_event(st, d1, d2);
+    rec_put(&hist, a_ms, (uint8_t)st, (uint8_t)d1, (uint8_t)d2);
+}
+static int arp_daw(void)
+{
+    const vibe_transport_info *tp = vibe_transport();
+    return tp->has && tp->playing && tp->bpm > 0.0f;
+}
+static float arp_bpm(void) { return arp_daw() ? vibe_transport()->bpm : (float)acfg.bpm; }
+static uint32_t arp_to_grid(int next)    /* ms to the DAW's next step on its grid (next 0: this one, if just past) */
+{
+    const vibe_transport_info *tp = vibe_transport();
+    double per = 1.0 / (double)ARP_DIV[acfg.rate % 6u];
+    double beat = tp->beat + (double)a_chunk * tp->bpm / (60.0 * (double)srate), g = (double)(int64_t)(beat / per) * per;
+    if (next || beat - g > per * 0.02)
+        g += per;
+    return (uint32_t)((g - beat) * 60000.0 / tp->bpm + 0.5);
+}
+static uint32_t arp_first_ms(void) { return arp_daw() ? a_ms + arp_to_grid(0) : a_ms + 12u; }
+#define ARP_MAX 16u
+#define ARP_SEQ (ARP_MAX * 4u)
+static const char *const ARP_MODES[8] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "RANDOM", "AS PLAYED", "CHORD"};
+static const char *const ARP_RATES[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
+static const uint8_t ARP_DIV[6] = {1, 2, 3, 4, 6, 8};   /* steps a beat */
+static struct {
+    uint8_t on;                          /* 0 off, 1 on, 2 latch */
+    uint8_t n, held;                     /* its notes; how many still held (LATCH: 0, all let go) */
+    uint8_t note[ARP_MAX], ch[ARP_MAX], vel[ARP_MAX], down[ARP_MAX];   /* in the order played */
+    uint8_t snd_n, snd_note[ARP_SEQ], snd_ch[ARP_SEQ];   /* sounding now (CHORD: several) */
+    uint32_t next_ms, off_ms, rnd;
+    int32_t pos, dir;                    /* where in the run, and which way (the bouncing modes) */
+} arp;
+static void arp_silence(void)            /* its sounding notes off */
+{
+    uint32_t i;
+    for (i = 0; i < arp.snd_n; i++)
+        arp_out(0x80u | arp.snd_ch[i], arp.snd_note[i], 0);
+    arp.snd_n = 0;
+}
+static void arp_clear(void)              /* everything let go (OFF, panic, a change of mode) */
+{
+    arp_silence();
+    arp.n = arp.held = 0;
+}
+static int arp_take(uint32_t st, uint32_t d1, uint32_t d2)
+{
+    uint32_t i, ch = st & 15u;
+    int on = (st & 0xF0u) == 0x90u && d2;
+    if (!arp.on)
+        return 0;
+    for (i = 0; i < arp.n; i++)
+        if (arp.note[i] == d1 && arp.ch[i] == ch)
+            break;
+    if (on) {
+        if (arp.on == 2u && !arp.held)   /* LATCH: a new press after all were let go starts anew */
+            arp.n = 0, i = 0;
+        if (i == arp.n) {
+            if (arp.n >= ARP_MAX)
+                return 1;
+            arp.n++;
+            arp.note[i] = (uint8_t)d1, arp.ch[i] = (uint8_t)ch;
+        } else if (arp.down[i])
+            return 1;
+        arp.vel[i] = (uint8_t)d2, arp.down[i] = 1, arp.held++;
+        if (arp.n == 1u && !arp.snd_n) { /* the first note: a step at once (12 ms on: the rest of a chord pressed
+                                          * together joins it), from the start of the run */
+            arp.next_ms = arp_first_ms(), arp.pos = -1, arp.dir = 1;
+        }
+    } else if (i < arp.n) {
+        if (arp.down[i])
+            arp.down[i] = 0, arp.held--;
+        if (arp.on != 2u) {              /* (LATCH keeps it) */
+            for (; i + 1u < arp.n; i++) {
+                arp.note[i] = arp.note[i + 1u], arp.ch[i] = arp.ch[i + 1u];
+                arp.vel[i] = arp.vel[i + 1u], arp.down[i] = arp.down[i + 1u];
+            }
+            arp.n--;
+        }
+    }
+    return 1;
+}
+static uint32_t arp_run(uint8_t *idx, int8_t *oct)   /* the run, low to high (AS PLAYED: as played) over the octaves */
+{
+    uint32_t i, j, n = 0, o;
+    uint8_t order[ARP_MAX];
+    for (i = 0; i < arp.n; i++)
+        order[i] = (uint8_t)i;
+    if (acfg.mode != 6u)
+        for (i = 1; i < arp.n; i++)
+            for (j = i; j > 0 && arp.note[order[j - 1u]] > arp.note[order[j]]; j--) {
+                uint8_t t = order[j];
+                order[j] = order[j - 1u], order[j - 1u] = t;
+            }
+    for (o = 0; o < acfg.oct; o++)
+        for (i = 0; i < arp.n; i++)
+            idx[n] = order[i], oct[n++] = (int8_t)o;
+    return n;
+}
+static void arp_tick(uint32_t now)
+{
+    uint8_t idx[ARP_SEQ];
+    int8_t oct[ARP_SEQ];
+    uint32_t n, step, i;
+    if (arp.snd_n && (int32_t)(now - arp.off_ms) >= 0 && acfg.gate < 100u)
+        arp_silence();
+    if (!arp.on || !arp.n) {
+        if (arp.snd_n)
+            arp_silence();
+        return;
+    }
+    if ((int32_t)(now - arp.next_ms) < 0)
+        return;
+    step = (uint32_t)(60000.0f / arp_bpm() / (float)ARP_DIV[acfg.rate % 6u]);
+    if ((int32_t)(now - arp.next_ms) > (int32_t)step)   /* (late by more than a step: from now) */
+        arp.next_ms = now;
+    arp_silence();                       /* (GATE 100%: legato, the last one held to here) */
+    n = arp_run(idx, oct);
+    if (acfg.mode == 7u) {            /* CHORD: all of them */
+        for (i = 0; i < n && arp.snd_n < ARP_SEQ; i++) {
+            uint32_t k = idx[i], note = arp.note[k] + 12u * (uint32_t)oct[i];
+            if (note > 127u)
+                continue;
+            arp_out(0x90u | arp.ch[k], note, arp.vel[k]);
+            arp.snd_note[arp.snd_n] = (uint8_t)note, arp.snd_ch[arp.snd_n++] = arp.ch[k];
+        }
+    } else {
+        int32_t p = arp.pos, m = (int32_t)n;
+        uint32_t k, note;
+        if (acfg.mode == 5u) {        /* RANDOM: not the same twice in a row */
+            arp.rnd = arp.rnd * 1664525u + 1013904223u;
+            p = m > 1 ? (int32_t)((arp.rnd >> 16) % (uint32_t)(m - 1)) : 0;
+            if (m > 1 && p >= arp.pos)
+                p++;
+        } else if (acfg.mode == 0u || acfg.mode == 6u)   /* UP, AS PLAYED */
+            p = (p + 1) % m;
+        else if (acfg.mode == 1u)     /* DOWN */
+            p = p <= 0 ? m - 1 : (p - 1) % m;
+        else {                           /* UP-DOWN, DOWN-UP: bouncing, the ends once; UP+DOWN: the ends twice */
+            int rep = acfg.mode == 4u;
+            if (arp.pos < 0)
+                p = acfg.mode == 3u ? m - 1 : 0, arp.dir = acfg.mode == 3u ? -1 : 1;
+            else if (m == 1)
+                p = 0;
+            else {
+                p += arp.dir;
+                if (p >= m)
+                    arp.dir = -1, p = rep ? m - 1 : m - 2;
+                else if (p < 0)
+                    arp.dir = 1, p = rep ? 0 : 1;
+            }
+        }
+        if (p >= m)
+            p = m - 1;
+        arp.pos = p;
+        k = idx[p], note = arp.note[k] + 12u * (uint32_t)oct[p];
+        if (note <= 127u) {
+            arp_out(0x90u | arp.ch[k], note, arp.vel[k]);
+            arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[k], arp.snd_n = 1;
+        }
+    }
+    arp.off_ms = arp.next_ms + step * acfg.gate / 100u;
+    arp.next_ms = arp_daw() ? now + arp_to_grid(1) : arp.next_ms + step;   /* (the DAW playing: on its grid) */
+}
 static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
 {
     if (st == Q_SOUND)
@@ -1172,6 +1452,19 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
         a_tonic = (uint8_t)(d1 % 12u);
     else if (st == Q_LOOP)
         a_loop = (uint8_t)(d1 != 0);
+    else if (st == Q_ARP) {
+        if (!arp.on || !d1 || (arp.on == 2u && d1 != 2u))
+            arp_clear();                 /* (in, out, out of LATCH: what it held goes) */
+        arp.on = (uint8_t)(d1 > 2u ? 2u : d1);
+    } else if (st == Q_ARP_A) {
+        acfg.mode = (uint8_t)(d1 & 7u), acfg.rate = (uint8_t)((d1 >> 3) % 6u);
+        acfg.gate = (uint8_t)(d2 < 5u ? 5u : d2 > 100u ? 100u : d2);
+        arp.pos = -1;
+    } else if (st == Q_ARP_B) {
+        uint32_t t = 40u + (d2 | (d1 >> 3) << 7);
+        acfg.oct = (uint8_t)((d1 & 7u) < 1u ? 1u : (d1 & 7u) > 4u ? 4u : (d1 & 7u));
+        acfg.bpm = (uint8_t)(t > 240u ? 240u : t);
+    }
     else if (st == Q_REC) {
         if (player.playing && a_loop) {  /* while it loops: overdub (tapped), undo (held) */
             if (d1)
@@ -1219,6 +1512,9 @@ static void a_publish(void)
     pub_count = take.count, pub_dur = take.duration_ms, pub_playing = player.playing;
     pub_pos = player.playing ? a_ms - player.start_ms : 0;
     pub_ov = ov.on ? 2u + ov.ending : ov.armed, pub_layers = ov.layers, pub_full = hist.full, pub_img = a_take_img;
+    pub_arp = arp.on, pub_arp_n = arp.n;
+    if (arp.snd_n)
+        pub_arp_note = arp.snd_note[0];
     if ((a_frames & 0x3FFFu) < 256u)     /* (the history's reach: now and then) */
         pub_hist_ms = rec_span_ms(&hist, a_ms);
 }
@@ -1256,6 +1552,8 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
         uint32_t st = q_st[k % QN], d1 = q_d1[k % QN], d2 = q_d2[k % QN];
         if (st >= 0xF0u)
             a_command(st, d1, d2);
+        else if ((st & 0xE0u) == 0x80u && arp_take(st, d1, d2))
+            ;                            /* (the ARP on: a note played joins its notes instead of sounding) */
         else {
             synth_event(st, d1, d2);
             if (q_rec[k % QN])           /* what was played: into the history */
@@ -1267,7 +1565,9 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
     for (at = 0; at < frames; at += 32) {   /* 32 frames at a time: the recording's events on time */
         int n = frames - at < 32 ? frames - at : 32;
         a_ms = (uint32_t)((a_frames + (uint64_t)at) * 1000u / (uint64_t)srate);
+        a_chunk = (uint32_t)at;
         a_player();
+        arp_tick(a_ms);
         synth_render(lr + 2 * at, (uint32_t)n, 4096u);   /* (MASTER at full: the host has its own volume) */
     }
     a_frames += (uint64_t)frames;
@@ -1467,7 +1767,11 @@ static void draw_frame(void)
     vg_clear(C_BG);
     vg_rect(0, 0, 480, 4, c);
     vg_text(PG_NAME[page], 16, 10, VG_BIG, c, 0);
-    vg_text(set.mode ? "CHORDS" : "NOTES", 150, 10, VG_BIG, C_INK, 0);
+    {
+        int x = 150 + vg_text(set.mode ? "CHORDS" : "NOTES", 150, 10, VG_BIG, C_INK, 0);
+        if (set.arp_on)                  /* the ARP on: said beside it */
+            vg_text(set.arp_latch ? "ARP LATCH" : "ARP", x + 8, 16, VG_SMALL, PG_COLOR[PG_ARP], 0);
+    }
     vg_text(sound_name(), 464, 10, VG_BIG, PG_COLOR[PG_SOUND], 2);
     if (vibe_transport()->has && vibe_transport()->playing)   /* the DAW plays */
         vg_text(">", 276, 12, VG_BIG, 0x4FD88A, 0);
@@ -1519,10 +1823,13 @@ static void draw_fkeys(void)
     for (i = 0; i < 6u; i++) {
         int x = 8 + (int)i * 78, lit = (i == 0u && set.mode) || (i == 1u && set.hold);
         const char *t = F[i];
-        if ((i == 5u && page != PG_SOUND) || (i == 3u && page != PG_SOUND && page != PG_SCALE && page != PG_SEQ))
+        if ((i == 5u && page != PG_SOUND && page != PG_ARP)
+            || (i == 3u && page != PG_SOUND && page != PG_SCALE && page != PG_SEQ && page != PG_ARP))
             t = "";
         if (i == 3u && page == PG_SEQ)
             t = "SAVE";
+        if (i == 3u && page == PG_ARP)
+            t = set.arp_on ? "ARP ON" : "ARP OFF", lit = set.arp_on;
         if (!t[0])
             continue;
         vg_frame(x, 292, 74, 24, 1, lit ? 0xFF7A00 : C_FAINT);
@@ -1660,12 +1967,35 @@ void vibe_on_draw(uint16_t *fb)
             cat(t, "   FULL: SAVE");
         vg_text(t, 16, 180, VG_SMALL, pub_full ? 0xFF8A1F : C_DIM, 0);
         vg_text("REC: LAST PHRASE (HELD: ALL)   LOOPING: OVERDUB (HELD: UNDO)", 16, 194, VG_SMALL, C_DIM, 0);
-    } else {                             /* ARP: the step to come */
-        vg_text("THE ARP", 16, 72, VG_BIG | VG_X2, C_FAINT, 0);
-        vg_text("A STEP TO COME: ON THE AUDIO'S CLOCK, THE DAW'S TEMPO", 16, 130, VG_MED, C_DIM, 0);
+    } else {                             /* ARP: its modes, on or off, its tempo (or the DAW's) */
+        char nb[12];
+        for (i = 0; i < 8u; i++) {
+            int x = 16 + (int)(i % 4u) * 112, y = 70 + (int)(i / 4u) * 28, on = i == set.arp_mode;
+            if (on)
+                vg_round(x, y, 106, 24, 4, PG_COLOR[PG_ARP]);
+            else
+                vg_frame(x, y, 106, 24, 1, C_FAINT);
+            vg_text(ARP_MODES[i], x + 53, y + 4, VG_MED, on ? C_BG : C_DIM, 1);
+        }
+        t[0] = 0;
+        cat(t, set.arp_on ? "ARP ON" : "ARP OFF");
+        if (set.arp_latch)
+            cat(t, ", LATCH");
+        vg_text(t, 16, 132, VG_BIG, set.arp_on ? PG_COLOR[PG_ARP] : C_FAINT, 0);
         transport_text(t);
-        vg_text(t[0] ? t : "NO DAW CLOCK: ITS OWN TEMPO", 464, 80, VG_BIG, t[0] ? 0x4FD88A : C_FAINT, 2);
-        draw_sounding(150);
+        if (!t[0]) {
+            cat(t, vg_itoa(set.arp_bpm, nb));
+            cat(t, " BPM, ITS OWN");
+        } else
+            cat(t, "  (THE DAW'S)");
+        vg_text(t, 464, 132, VG_BIG, vibe_transport()->has && vibe_transport()->playing ? 0x4FD88A : C_INK, 2);
+        if (set.arp_on && pub_arp_n) {
+            t[0] = 0;
+            cat(t, NOTE_N[pub_arp_note % 12u]);
+            cat(t, vg_itoa((int)(pub_arp_note / 12u) - 1, nb));
+            vg_text(t, 16, 164, VG_BIG | VG_X2, C_INK, 0);
+        }
+        vg_text("K4 AGAIN OR F4: ON, OFF   F6: TEMPO, LATCH", 464, 186, VG_SMALL, C_DIM, 2);
     }
     draw_values();
     draw_fkeys();
@@ -1691,9 +2021,9 @@ void vibe_on_draw(uint16_t *fb)
     vf_key(VB_F1, 8, 292, 74, 24);
     vf_key(VB_F2, 86, 292, 74, 24);
     vf_key(VB_F3, 164, 292, 74, 24);
-    if (page == PG_SOUND)
+    if (page == PG_SOUND || page == PG_ARP)
         vf_key(VB_F6, 398, 292, 74, 24);
-    if (page == PG_SOUND || page == PG_SCALE || page == PG_SEQ)
+    if (page == PG_SOUND || page == PG_SCALE || page == PG_SEQ || page == PG_ARP)
         vf_key(VB_F4, 242, 292, 74, 24);
     vf_end(0xFF8A1F);
 }

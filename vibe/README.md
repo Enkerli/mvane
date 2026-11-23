@@ -74,5 +74,11 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    that file. `vibe/rec1.json` then `rec2.json`: two chords kept with REC, played, looped with an overdub (three
    layers), saved; found again. Not yet: MIDI in moved to a free channel while a recording plays (the FM-1's 0.13.2,
    for a wind controller's overdubs); SAVE's copy spread over blocks (now one: 17 % of a block at most in Node).
-8. The ARP, on the audio's clock and the DAW's tempo.
+8. **Done:** the ARP, the FM-1's line for line, in the audio flow: it takes the notes that would sound (the keys,
+   the chords' voices, MIDI in) and plays them a step at a time on their channels (MPE follows), into YARD and the
+   history (a recording keeps it, plays back as it was). The ARP page (K4): MODE (UP, DOWN, UP-DOWN, DOWN-UP,
+   UP+DOWN, RANDOM, AS PLAYED, CHORD), RATE (1/4 .. 1/32, triplets), GATE, OCTAVES; F6 MORE: TEMPO, LATCH; K4 again
+   or F4: on, off. Its own tempo; while the DAW plays, the DAW's, each step on the DAW's grid (`vibe/arp_daw.json`:
+   at 90 BPM, 1/16, the steps at 0.632, 0.800, 0.968 s ... against 0.633, 0.800, 0.967 on the grid). Seven DAW
+   parameters (Editor tab C); the settings' ARP fields are the FM-1's. `vibe/arp.json`: on, a chord, LATCH.
 9. Clipper's sounds (its engines are built for 44.1 kHz: at that rate, resampled, or their tables at the host's).
