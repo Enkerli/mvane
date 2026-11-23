@@ -33,7 +33,11 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    - **F1 F2 F3**: NOTES / CHORDS, HOLD, POLY / MONO / +BREATH. **A** the sound, **B** the scale (bright to dark).
    - MIDI and the DAW's notes as notes on their channels; QUANT FULL snaps them to the scale.
    - `vibe/chords.json` (wasmtest) plays and draws Cmaj7, C6, D6, Dmaj9 (M7 + M9), the CHORD page, NOTES.
-   - Not yet: the pads (to decide), ENV and LFO (the house's K2 and K3 are PLAY and CHORD here for now).
+   - **The pads** (Alex: the recording slots), a 4 × 4 grid: rows 1–2 the eight slots (a tap goes to it; on the
+     open one, PLAY), row 3 REC (tapped, held, as the button) PLAY STOP LOOP, row 4 SAVE UNDO HOLD ARP; lit as they
+     stand (the slots holding a recording dim, the open one bright, PLAY while it plays, REC while it overdubs).
+     `vibe/pads.json`: kept, looped, overdubbed, undone, saved, another slot and back, all on the pads.
+   - Not yet: ENV and LFO (the house's K2 and K3 are PLAY and CHORD here for now).
 3. **Done:** the pages, drawn whole each time on 480 × 320 in the house layout: the page in its colour, NOTES /
    CHORDS and the sound; K1–K6 as tabs, the open one lit; the page's own (PLAY: what sounds on a five-octave keyboard,
    the scale's tones marked, the tonic in colour, the bass in red; CHORD: the chord, its voicing, the ten qualities,

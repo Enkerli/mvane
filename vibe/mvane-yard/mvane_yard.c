@@ -1101,6 +1101,7 @@ static const char *const HELP[] = {
     "F6",            "MORE: the page's next four (SOUND)",
     "MIDI / DAW",    "notes on their channels (MPE); QUANT FULL: to the scale",
     "ARP (K4)",      "K4 again or F4: on, off. MODE RATE GATE OCTAVES; F6: TEMPO, LATCH. The DAW playing: its tempo, its grid",
+    "PADS",          "1-8 the slots (the open one again: PLAY). REC PLAY STOP LOOP. SAVE UNDO HOLD ARP",
     "REC  PLAY  STOP", "REC: the last phrase (held: everything); while it loops: overdub (held: undo). SEQ: the slot, LOOP, SAVE (F4)",
     "DATA + ENTER",  "every control on the screen: DATA walks to it, ENTER presses it or edits it (DATA turns)",
     "HOME",          "this overview"};
@@ -1161,10 +1162,15 @@ void vibe_on_event(const vibe_event *e)
         settings_touch();
 }
 static void rec_press(int down);
+static void pad_press(uint32_t p, int down);
 static void event(const vibe_event *e)
 {
     if (e->type == VIBE_EV_BUTTON && !e->down && e->id == VB_REC) {
         rec_press(0);
+        return;
+    }
+    if (e->type == VIBE_EV_PAD) {        /* the recording slots and their controls (pad_press) */
+        pad_press(e->id, e->down);
         return;
     }
     {                                    /* FOCUS first (SDK 10): DATA walks, ENTER presses */
@@ -1794,6 +1800,64 @@ static void slot_step(int d)             /* SLOT: the next or previous (a record
     slot = (uint8_t)((slot + 8u + (uint32_t)d) % 8u);
     slot_load();
 }
+/* ---- the pads (Alex, 2026-11-22: the recording slots): a 4 x 4 grid, pad 0 top left
+ *   1 2 3 4  /  5 6 7 8    the slots: a tap goes to it (a recording not saved: warned first); on the one open: PLAY
+ *   REC PLAY STOP LOOP     REC as the button (tapped, held), PLAY, STOP, LOOP on / off
+ *   SAVE UNDO HOLD ARP     SAVE into the slot, UNDO the last overdub (while it loops), HOLD, the ARP on / off
+ * lit as they stand: the slots holding a recording dim, the open one bright; PLAY while it plays, REC while it
+ * overdubs, LOOP, HOLD and ARP while on ---- */
+enum { PAD_REC = 8, PAD_PLAY, PAD_STOP, PAD_LOOP, PAD_SAVE, PAD_UNDO, PAD_HOLD, PAD_ARP };
+static void pad_press(uint32_t p, int down)
+{
+    if (p == PAD_REC) {                  /* (down and up: tapped or held, as the button) */
+        rec_press(down);
+        return;
+    }
+    if (!down)
+        return;
+    if (p < 8u) {
+        if (p == slot)
+            send(Q_PLAY, 1, 0);
+        else
+            slot_step((int)p - (int)slot);
+    } else if (p == PAD_PLAY)
+        send(Q_PLAY, 1, 0);
+    else if (p == PAD_STOP)
+        send(Q_PLAY, 2, 0);
+    else if (p == PAD_LOOP) {
+        loop_on ^= 1u;
+        send_loop();
+        say("LOOP", loop_on ? "ON" : "OFF");
+    } else if (p == PAD_SAVE)
+        slot_save();
+    else if (p == PAD_UNDO) {
+        if (pub_playing && loop_on)
+            send(Q_REC, 1, 0);           /* (REC held while it loops: the last layer undone) */
+        else
+            say("UNDO", "WHILE IT LOOPS");
+    } else if (p == PAD_HOLD) {
+        set.hold ^= 1u;
+        if (!set.hold && ch.key >= 0 && !key_role[ch.key & 127])
+            chord_release();
+    } else if (p == PAD_ARP)
+        arp_switch(!set.arp_on);
+}
+static void pad_lights(void)
+{
+    uint32_t i;
+    for (i = 0; i < 8u; i++) {
+        int full = i == slot ? pub_count != 0u : slot_size[i] > 16u;
+        vibe_led_pad((int)i, PG_COLOR[PG_SEQ], i == slot ? 1.0f : full ? 0.3f : 0.0f);
+    }
+    vibe_led_pad(PAD_REC, 0xFF3030, pub_ov ? 1.0f : 0.15f);
+    vibe_led_pad(PAD_PLAY, 0x4FD88A, pub_playing ? 1.0f : 0.15f);
+    vibe_led_pad(PAD_STOP, 0xF2F2F2, 0.15f);
+    vibe_led_pad(PAD_LOOP, 0xFF8A1F, loop_on ? 1.0f : 0.15f);
+    vibe_led_pad(PAD_SAVE, 0xF2F2F2, pub_dirty ? 0.8f : 0.15f);
+    vibe_led_pad(PAD_UNDO, 0x8A7FD8, pub_layers ? 0.6f : 0.1f);
+    vibe_led_pad(PAD_HOLD, 0xFF7A00, set.hold ? 1.0f : 0.15f);
+    vibe_led_pad(PAD_ARP, PG_COLOR[PG_ARP], set.arp_on ? 1.0f : 0.15f);
+}
 static void slot_save(void)              /* SAVE (F4 on SEQ): the recording into its slot's file */
 {
     if (!pub_count) {
@@ -2059,9 +2123,10 @@ void vibe_on_draw(uint16_t *fb)
     export_check();
     {                                    /* the PLAY and REC lights follow the recorder */
         static uint32_t lit = 0xFFFFFFFFu;
-        uint32_t now = pub_playing | pub_ov << 1;
-        if (now != lit)
-            lit = now, lights();
+        uint32_t now = pub_playing | pub_ov << 1 | (pub_count != 0u) << 3 | pub_dirty << 4 | (pub_layers != 0u) << 5
+                       | (uint32_t)slot << 6 | (uint32_t)loop_on << 9 | (uint32_t)set.hold << 10 | (uint32_t)set.arp_on << 11;
+        if (now != lit)                  /* (and the pads) */
+            lit = now, lights(), pad_lights();
     }
     if (help) {
         vg_controls("MVANE YARD", HELP, (int)(sizeof HELP / sizeof HELP[0] / 2u));
