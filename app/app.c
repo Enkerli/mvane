@@ -89,7 +89,7 @@ static void settings_defaults(void)
     for (i = 0; i < SP_N_SET; i++)
         set.p[i] = P[i];
     set.onset = set.onset_lvl = 0;
-    set.level = 64;
+    set.level = SYNTH_SOUNDS[0].p[SP_LEVEL];   /* (SAW's, as PRESETS gives it) */
     set.type = 0;
     set.style = CHORD_OPEN;
     set.bass = 1;
