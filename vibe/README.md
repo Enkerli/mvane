@@ -34,7 +34,13 @@ Drop `build/mvane-yard.zip` (in the SDK's folder) onto VIBE FM VST's window, or 
    - MIDI and the DAW's notes as notes on their channels; QUANT FULL snaps them to the scale.
    - `vibe/chords.json` (wasmtest) plays and draws Cmaj7, C6, D6, Dmaj9 (M7 + M9), the CHORD page, NOTES.
    - Not yet: the pads (to decide), ENV and LFO (the house's K2 and K3 are PLAY and CHORD here for now).
-3. The pages, on the full 480 × 320.
+3. **Done:** the pages, drawn whole each time on 480 × 320 in the house layout: the page in its colour, NOTES /
+   CHORDS and the sound; K1–K6 as tabs, the open one lit; the page's own (PLAY: what sounds on a five-octave keyboard,
+   the scale's tones marked, the tonic in colour, the bass in red; CHORD: the chord, its voicing, the ten qualities,
+   the latched lit; SOUND: the sound, its three pages of values; SCALE: the number in big digits, its name, its twelve
+   tones from the key); the key, scale, QUANT and play mode; encoders 1–4's values with bars; F1–F6's captions
+   (F1 says NOTES or CHORDS, F3 the play mode, F2 lit while HOLD). `vibe/pages.json` (wasmtest) shoots every page;
+   the longest draw 0.7 ms in Node.
 4. FOCUS (DATA + ENTER reaches every control).
 5. The DAW: YARD's parameters (automatable), the ARP and the loops on the song position.
 6. Storage: settings, your sounds and scales (`yard.ysb`), recordings (`.mvt`), as on the FM-1.

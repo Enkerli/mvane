@@ -99,6 +99,15 @@ static uint32_t scale_snap(uint32_t note)
 }
 
 /* ---- MPE channels: a member channel (MIDI 2..16) a note, the one free longest ---- */
+static uint8_t sounding[128];            /* (the screen's) notes on now, from the keys, the chords, MIDI and the DAW */
+static void sound_count(uint32_t note, int on)
+{
+    note &= 127u;
+    if (on)
+        sounding[note]++;
+    else if (sounding[note])
+        sounding[note]--;
+}
 static uint8_t ch_notes[16];
 static uint32_t ch_free_at[16], ch_clock;
 static void note_out(uint32_t ch, uint32_t note, uint32_t vel)   /* a note on (vel > 0) or off, counted */
@@ -107,6 +116,7 @@ static void note_out(uint32_t ch, uint32_t note, uint32_t vel)   /* a note on (v
         ch_notes[ch & 15u]++;
     else if (ch_notes[ch & 15u] && !--ch_notes[ch & 15u])
         ch_free_at[ch & 15u] = ++ch_clock;
+    sound_count(note > 127u ? 127u : note, vel != 0u);
     send((vel ? 0x90u : 0x80u) | (ch & 15u), note > 127u ? 127u : note, vel);
 }
 static uint32_t mpe_channel(void)
@@ -482,10 +492,15 @@ static void midi_note(const vibe_event *e)   /* a note from MIDI or the DAW: as 
     if (e->down) {
         int v = (int)(e->value * 127.0f + 0.5f);
         m = set.quant == 2u ? scale_snap(n) : n;
+        if (in_map[c][n])
+            sound_count(in_map[c][n] - 1u, 0);
         in_map[c][n] = (uint8_t)(m + 1u);
+        sound_count(m, 1);
         send(0x90u | c, m, (uint32_t)(v < 1 ? 1 : v > 127 ? 127 : v));
     } else {
         m = in_map[c][n] ? in_map[c][n] - 1u : n;
+        if (in_map[c][n])
+            sound_count(m, 0);
         in_map[c][n] = 0;
         send(0x80u | c, m, 0);
     }
@@ -577,72 +592,213 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
     }
 }
 
-void vibe_on_draw(uint16_t *fb)
+/* ---- the screen (step 3): every page drawn whole each time, 480 x 320, the house layout ----
+ *   0..40    the page in its colour, NOTES / CHORDS, the sound
+ *   44..62   K1..K6: the six pages, the open one lit
+ *   66..206  the page's own: what sounds, on a keyboard; the qualities; the sound's values; the scale's number
+ *   210..226 the key, the scale, QUANT, the play mode
+ *   230..284 encoders 1..4: the page's four values, a bar each
+ *   290..318 F1..F6: their captions */
+#define C_BG 0x101114u
+#define C_INK 0xF2F2F2u
+#define C_DIM 0x8A8E98u
+#define C_FAINT 0x3A3E48u
+#define C_PANEL 0x1C1E24u
+static void text_scale(char *t)          /* "C MAJOR", "D PCS 1234" */
+{
+    const char *s = scale_name();
+    char nb[8];
+    t[0] = 0;
+    cat(t, NOTE_N[set.tonic % 12u]);
+    cat(t, " ");
+    if (s)
+        cat(t, s);
+    else {
+        cat(t, "PCS ");
+        cat(t, vg_itoa(set.pcs & 0xFFFu, nb));
+    }
+}
+/* a keyboard from note lo, white keys w px wide: the scale's tones marked (the tonic in the page's colour), what
+ * sounds lit in the page's colour, the lowest (the bass) in red */
+static void keyboard(int x0, int y0, int w, int h, uint32_t lo, uint32_t whites, uint32_t accent)
+{
+    static const int8_t WI[12] = {0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6};
+    uint16_t m = scale_mask();
+    uint32_t n, k, lowest = 128u;
+    int x;
+    for (n = 0; n < 128u; n++)
+        if (sounding[n]) {
+            lowest = n;
+            break;
+        }
+    for (k = 0; k < whites; k++) {       /* the white keys */
+        uint32_t oct = k / 7u, wi = k % 7u, pc;
+        static const uint8_t WPC[7] = {0, 2, 4, 5, 7, 9, 11};
+        pc = WPC[wi];
+        n = lo + oct * 12u + pc;
+        x = x0 + (int)k * w;
+        vg_rect(x, y0, w - 1, h, n < 128u && sounding[n] ? (n == lowest ? 0xE0484Cu : accent) : 0xA8ACB4);
+        if (n < 128u && !sounding[n] && (m >> ((pc + 12u - set.tonic) % 12u) & 1u))
+            vg_rect(x + 2, y0 + h - 8, w - 5, 5, (pc + 12u - set.tonic) % 12u ? 0x6A7080 : accent);
+    }
+    for (k = 0; k < whites; k++) {       /* the black keys above them */
+        uint32_t oct = k / 7u, wi = k % 7u, pc;
+        static const int8_t BPC[7] = {1, 3, -1, 6, 8, 10, -1};
+        if (BPC[wi] < 0 || k + 1u >= whites)
+            continue;
+        pc = (uint32_t)BPC[wi];
+        n = lo + oct * 12u + pc;
+        x = x0 + (int)k * w + w - w / 3;
+        vg_rect(x, y0, (w * 2) / 3, (h * 3) / 5, n < 128u && sounding[n] ? (n == lowest ? 0xE0484Cu : accent) : 0x24262C);
+        if (n < 128u && !sounding[n] && (m >> ((pc + 12u - set.tonic) % 12u) & 1u))
+            vg_rect(x + 2, y0 + (h * 3) / 5 - 6, (w * 2) / 3 - 4, 4, (pc + 12u - set.tonic) % 12u ? 0x6A7080 : accent);
+    }
+    (void)WI;
+}
+static void draw_frame(void)
+{
+    uint32_t i, c = PG_COLOR[page];
+    vg_clear(C_BG);
+    vg_rect(0, 0, 480, 4, c);
+    vg_text(PG_NAME[page], 16, 10, VG_BIG, c, 0);
+    vg_text(set.mode ? "CHORDS" : "NOTES", 150, 10, VG_BIG, C_INK, 0);
+    vg_text(SYNTH_SOUNDS[set.sound].name, 464, 10, VG_BIG, PG_COLOR[PG_SOUND], 2);
+    for (i = 0; i < PG_N; i++) {         /* K1..K6 */
+        int x = 8 + (int)i * 78;
+        if (i == page)
+            vg_round(x, 44, 74, 18, 4, PG_COLOR[i]);
+        else
+            vg_frame(x, 44, 74, 18, 1, C_FAINT);
+        vg_text(PG_NAME[i], x + 37, 46, VG_BOLD, i == page ? C_BG : C_DIM, 1);
+    }
+}
+static void draw_values(void)
 {
     uint32_t i;
     char t[64];
-    const char *s;
+    text_scale(t);
+    cat(t, "    QUANT ");
+    cat(t, QUANT_N[set.quant % 3u]);
+    cat(t, "    ");
+    cat(t, PLAY_N[set.play & 3u]);
+    if (set.hold)
+        cat(t, "    HOLD");
+    vg_text(t, 16, 210, VG_MED, C_DIM, 0);
+    for (i = 0; i < 4u; i++) {           /* encoders 1..4, above F1..F6 */
+        const char *lb;
+        char v[24];
+        int x = 8 + (int)i * 118, fill = -1;
+        page_value(i, &lb, v);
+        vg_round(x, 230, 112, 54, 6, C_PANEL);
+        if (!lb[0])
+            continue;
+        vg_text(lb, x + 8, 234, VG_SMALL, C_DIM, 0);
+        vg_text(v, x + 8, 250, VG_BIG, C_INK, 0);
+        if (page == PG_SOUND)
+            fill = set.val[SOUND_P[more % 3u][i]];
+        else if (page == PG_PLAY && i == 3u)
+            fill = set.val[SP_GLIDE];
+        if (fill >= 0) {
+            vg_rect(x + 8, 277, 96, 3, C_FAINT);
+            vg_rect(x + 8, 277, fill * 96 / 127, 3, PG_COLOR[page]);
+        }
+    }
+}
+static void draw_fkeys(void)
+{
+    static const char *const F[6] = {"MODE", "HOLD", "PLAY", "", "", "MORE"};
+    uint32_t i;
+    for (i = 0; i < 6u; i++) {
+        int x = 8 + (int)i * 78, lit = (i == 0u && set.mode) || (i == 1u && set.hold);
+        const char *t = F[i];
+        if (i == 5u && page != PG_SOUND)
+            t = "";
+        if (!t[0])
+            continue;
+        vg_frame(x, 292, 74, 24, 1, lit ? 0xFF7A00 : C_FAINT);
+        vg_text(i == 0u ? (set.mode ? "CHORDS" : "NOTES") : i == 2u ? PLAY_N[set.play & 3u] : t, x + 37, 297, VG_BOLD,
+                lit ? 0xFF7A00 : C_DIM, 1);
+    }
+}
+static void draw_qualities(int y)        /* the black keys' qualities in this bank, two rows of five, latched lit */
+{
+    uint32_t i;
+    uint16_t eff = qual_eff();
+    for (i = 0; i < CHORD_BANK; i++) {
+        int x = 16 + (int)(i % 5u) * 90, yy = y + (int)(i / 5u) * 26, on = eff >> i & 1u;
+        if (on)
+            vg_round(x, yy, 84, 22, 4, PG_COLOR[PG_CHORD]);
+        else
+            vg_frame(x, yy, 84, 22, 1, C_FAINT);
+        vg_text(CHORD_TYPE_NAMES[set.bank * CHORD_BANK + i], x + 42, yy + 3, VG_MED, on ? C_BG : C_DIM, 1);
+    }
+}
+static void draw_sounding(int y)         /* the chord's name, or the notes sounding */
+{
+    if (set.mode && ch.name[0])
+        vg_text(ch.name, 240, y, VG_BIG | VG_X2, ch.n ? C_INK : 0x5A5E68, 1);   /* (VG_HUGE: capitals, digits only) */
+    else {
+        char t[64];
+        uint32_t n, k = 0;
+        t[0] = 0;
+        for (n = 0; n < 128u && k < 8u; n++)
+            if (sounding[n]) {
+                char nb[4];
+                if (k++)
+                    cat(t, " ");
+                cat(t, NOTE_N[n % 12u]);
+                cat(t, vg_itoa((int)(n / 12u) - 1, nb));
+            }
+        vg_text(t[0] ? t : (set.mode ? "A WHITE KEY: A CHORD" : "PLAY"), 240, y + 12, VG_BIG, t[0] ? C_INK : C_FAINT, 1);
+    }
+}
+
+void vibe_on_draw(uint16_t *fb)
+{
+    uint32_t i;
+    char t[48];
     (void)fb;
     if (help) {
         vg_controls("MVANE YARD", HELP, (int)(sizeof HELP / sizeof HELP[0] / 2u));
         return;
     }
-    vg_clear(0x101114);
-    vg_rect(0, 0, 480, 4, PG_COLOR[page]);
-    vg_text(PG_NAME[page], 16, 12, VG_BIG, PG_COLOR[page], 0);
-    vg_text(set.mode ? "CHORDS" : "NOTES", 130, 12, VG_BIG, 0xF2F2F2, 0);
-    vg_text(SYNTH_SOUNDS[set.sound].name, 464, 12, VG_BIG, 0x2F8F78, 2);
-    /* what sounds: the chord's name, or the scale; then the key, the scale, the qualities latched */
-    if (set.mode && ch.name[0])
-        vg_text(ch.name, 240, 56, VG_BIG | VG_X2,   /* (VG_HUGE has capitals and digits only: Dm9 needs lowercase) */
-                 ch.n ? 0xF2F2F2 : 0x5A5E68, 1);
-    t[0] = 0;
-    strcpy(t, NOTE_N[set.tonic % 12u]);
-    cat(t, " ");
-    s = scale_name();
-    if (s)
-        cat(t, s);
-    else {
-        char nb[8];
-        cat(t, "PCS ");
-        cat(t, vg_itoa(set.pcs & 0xFFFu, nb));
-    }
-    cat(t, "   QUANT ");
-    cat(t, QUANT_N[set.quant % 3u]);
-    cat(t, "   ");
-    cat(t, PLAY_N[set.play & 3u]);
-    vg_text(t, 16, 140, VG_MED, 0xB8BCC6, 0);
-    if (set.mode) {                      /* the black keys' qualities, the latched lit */
-        int x = 16;
-        uint16_t eff = qual_eff();
-        for (i = 0; i < CHORD_BANK; i++)
-            x += vg_text(CHORD_TYPE_NAMES[set.bank * CHORD_BANK + i], x, 164, VG_SMALL, eff >> i & 1u ? 0xF2F2F2 : 0x5A5E68, 0) + 12;
-        if (set.hold)
-            vg_text("HOLD", 464, 164, VG_SMALL, 0xFF7A00, 2);
-    }
-    if (page == PG_ARP || page == PG_SEQ)  /* (the steps to come) */
-        vg_text(page == PG_ARP ? "THE ARP: A STEP TO COME (ON THE AUDIO'S CLOCK)" : "RECORDINGS: A STEP TO COME (THE RECORDER)",
-                16, 196, VG_SMALL, 0x8A8E98, 0);
-    if (page == PG_SCALE) {              /* the number's twelve pitch classes from the key */
+    draw_frame();
+    if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
+        static const char *const SUB[3] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER"};
+        vg_text(SYNTH_SOUNDS[set.sound].name, 16, 72, VG_BIG | VG_X2, C_INK, 0);
+        vg_text(SYNTH_SOUNDS[set.sound].mono ? "YARD, MONO" : "YARD", 16, 124, VG_MED, C_DIM, 0);
+        for (i = 0; i < 3u; i++) {
+            int y = 150 + (int)i * 18;
+            vg_text(SUB[i], 16, y, VG_SMALL, i == more % 3u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
+        }
+        vg_text("A: THE SOUND   F6: THE NEXT FOUR", 464, 186, VG_SMALL, C_DIM, 2);
+    } else if (page == PG_PLAY) {        /* what sounds, the scale on the keyboard */
+        draw_sounding(66);
+        keyboard(16, 128, 12, 70, 36u + 12u * (uint32_t)vibe_keys_octave_get() - 12u, 37u, PG_COLOR[PG_PLAY]);
+    } else if (page == PG_CHORD) {       /* the chord, its voicing, the qualities */
+        draw_sounding(66);
+        keyboard(16, 118, 12, 34, 24u, 37u, PG_COLOR[PG_CHORD]);
+        draw_qualities(158);
+    } else if (page == PG_SCALE) {       /* the number, its name, its twelve tones from the key */
         uint16_t m = scale_mask();
-        for (i = 0; i < 12u; i++)
-            vg_rect(300 + (int)i * 14, 196, 10, 10, m >> i & 1u ? (i ? 0xF2F2F2 : PG_COLOR[PG_SCALE]) : 0x2A2D35);
-        vg_text(vg_itoa(set.pcs & 0xFFFu, t), 16, 190, VG_BIG, 0xF2F2F2, 0);
+        const char *nm = scale_name();
+        vg_text(vg_itoa(set.pcs & 0xFFFu, t), 16, 66, VG_HUGE, C_INK, 0);
+        vg_text(nm ? nm : "(NO NAME)", 464, 76, VG_BIG, nm ? PG_COLOR[PG_SCALE] : C_FAINT, 2);
+        for (i = 0; i < 12u; i++) {
+            int x = 16 + (int)i * 38, on = m >> i & 1u;
+            if (on)
+                vg_round(x, 140, 34, 34, 5, i ? C_INK : PG_COLOR[PG_SCALE]);
+            else
+                vg_frame(x, 140, 34, 34, 1, C_FAINT);
+            vg_text(NOTE_N[(set.tonic + i) % 12u], x + 17, 148, VG_MED, on ? C_BG : C_DIM, 1);
+        }
+        vg_text("A BIT EACH TONE ABOVE THE KEY: C MAJOR IS 2741    B: THE LIST", 16, 182, VG_SMALL, C_DIM, 0);
+    } else {                             /* ARP, SEQ: the steps to come */
+        vg_text(page == PG_ARP ? "THE ARP" : "RECORDINGS", 16, 72, VG_BIG | VG_X2, C_FAINT, 0);
+        vg_text(page == PG_ARP ? "A STEP TO COME: ON THE AUDIO'S CLOCK, THE DAW'S TEMPO" : "A STEP TO COME: THE RECORDER, LOOPS, OVERDUB",
+                16, 130, VG_MED, C_DIM, 0);
+        draw_sounding(150);
     }
-    for (i = 0; i < 4u; i++) {           /* the four values, above F1..F6 */
-        const char *lb;
-        char v[24];
-        int x = 16 + (int)i * 116;
-        page_value(i, &lb, v);
-        if (!lb[0])
-            continue;
-        vg_text(lb, x, 228, VG_SMALL, 0x8A8E98, 0);
-        vg_text(v, x, 246, VG_BIG, 0xF2F2F2, 0);
-    }
-    {                                    /* F1..F6's captions */
-        static const char *const F[6] = {"MODE", "HOLD", "PLAY", "", "", "MORE"};
-        for (i = 0; i < 6u; i++)
-            if (F[i][0] && (i != 5u || page == PG_SOUND))
-                vg_text(F[i], 40 + (int)i * 80, 296, VG_SMALL, i == 1u && set.hold ? 0xFF7A00 : 0x8A8E98, 1);
-    }
+    draw_values();
+    draw_fkeys();
 }
