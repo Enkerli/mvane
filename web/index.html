@@ -80,6 +80,16 @@ h2.part { font-size: 20px; margin: 30px 0 4px; }
 footer { color: var(--dim); font-size: 13px; margin: 28px 0 0; border-top: 1px solid var(--line); padding-top: 12px; }
 footer button { font-size: 13px; padding: 3px 9px; }
 [hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cheat { overflow-x: auto; }
+.cheat table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.3; }
+.cheat th, .cheat td { border: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+.cheat b { font-weight: 600; }
+.cheat thead th { color: var(--dim); font-weight: 600; }
+.cheat tbody th[scope=row] { color: var(--accent); min-width: 7em; }
+.cheat tr.grp th { font-size: 13px; padding-top: 8px; color: var(--ink); }
+.cheat .sub { display: block; color: var(--dim); font-weight: 400; font-size: 11.5px; }
+.cheat .n { color: var(--dim); }
 </style>
 </head>
 <body>
@@ -91,6 +101,7 @@ footer button { font-size: 13px; padding: 3px 9px; }
     <div class="row">
       <a class="btn go" id="dl" href="https://github.com/Enkerli/mvane-yard/releases">Download the latest release</a>
       <a class="btn" href="https://github.com/Enkerli/mvane-yard">Source on GitHub</a>
+      <a class="btn" href="#controls">The controls</a>
       <a class="btn" href="#usb">Your FM-1 over USB</a>
     </div>
     <p class="small" id="dlnote">Install it with M-Flasher (below), after its backup of your FM-1.</p>
@@ -115,12 +126,23 @@ footer button { font-size: 13px; padding: 3px 9px; }
         <li><b>Expression</b>: MPE out and in (pressure, slide, bend per note), a wind controller's breath, pressure
           routed on the sounds that ignored it.</li>
       </ul>
-      <p><a href="cheatsheet.html">The cheat sheet</a> (every control as tables, and tasks to try) ·
-        <a href="panel-map.svg">the panel map</a> ·
+      <p><a href="#controls">The controls</a> ·
         <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">The manual</a> ·
         <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/SOUNDS.md">All the sounds</a> ·
         <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/ROADMAP.md">The roadmap</a></p>
     </details>
+  </section>
+
+  <section class="card" id="controls">
+    <h2>The controls</h2>
+    <p class="small">HOME switches the knobs' two pages (lit: SOUND). A layer: hold its button and turn, or tap it open
+      and tap it closed; EDIT and GLO follow the page. In the ARP's layer, PLAY turns the ARP on and off.</p>
+<!-- cheat:start (tools/panel_map.py) -->
+<div class="cheat"><table><caption class="sr">mvane yard's controls: what K1 to K4 and SELECT do on each page and in each layer</caption><thead><tr><th scope="col">Where</th><th scope="col">K1</th><th scope="col">K2</th><th scope="col">K3</th><th scope="col">K4</th><th scope="col">SELECT</th></tr></thead><tbody><tr class="grp"><th scope="rowgroup" colspan="6">The knobs' two pages</th></tr><tr><th scope="row">PLAY page</th><td><b>QUANT</b><span class="sub">OFF BASIC FULL</span></td><td><b>KEY</b></td><td><b>SCALE</b><span class="sub">the named list</span></td><td><b>GLIDE</b></td><td><b>the next family's</b><span class="sub">first sound</span></td></tr><tr><th scope="row">SOUND page<span class="sub">YARD sound / Clipper's</span></th><td><b>TONE / BRITE</b></td><td><b>ATTACK / TIMBR</b></td><td><b>DECAY / MOTN</b></td><td><b>RELEASE / SPACE</b></td><td><b>as on PLAY</b></td></tr><tr class="grp"><th scope="rowgroup" colspan="6">Layers</th></tr><tr><th scope="row">GLO, PLAY page<span class="sub">SETTINGS</span></th><td><b>PLAY</b><span class="sub">POLY MONO POLY+BR MONO+BR</span></td><td><b>USB AUDIO</b><span class="sub">MASTER: as MASTER FULL: full level</span></td><td><b>MPE OUT</b><span class="sub">ON OFF</span></td><td><b>BEND</b><span class="sub">12 24 48 96</span></td><td><b>USB: right, host</b><span class="sub">a MIDI device; left, a computer</span></td></tr><tr><th scope="row">GLO, SOUND page<span class="sub">MORE</span></th><td><b>PHONES MAX</b><span class="sub">100% to 10%</span></td><td><b>SPREAD</b><span class="sub">MPE glide</span></td><td><span class="n">-</span></td><td><span class="n">-</span></td><td><span class="n">-</span></td></tr><tr><th scope="row">EDIT, PLAY page<span class="sub">CHORD</span></th><td><b>VOICING</b><span class="sub">CLOSE OPEN WIDE PAIRS</span></td><td><b>VOICES</b><span class="sub">3 to 6</span></td><td><b>BASS</b><span class="sub">ON OFF</span></td><td><b>BANK</b><span class="sub">QUALITY / SCALE</span></td><td><b>the chord type</b></td></tr><tr><th scope="row">EDIT, SOUND page<span class="sub">a YARD sound</span></th><td><b>DETUNE / WAVE</b><span class="sub">/ ONSET</span></td><td><b>SUB / PW</b><span class="sub">/ ONSET LVL</span></td><td><b>RES / NOISE</b><span class="sub">/ LEVEL</span></td><td><b>PLUCK / FILTER</b><span class="sub">/ -</span></td><td><b>the next page</b><span class="sub">(three); SAVE: keep the sound</span></td></tr><tr><th scope="row"><span class="sub">a Clipper sound</span></th><td><b>engine 1-4 / 5-8</b><span class="sub">/ ATTACK</span></td><td><b>... / DECAY</b></td><td><b>... / SUSTAIN</b></td><td><b>... / RELEASE</b></td><td><b>the next page</b><span class="sub">SAVE: keep it</span></td></tr><tr><th scope="row">FX<span class="sub">Clipper's sends</span></th><td><b>DRIVE</b></td><td><b>CHORUS</b></td><td><b>DELAY</b></td><td><b>REVERB</b></td><td><b>the reverb's model</b><span class="sub">(YARD: as EDIT)</span></td></tr><tr><th scope="row">SEL<span class="sub">SCALE: its number</span></th><td><b>thousands</b><span class="sub">0 to 4</span></td><td><b>hundreds</b></td><td><b>tens</b></td><td><b>units</b></td><td><b>the named list;</b><span class="sub">SAVE: keep the number in yours</span></td></tr><tr><th scope="row">SEQ<span class="sub">RECORDINGS</span></th><td><b>SLOT</b><span class="sub">1 to 8</span></td><td><b>LOOP</b><span class="sub">ON OFF</span></td><td><span class="n">-</span></td><td><span class="n">-</span></td><td><b>the slot</b></td></tr><tr><th scope="row">ARP<span class="sub">PLAY in it: on, off</span></th><td><b>MODE / TEMPO</b></td><td><b>RATE / LATCH</b></td><td><b>GATE</b></td><td><b>OCTAVES</b></td><td><b>the other page</b></td></tr></tbody></table></div>
+<!-- cheat:end -->
+    <p class="small"><a href="cheatsheet.html">This table alone</a> (to print or keep) ·
+      <a href="tasks.html">Try it: tasks</a> (answers hidden) · <a href="panel-map.svg">The panel map</a> ·
+      <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">The manual</a></p>
   </section>
 
   <section class="card">

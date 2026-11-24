@@ -15,7 +15,7 @@
  *   ENV        black keys: types from the scale (STACK 7 TRIAD ADD9 SUS 6/9 QUARTAL 11 FIFTHS V/) or fixed
  *              qualities, as Coral Flower's (M6 M7 M9 S2 S4 m6 m7 m9 M m)
  *   GLO        SETTINGS (PLAY, USB AUDIO, MPE OUT, BEND); on SOUND: MORE (PHONES MAX, SPREAD)
- *   ARP        tap: OFF / ON / LATCH; held: MODE RATE GATE OCTAVES, SELECT the tempo
+ *   ARP        its layer (held, or tapped open): MODE RATE GATE OCTAVES, SELECT TEMPO LATCH; PLAY in it: on, off
  *   K1 tone    K2 release    K3 glide    K4 attack (CC74, CC72, CC5, CC73 on the master channel: recorded, replayed)
  *   OCT- OCT+  octave        REC  tap: capture the last phrase; hold: capture the whole history
  *   PLAY       play / stop the take                    SAVE  the settings and the take into its slot
@@ -2472,7 +2472,18 @@ static void input(void)
             app_say("KNOBS", set.page ? "SOUND" : "PLAY");
         } else if (k == B_REC)
             ui.rec_t = now ? now : 1u;
-        else if (k == B_PLAY) {
+        else if (k == B_PLAY && (ui.held == B_ARP || ui.latched == B_ARP)) {
+            /* (0.16, Alex) PLAY in the ARP's layer: the ARP on, off; with SEQ's open or held too, the recording with it */
+            int seq = ui.held == B_SEQ || ui.latched == B_SEQ, on = !arp.on;
+            if (ui.held >= 0)
+                ui.held_used = 1;
+            arp_set(on ? (set.arp_latch ? 2u : 1u) : 0u);
+            if (seq && on && !player.playing && take.count)
+                take_play(now);
+            else if (seq && !on && player.playing)
+                rec_play_stop(&player, play_emit, 0);
+            app_say("ARP", !on ? "OFF" : set.arp_latch ? "ON, LATCH" : "ON");
+        } else if (k == B_PLAY) {
             if (player.playing) {
                 rec_play_stop(&player, play_emit, 0);
                 app_say("RECORDING", "STOPPED");
@@ -2512,10 +2523,7 @@ static void input(void)
         }
     }
     if (ui.held >= 0 && !(btn >> ui.held & 1u)) {   /* a layer button let go: a tap opens or closes its page */
-        if (ui.held == B_ARP) {          /* ARP tapped: on, off (held: its layer) */
-            if (!ui.held_used)
-                arp_set(arp.on ? 0u : set.arp_latch ? 2u : 1u);
-        } else if (!ui.held_used)
+        if (!ui.held_used)               /* (0.16, Alex: ARP as the other layers; PLAY starts and stops it) */
             ui.latched = ui.latched == ui.held ? -1 : ui.held;
         ui.held = -1;
         for (k = EN_K1; k < NE; k++)     /* (0.16) the knobs' labels unlit: they are another layer's now */
@@ -2585,7 +2593,8 @@ static void input(void)
     ui.keys = keys;
     ui.btn = btn;
     plat_glow(1);
-    plat_leds(btn | (set_dirty || take_dirty ? 1u << B_SAVE : 0u) | (player.playing ? 1u << B_PLAY : 0u)
+    plat_leds(btn | (set_dirty || take_dirty ? 1u << B_SAVE : 0u)
+                  | (player.playing || (arp.on && layer_now() == B_ARP) ? 1u << B_PLAY : 0u)   /* (in ARP: the ARP's) */
                   | (layer_now() >= 0 ? 1u << layer_now() : 0u) | (set.page ? 1u << B_HOME : 0u)
                   | (arp.on ? 1u << B_ARP : 0u),
               keys | (ui.hold && set.mode ? 1u << HOLD_KEY : 0u) | (set.mode ? qual_leds() : 0u));
@@ -2654,7 +2663,7 @@ static void draw(void)
         }
         text_cat(bp, " BPM");
         cv_text(10, 32, &FONT_S, bp, arp.on ? C_HI : C_GRAY);
-        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE, RATE ...   TAP ARP: ON, OFF" : "SELECT: TEMPO, LATCH   TAP ARP: ON, OFF",
+        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE, RATE ...   PLAY: ON, OFF" : "SELECT: TEMPO, LATCH   PLAY: ON, OFF",
                 C_GRAY);
     } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
         int h = plat_usb_host_state();

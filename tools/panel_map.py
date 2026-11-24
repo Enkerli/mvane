@@ -64,8 +64,8 @@ for i in range(4):
 r(568, 160, 404, 196, TRAY, 18)
 ROW1 = [("FX", ["sends /", "+SAVE: keep"]), ("SEL", ["SCALE", "layer"]), ("ENV", ["(unused)"]), ("LFO", ["(unused)"]),
         ("EDIT", ["CHORD /", "SOUND"]), ("GLO", ["SETTINGS /", "MORE"])]
-ROW2 = [("HOME", ["PLAY / SOUND", "page"]), ("SAVE", ["settings +", "recording"]), ("ARP", ["tap on/off", "hold: layer"]),
-        ("SEQ", ["RECORD-", "INGS layer"]), ("PLAY", ["play / stop"]), ("REC", ["tap: phrase", "hold: all"])]
+ROW2 = [("HOME", ["PLAY / SOUND", "page"]), ("SAVE", ["settings +", "recording"]), ("ARP", ["layer; in it,", "PLAY: on/off"]),
+        ("SEQ", ["RECORD-", "INGS layer"]), ("PLAY", ["play / stop;", "in ARP: ARP"]), ("REC", ["tap: phrase", "hold: all"])]
 LAYER = {"FX", "SEL", "EDIT", "GLO", "SEQ", "ARP"}
 for i, (n, role) in enumerate(ROW1):
     button(578 + i * 65, 172, 58, 82, n, role, CORAL if n in LAYER else (DIM if n in ("ENV", "LFO") else None))
@@ -171,8 +171,8 @@ row("FX", [["DRIVE"], ["CHORUS"], ["DELAY"], ["REVERB"], ["the reverb's model", 
 row("SEL", [["thousands", "0 to 4"], ["hundreds"], ["tens"], ["units"], ["the named list;", "SAVE: keep the", "number in yours"]],
     "SCALE: its number", CORAL)
 row("SEQ", [["SLOT", "1 to 8"], ["LOOP", "ON OFF"], [], [], ["the slot"]], "RECORDINGS", CORAL)
-row("ARP (held)", [["MODE / TEMPO"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["the other page"]],
-    "tap ARP: on, off", CORAL)
+row("ARP", [["MODE / TEMPO"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["the other page"]],
+    "PLAY in it: on, off", CORAL)
 
 section("Errands")
 ERR = [   # (the errand's name, the task as a user test asks it, the answer)
@@ -194,7 +194,7 @@ ERR = [   # (the errand's name, the task as a user test asks it, the answer)
     ("Loop and overdub", "Loop a recording, add a layer, then undo it.",
      "tap SEQ - K2 LOOP ON - tap SEQ - PLAY - tap REC: a layer at the next pass; hold REC: undo"),
     ("The arpeggiator", "Turn the arpeggiator on, latched, at 1/16.",
-     "hold ARP - K2 RATE to 1/16 - SELECT, K2 LATCH ON - let go - tap ARP"),
+     "tap ARP - K2 RATE to 1/16 - SELECT, K2 LATCH ON - PLAY (the ARP on) - tap ARP"),
     ("Edit and keep a sound", "Make CLAV 3 dB quieter and keep it as your own.",
      "PRESETS to CLAV - HOME to SOUND - tap EDIT - SELECT to page 3/3 - K3 LEVEL down 6 steps - SAVE - tap EDIT"),
     ("Everything off", "Silence every note at once.", "OCT- and OCT+ together"),
@@ -217,91 +217,90 @@ for p in (os.path.join(here, "..", "docs", "media", "panel-map.svg"), os.path.jo
         f.write(svg)
 print(f"panel-map.svg: {W} x {H}")
 
-# ---- the cheat sheet: the same as accessible HTML tables, the errands as tasks with their answers hidden ----
-def cell_html(c):
-    return "<br>".join(escape(x) for x in c) if c else "<span class=n>-</span>"
+# ---- the cheat sheet (Alex, 2026-11-23: the map's top part, on the landing page): the knob pages and the layers in
+# one accessible table, written into web/index.html (between its cheat markers) and web/cheatsheet.html (the Hub's
+# cheat link); the errands as tasks, their answers hidden, on a page of their own (web/tasks.html) ----
+def cell_html(c):                         # the name, then its values in small print
+    if not c:
+        return '<span class="n">-</span>'
+    return f"<b>{escape(c[0])}</b>" + (f'<span class="sub">{escape(" ".join(c[1:]))}</span>' if c[1:] else "")
 
 
-tables = []
+body = []
 for title, sub, rows in HT:
     if not rows:
         continue
-    body = []
+    body.append(f'<tr class="grp"><th scope="rowgroup" colspan="6">{escape(title.split(":")[0])}</th></tr>')
     for name, rsub, cells in rows:
-        head_ = escape(name or "") + (f"<span class=sub>{escape(rsub)}</span>" if rsub else "")
-        body.append(f"<tr><th scope=row>{head_}</th>" + "".join(f"<td>{cell_html(c)}</td>" for c in cells) + "</tr>")
-    tables.append(f"<h2>{escape(title)}</h2>" + (f"<p>{escape(sub)}</p>" if sub else "") +
-                  f"<div class=wrap><table><caption class=sr>{escape(title)}</caption><thead><tr><th scope=col>Where</th>"
-                  "<th scope=col>K1</th><th scope=col>K2</th><th scope=col>K3</th><th scope=col>K4</th>"
-                  "<th scope=col>SELECT</th></tr></thead><tbody>" + "".join(body) + "</tbody></table></div>")
-CTRL = [("MASTER", "The volume (PHONES MAX sets its top)"), ("ALGORITHM", "NOTES (left) / CHORDS (right)"),
-        ("PRESETS", "The sound, by family (a fast turn: the next family)"),
-        ("SELECT", "What the layer lists; on the pages, the next family's first sound"),
-        ("HOME", "The PLAY page / the SOUND page (lit); with GLO or EDIT open, their other half"),
-        ("OCT- / OCT+", "The octave; both together: everything off"),
-        ("REC", "Tap: keep the last phrase; hold: the whole history. While a recording loops: tap, a layer; hold, undo"),
-        ("PLAY", "Play / stop the recording"),
-        ("SAVE", "The settings and the recording (stopped); with SEL open: the scale; with FX, or EDIT on SOUND: the sound"),
-        ("ARP", "Tap: on, off; hold: its layer"),
-        ("FX, SEL, EDIT, GLO, SEQ", "Their layers: hold and turn, or tap open and tap closed"), ("ENV, LFO", "Nothing yet"),
-        ("White keys", "NOTES: notes; CHORDS: the scale's degrees from the tonic (F3). Pressure on F3 to C5, each key its own"),
-        ("Black keys", "CHORDS: the chord's quality, latched, combined when pressed together; F#5: HOLD. NOTES: notes")]
-ctrl = ("<h2>Buttons, encoders, keys</h2><div class=wrap><table><caption class=sr>Buttons, encoders, keys</caption>"
-        "<thead><tr><th scope=col>Control</th><th scope=col>Does</th></tr></thead><tbody>" +
-        "".join(f"<tr><th scope=row>{escape(a)}</th><td>{escape(b)}</td></tr>" for a, b in CTRL) + "</tbody></table></div>")
-tasks = "".join(f'<li><label><input type=checkbox data-k="{i}"> {escape(q)}</label>'
-                f"<details><summary>The answer<span class=sr> to task {i + 1}</span></summary><p><b>{escape(a)}:</b> {escape(ans)}</p></details></li>"
-                for i, (a, q, ans) in enumerate(ERR))
-html = f"""<!doctype html>
+        head_ = escape(name or "") + (f'<span class="sub">{escape(rsub)}</span>' if rsub else "")
+        body.append(f'<tr><th scope="row">{head_}</th>' + "".join(f"<td>{cell_html(c)}</td>" for c in cells) + "</tr>")
+CHEAT_CSS = """.cheat { overflow-x: auto; }
+.cheat table { border-collapse: collapse; width: 100%; font-size: 13px; line-height: 1.3; }
+.cheat th, .cheat td { border: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+.cheat b { font-weight: 600; }
+.cheat thead th { color: var(--dim); font-weight: 600; }
+.cheat tbody th[scope=row] { color: var(--accent); min-width: 7em; }
+.cheat tr.grp th { background: var(--bg); font-size: 15px; padding-top: 10px; }
+.cheat .sub { display: block; color: var(--dim); font-weight: 400; font-size: 11.5px; }
+.cheat .n { color: var(--dim); }"""
+frag = ('<div class="cheat"><table><caption class="sr">mvane yard\'s controls: what K1 to K4 and SELECT do on each '
+        'page and in each layer</caption><thead><tr><th scope="col">Where</th><th scope="col">K1</th>'
+        '<th scope="col">K2</th><th scope="col">K3</th><th scope="col">K4</th><th scope="col">SELECT</th></tr></thead>'
+        "<tbody>" + "".join(body) + "</tbody></table></div>")
+
+web = os.path.join(here, "..", "web")
+ip = os.path.join(web, "index.html")
+with open(ip) as f:
+    page = f.read()
+A, B = "<!-- cheat:start (tools/panel_map.py) -->", "<!-- cheat:end -->"
+if A in page and B in page:
+    page = page[:page.index(A) + len(A)] + "\n" + frag + "\n" + page[page.index(B):]
+    with open(ip, "w") as f:
+        f.write(page)
+else:
+    print("index.html: no cheat markers; left as it was")
+
+HEAD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mvane yard cheat sheet</title>
-<meta name="description" content="mvane yard on the M-VAVE FM-1: every control, the knob pages and the layers, and tasks to try.">
+<title>{title}</title><meta name="description" content="{desc}">
 <style>
-:root {{ --bg: #fbfaf7; --card: #fff; --ink: #1d1f22; --soft: #5a5f66; --line: #d6d3cc; --teal: #1f7a64; --coral: #b4532a; }}
-@media (prefers-color-scheme: dark) {{ :root {{ --bg: #16181b; --card: #1f2226; --ink: #ececee; --soft: #a9adb4; --line: #353940;
-  --teal: #6fd0b8; --coral: #f0956b; }} }}
+:root {{ --bg: #f4f2ed; --card: #fff; --ink: #1d1f22; --dim: #5a5f66; --line: #d6d3cc; --accent: #1f7a64; }}
+@media (prefers-color-scheme: dark) {{ :root {{ --bg: #16181b; --card: #1f2226; --ink: #ececee; --dim: #a9adb4;
+  --line: #353940; --accent: #6fd0b8; }} }}
 * {{ box-sizing: border-box; }}
-body {{ margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }}
-main {{ max-width: 72rem; margin: 0 auto; padding: 1.5rem 16px 3rem; }}
-h1 {{ font-size: 1.7rem; margin: 0 0 .3rem; }} h2 {{ font-size: 1.25rem; margin: 2rem 0 .4rem; }}
-p {{ margin: .3rem 0 .8rem; color: var(--soft); }} a {{ color: var(--teal); }}
-.wrap {{ overflow-x: auto; }}
-table {{ border-collapse: collapse; width: 100%; background: var(--card); font-size: .95rem; }}
-th, td {{ border: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }}
-thead th {{ color: var(--soft); font-weight: 600; }}
-tbody th {{ color: var(--coral); white-space: nowrap; }}
-.sub {{ display: block; color: var(--soft); font-weight: 400; font-size: .85rem; }}
-.n {{ color: var(--soft); }}
+body {{ margin: 0; background: var(--card); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }}
+main {{ max-width: 70rem; margin: 0 auto; padding: 1.2rem 16px 2rem; }}
+h1 {{ font-size: 1.5rem; margin: 0 0 .3rem; }} p {{ margin: .3rem 0 .8rem; color: var(--dim); }} a {{ color: var(--accent); }}
 .sr {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }}
-ol {{ padding-left: 1.4rem; }} li {{ margin: .6rem 0; }}
-details {{ margin: .25rem 0 0 1.6rem; }} summary {{ cursor: pointer; color: var(--teal); }}
+ol {{ padding-left: 1.4rem; }} li {{ margin: .7rem 0; }}
+details {{ margin: .25rem 0 0 1.6rem; }} summary {{ cursor: pointer; color: var(--accent); }}
 input[type=checkbox] {{ width: 1.1rem; height: 1.1rem; vertical-align: -.15rem; }}
-:focus-visible {{ outline: 3px solid var(--teal); outline-offset: 2px; }}
-</style></head>
-<body><main>
-<h1>mvane yard: the cheat sheet</h1>
-<p>Every control of mvane yard on the M-VAVE FM-1 (0.16), as tables. The same as a picture:
-<a href="panel-map.svg">the panel map</a>. All of it in words: <a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">the manual</a>.</p>
-<h2>The panel in three ideas</h2>
-<ol><li><b>Two knob pages</b>: HOME switches K1 to K4 between PLAY and SOUND (HOME lit). The screen names the four knobs.</li>
-<li><b>Layers</b>: FX, SEL, EDIT, GLO, SEQ and ARP change what the knobs and SELECT do. Hold the button and turn, or tap it open and tap it closed. EDIT and GLO follow the page; with one open, HOME flips it to its other half.</li>
-<li><b>SELECT</b> moves through what the layer lists.</li></ol>
-{ctrl}
-{"".join(tables[1:] if tables and tables[0].startswith("<h2>The keys") else tables)}
-<h2>Try it: tasks</h2>
-<p>A way to learn the panel, or to test it: do each task on the FM-1, then open its answer. Your ticks stay in this browser.</p>
-<ol id=tasks>{tasks}</ol>
-<p><small>Made by tools/panel_map.py from the same lists as the panel map.</small></p>
-</main>
-<script>
-document.querySelectorAll("#tasks input").forEach((b) => {{
-  const k = "mvane-task-" + b.dataset.k;
-  try {{ b.checked = localStorage.getItem(k) === "1"; }} catch (e) {{}}
-  b.onchange = () => {{ try {{ localStorage.setItem(k, b.checked ? "1" : "0"); }} catch (e) {{}} }};
-}});
-</script>
-</body></html>
+:focus-visible {{ outline: 3px solid var(--accent); outline-offset: 2px; }}
+@media print {{ body {{ font-size: 11px; }} a {{ color: inherit; }} }}
+{css}
+</style></head><body><main>
 """
-with open(os.path.join(here, "..", "web", "cheatsheet.html"), "w") as f:
-    f.write(html)
-print("cheatsheet.html:", len(tables), "tables,", len(ERR), "tasks")
+LINKS = ('<p><a href="./">mvane yard</a> · <a href="cheatsheet.html">the cheat sheet</a> · '
+         '<a href="tasks.html">try it: tasks</a> · <a href="panel-map.svg">the panel map</a> · '
+         '<a href="https://github.com/Enkerli/mvane-yard/blob/main/docs/MANUAL.md">the manual</a></p>')
+with open(os.path.join(web, "cheatsheet.html"), "w") as f:
+    f.write(HEAD.format(title="mvane yard cheat sheet", desc="What K1 to K4 and SELECT do on each page and layer of mvane yard on the M-VAVE FM-1.", css=CHEAT_CSS)
+            + "<h1>mvane yard: the cheat sheet</h1><p>HOME switches the knobs' two pages (lit: SOUND). A layer: hold its "
+              "button and turn, or tap it open and tap it closed; EDIT and GLO follow the page. In the ARP's layer, PLAY "
+              "turns the ARP on and off.</p>\n" + frag + LINKS + "</main></body></html>\n")
+tasks = "".join(f'<li><label><input type="checkbox" data-k="{i}"> {escape(q)}</label>'
+                f'<details><summary>The answer<span class="sr"> to task {i + 1}</span></summary><p><b>{escape(a)}:</b> '
+                f"{escape(ans)}</p></details></li>" for i, (a, q, ans) in enumerate(ERR))
+with open(os.path.join(web, "tasks.html"), "w") as f:
+    f.write(HEAD.format(title="mvane yard: try it", desc="Tasks to learn mvane yard's panel on the M-VAVE FM-1, or to test it, their answers hidden.", css="")
+            + "<h1>mvane yard: try it</h1><p>A way to learn the panel, or to test it: do each task on the FM-1, then "
+              "open its answer. Your ticks stay in this browser.</p>\n<ol id=\"tasks\">" + tasks + "</ol>" + LINKS +
+            """</main><script>
+document.querySelectorAll("#tasks input").forEach((b) => {
+  const k = "mvane-task-" + b.dataset.k;
+  try { b.checked = localStorage.getItem(k) === "1"; } catch (e) {}
+  b.onchange = () => { try { localStorage.setItem(k, b.checked ? "1" : "0"); } catch (e) {} };
+});
+</script></body></html>
+""")
+print("cheat sheet:", len(body), "rows (index.html, cheatsheet.html);", len(ERR), "tasks (tasks.html)")

@@ -1,8 +1,11 @@
-# The ARP (0.12): ARP tapped on, off; held, its layer: MODE RATE GATE OCTAVES, SELECT to TEMPO LATCH. It plays
+# The ARP (0.12): its layer, held or tapped open (0.16), MODE RATE GATE OCTAVES, SELECT to TEMPO LATCH; PLAY in
+# the layer turns it on, off (0.16, Alex; before, a tap of ARP did). It plays
 # what would sound, a step at a time. app/build/host/mvane-yard_host app/tests/arp.txt app/build/host
 wait 600
 spin ALGO -1
 expect arp 0
+tap ARP
+tap PLAY
 tap ARP
 wait 20
 expect arp 1
@@ -82,7 +85,9 @@ expect arp_snd 3
 key 7 up
 key 11 up
 key 14 up
-# OFF (a tap): what it kept goes; keys sound again as themselves; on again: LATCH still set
+# OFF (PLAY in the layer): what it kept goes; keys sound again as themselves; on again: LATCH still set
+tap ARP
+tap PLAY
 tap ARP
 wait 20
 expect arp 0
@@ -90,8 +95,48 @@ expect arp_n 0
 wait 200
 expect arp_snd 0
 tap ARP
+tap PLAY
+tap ARP
 wait 20
 expect arp 2
 tap ARP
+tap PLAY
+tap ARP
 wait 20
 expect arp 0
+
+# (0.16) the layer stays open after a tap, and PLAY outside it is the recording's, not the ARP's
+tap ARP
+tap PLAY
+wait 20
+expect arp 2
+tap ARP
+tap PLAY
+wait 20
+expect arp 2
+tap ARP
+tap PLAY
+tap ARP
+wait 20
+expect arp 0
+# (0.16) ARP open and SEQ held: PLAY starts both, the ARP and the recording; again, stops both
+key 7 down 100
+wait 300
+key 7 up
+wait 3500
+tap REC
+wait 50
+tap ARP
+press SEQ
+tap PLAY
+release SEQ
+wait 20
+expect arp 2
+expect playing 1
+press SEQ
+tap PLAY
+release SEQ
+wait 20
+expect arp 0
+expect playing 0
+tap ARP

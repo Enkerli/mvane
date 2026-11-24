@@ -7,8 +7,9 @@ overdub it, move it to another key or scale, save it in one of eight slots, take
 
 ![mvane yard's controls: the panel, the knob pages, the layers, errands](media/panel-map.svg)
 
-The same as accessible tables, with tasks to try (their answers hidden):
-[the cheat sheet](https://enkerli.github.io/mvane-yard/cheatsheet.html).
+The knob pages and layers as an accessible table: [the cheat sheet](https://enkerli.github.io/mvane-yard/cheatsheet.html)
+(also on [the page](https://enkerli.github.io/mvane-yard/#controls)); tasks to learn or test the panel, their answers
+hidden: [try it](https://enkerli.github.io/mvane-yard/tasks.html).
 
 ## Install
 
@@ -99,7 +100,7 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **FX**, a YARD sound | as EDIT on the SOUND page | | | | |
 | **SEL**: SCALE | thousands (0 to 4) | hundreds | tens | units (at most 4095) | the named list, then yours; SAVE keeps the number in your list |
 | **SEQ**: RECORDINGS | SLOT (1 to 8) | LOOP (OFF, ON) | | | the slot |
-| **ARP** (held; tap: on, off) | MODE / TEMPO | RATE / LATCH | GATE | OCTAVES | the other page |
+| **ARP** (PLAY in it: the ARP on, off) | MODE / TEMPO | RATE / LATCH | GATE | OCTAVES | the other page |
 
 ### Buttons and encoders
 
@@ -112,10 +113,10 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **HOME** | The PLAY page / the SOUND page (lit); with GLO or EDIT open, their other half |
 | **OCT- / OCT+** | The octave (-2 to +2); both together: panic, everything off |
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub from the next pass (again: stop at its end); hold, undo the last layer |
-| **PLAY** | Play / stop the recording |
+| **PLAY** | Play / stop the recording. With the ARP's layer open (or held): the ARP on, off; with SEQ's open or held as well: both together |
 | **SAVE** | The settings, and the recording into its slot (stop it first). With SEL open: the scale into your list. With FX open, or EDIT on the SOUND page: the sound |
-| **ARP** | Tap: the arpeggiator on, off. Hold: its layer |
-| **FX, SEL, EDIT, GLO, SEQ** | Their layers (above) |
+| **ARP** | Its layer, as the others (PLAY in it: the arpeggiator on, off) |
+| **FX, SEL, EDIT, GLO, SEQ, ARP** | Their layers (above) |
 | **ENV, LFO** | Nothing yet |
 
 ## Playing
@@ -187,7 +188,9 @@ scale's notes, pick a known scale, or type its number.
 
 ### ARP
 
-**Tap ARP**: on, off (the screen says ARP, or ARP LATCH; the button lights). **Hold ARP** and turn: MODE (UP, DOWN,
+**ARP is a layer like the others**: hold it, or tap it open (tap again to close). In it, **PLAY** turns the
+arpeggiator on and off (the screen says ARP, or ARP LATCH; the ARP button lights while it runs, PLAY while the layer
+is open). With SEQ's layer open or held as well, PLAY starts and stops the recording with it. The layer's knobs: MODE (UP, DOWN,
 UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD), RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32), GATE (5% to 100%),
 OCTAVES (1 to 4); SELECT: TEMPO (40 to 240 BPM) and LATCH. It plays what would sound, a step at a time: in NOTES the
 keys you hold, in CHORDS the chord's voices (the bass too), and the notes coming in over MIDI. UP-DOWN and DOWN-UP
