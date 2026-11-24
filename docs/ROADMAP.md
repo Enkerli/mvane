@@ -86,7 +86,7 @@ chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The
 9. **The ARP, tweaked** (Alex): its degrees from the expression (pressure or slide: how far up the run, which
    degree), rhythms that are not even (lengths, rests, accents; Serpe-like notation for a pattern as text), steps of
    two or three notes and the full chord on chosen steps (comping), steps through the scale's degrees above the held
-   notes; and **a RANDOM mode in the current scale**, each degree weighted (the root most, then the fifth, the third,
+   notes; and **a RANDOM mode in the current scale** (SCALE, done in 0.16, unweighted), each degree weighted (the root most, then the fifth, the third,
    and so on: a histogram of degree frequency, a default from the corpus, editable on the page), a run never leaving
    the scale and the key it follows.
 10. **Quantize to the current chord, loosely** (Alex): a QUANT setting between FULL (the scale) and CHORD (the held

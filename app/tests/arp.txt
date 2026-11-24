@@ -69,8 +69,9 @@ key 14 down 100
 wait 10
 expect arp_n 1
 key 14 up
-# CHORD (MODE back to UP, then back once more: CHORD), one octave: all at once
+# CHORD (MODE back to UP, then back past SCALE: CHORD), one octave: all at once
 press ARP
+spin K1 -1
 spin K1 -1
 spin K1 -1
 spin K4 -1
@@ -105,21 +106,22 @@ tap ARP
 wait 20
 expect arp 0
 
-# (0.16) the layer stays open after a tap, and PLAY outside it is the recording's, not the ARP's
+# (0.16) ARP's layer stays open after a tap; PLAY toggles the ARP while it is engaged: its layer open, or running
+# (ARP lit, the layer closed too); with neither, PLAY is the recording's
 tap ARP
 tap PLAY
 wait 20
 expect arp 2
 tap ARP
+expect layer -1
 tap PLAY
-wait 20
-expect arp 2
-tap ARP
-tap PLAY
-tap ARP
 wait 20
 expect arp 0
-# (0.16) ARP open and SEQ held: PLAY starts both, the ARP and the recording; again, stops both
+tap PLAY
+wait 20
+expect arp 0
+expect playing 0
+# ARP open and SEQ held: PLAY starts both, the ARP and the recording; again, stops both
 key 7 down 100
 wait 300
 key 7 up
@@ -140,3 +142,48 @@ wait 20
 expect arp 0
 expect playing 0
 tap ARP
+# (0.16, Alex: "engaging the ARP stops the held chord") CHORDS: a chord held with HOLD goes into the ARP when it
+# starts, and sounds again as a chord when it stops
+press ARP
+spin K1 2
+release ARP
+spin ALGO 1
+wait 20
+tapkey b10 90
+key w2 down 100
+wait 50
+key w2 up
+wait 50
+expect hold 1
+expect chord_n >3
+tap ARP
+tap PLAY
+tap ARP
+wait 300
+expect arp 2
+expect arp_n >3
+# quick turns of PRESETS while it plays: it keeps its notes (it lost them on turns closer than 40 ms)
+spin PRESET 1
+wait 10
+spin PRESET 1
+wait 10
+spin PRESET 1
+wait 10
+spin PRESET 1
+wait 300
+expect arp_n >3
+tap PLAY
+wait 100
+expect arp 0
+expect chord_n >3
+# SCALE (0.16): random tones of the scale over the octaves from the lowest note held
+tap ARP
+spin K1 -2
+tap PLAY
+tap ARP
+wait 600
+expect arp 2
+expect arp_n >3
+tap PLAY
+tapkey b10 90
+wait 100

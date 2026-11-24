@@ -100,7 +100,7 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **FX**, a YARD sound | as EDIT on the SOUND page | | | | |
 | **SEL**: SCALE | thousands (0 to 4) | hundreds | tens | units (at most 4095) | the named list, then yours; SAVE keeps the number in your list |
 | **SEQ**: RECORDINGS | SLOT (1 to 8) | LOOP (OFF, ON) | | | the slot |
-| **ARP** (PLAY in it: the ARP on, off) | MODE / TEMPO | RATE / LATCH | GATE | OCTAVES | the other page |
+| **ARP** (PLAY while ARP is lit: the ARP on, off) | MODE / TEMPO | RATE / LATCH | GATE | OCTAVES | the other page |
 
 ### Buttons and encoders
 
@@ -113,9 +113,9 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **HOME** | The PLAY page / the SOUND page (lit); with GLO or EDIT open, their other half |
 | **OCT- / OCT+** | The octave (-2 to +2); both together: panic, everything off |
 | **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub from the next pass (again: stop at its end); hold, undo the last layer |
-| **PLAY** | Play / stop the recording. With the ARP's layer open (or held): the ARP on, off; with SEQ's open or held as well: both together |
+| **PLAY** | Play / stop the recording. While ARP is lit (its layer open or held, or the arpeggiator running): the arpeggiator on, off; with SEQ's open or held as well: both together |
 | **SAVE** | The settings, and the recording into its slot (stop it first). With SEL open: the scale into your list. With FX open, or EDIT on the SOUND page: the sound |
-| **ARP** | Its layer, as the others (PLAY in it: the arpeggiator on, off) |
+| **ARP** | Its layer, as the others; lit while open or running (PLAY then: the arpeggiator on, off) |
 | **FX, SEL, EDIT, GLO, SEQ, ARP** | Their layers (above) |
 | **ENV, LFO** | Nothing yet |
 
@@ -188,14 +188,18 @@ scale's notes, pick a known scale, or type its number.
 
 ### ARP
 
-**ARP is a layer like the others**: hold it, or tap it open (tap again to close). In it, **PLAY** turns the
-arpeggiator on and off (the screen says ARP, or ARP LATCH; the ARP button lights while it runs, PLAY while the layer
-is open). With SEQ's layer open or held as well, PLAY starts and stops the recording with it. The layer's knobs: MODE (UP, DOWN,
-UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD), RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32), GATE (5% to 100%),
+**ARP is a layer like the others**: hold it, or tap it open (tap again to close). **PLAY turns the arpeggiator on
+and off while ARP is engaged**: its layer open or held, or the arpeggiator running (the ARP button lit, even with its
+layer closed). The screen says ARP, or ARP LATCH; ARP and PLAY light while it runs. With SEQ's layer open or held as
+well, PLAY starts the arpeggiator and the recording together, and stops both if either runs. A chord that sounds (its
+key held, or HOLD) goes into the arpeggiator when it starts, and sounds again as a chord when it stops; so do the
+keys held in NOTES. Changing the sound while it runs keeps its notes. The layer's knobs: MODE (UP, DOWN,
+UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD, SCALE), RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32), GATE (5% to 100%),
 OCTAVES (1 to 4); SELECT: TEMPO (40 to 240 BPM) and LATCH. It plays what would sound, a step at a time: in NOTES the
 keys you hold, in CHORDS the chord's voices (the bass too), and the notes coming in over MIDI. UP-DOWN and DOWN-UP
 turn at the ends without repeating them, UP+DOWN repeats them, RANDOM never plays the same twice in a row, CHORD plays
-them all together (a comping rhythm). Each note goes out on its key's channel at its velocity, so that key's pressure
+them all together (a comping rhythm), **SCALE** (0.16) plays a random tone of the scale, from the lowest note held up
+OCTAVES octaves, never the same twice in a row (weights by degree, the root most, are on the roadmap). Each note goes out on its key's channel at its velocity, so that key's pressure
 shapes it. **LATCH** keeps the notes after you let go; a new press after letting go of everything starts a new set.
 A recording keeps what the ARP played, and is not arpeggiated again when it plays. Its settings are kept with SAVE;
 ON and LATCH are not (it starts off).

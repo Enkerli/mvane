@@ -64,8 +64,8 @@ for i in range(4):
 r(568, 160, 404, 196, TRAY, 18)
 ROW1 = [("FX", ["sends /", "+SAVE: keep"]), ("SEL", ["SCALE", "layer"]), ("ENV", ["(unused)"]), ("LFO", ["(unused)"]),
         ("EDIT", ["CHORD /", "SOUND"]), ("GLO", ["SETTINGS /", "MORE"])]
-ROW2 = [("HOME", ["PLAY / SOUND", "page"]), ("SAVE", ["settings +", "recording"]), ("ARP", ["layer; in it,", "PLAY: on/off"]),
-        ("SEQ", ["RECORD-", "INGS layer"]), ("PLAY", ["play / stop;", "in ARP: ARP"]), ("REC", ["tap: phrase", "hold: all"])]
+ROW2 = [("HOME", ["PLAY / SOUND", "page"]), ("SAVE", ["settings +", "recording"]), ("ARP", ["layer; lit:", "PLAY on/off"]),
+        ("SEQ", ["RECORD-", "INGS layer"]), ("PLAY", ["play / stop;", "ARP lit: ARP"]), ("REC", ["tap: phrase", "hold: all"])]
 LAYER = {"FX", "SEL", "EDIT", "GLO", "SEQ", "ARP"}
 for i, (n, role) in enumerate(ROW1):
     button(578 + i * 65, 172, 58, 82, n, role, CORAL if n in LAYER else (DIM if n in ("ENV", "LFO") else None))
@@ -171,8 +171,8 @@ row("FX", [["DRIVE"], ["CHORUS"], ["DELAY"], ["REVERB"], ["the reverb's model", 
 row("SEL", [["thousands", "0 to 4"], ["hundreds"], ["tens"], ["units"], ["the named list;", "SAVE: keep the", "number in yours"]],
     "SCALE: its number", CORAL)
 row("SEQ", [["SLOT", "1 to 8"], ["LOOP", "ON OFF"], [], [], ["the slot"]], "RECORDINGS", CORAL)
-row("ARP", [["MODE / TEMPO"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["the other page"]],
-    "PLAY in it: on, off", CORAL)
+row("ARP", [["MODE / TEMPO", "... CHORD SCALE"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["the other page"]],
+    "lit: PLAY on, off", CORAL)
 
 section("Errands")
 ERR = [   # (the errand's name, the task as a user test asks it, the answer)
@@ -286,8 +286,8 @@ LINKS = ('<p><a href="./">mvane yard</a> · <a href="cheatsheet.html">the cheat 
 with open(os.path.join(web, "cheatsheet.html"), "w") as f:
     f.write(HEAD.format(title="mvane yard cheat sheet", desc="What K1 to K4 and SELECT do on each page and layer of mvane yard on the M-VAVE FM-1.", css=CHEAT_CSS)
             + "<h1>mvane yard: the cheat sheet</h1><p>HOME switches the knobs' two pages (lit: SOUND). A layer: hold its "
-              "button and turn, or tap it open and tap it closed; EDIT and GLO follow the page. In the ARP's layer, PLAY "
-              "turns the ARP on and off.</p>\n" + frag + LINKS + "</main></body></html>\n")
+              "button and turn, or tap it open and tap it closed; EDIT and GLO follow the page. While ARP is lit (open, or "
+              "running), PLAY turns the ARP on and off.</p>\n" + frag + LINKS + "</main></body></html>\n")
 tasks = "".join(f'<li><label><input type="checkbox" data-k="{i}"> {escape(q)}</label>'
                 f'<details><summary>The answer<span class="sr"> to task {i + 1}</span></summary><p><b>{escape(a)}:</b> '
                 f"{escape(ans)}</p></details></li>" for i, (a, q, ans) in enumerate(ERR))

@@ -34,6 +34,7 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 #define TAKE_MAX (HIST_WORDS + REC_PRE)  /* the longest take: the whole history (a saved one: in the flash, read in place) */
 #define PHRASE_GAP_MS 3000u              /* REC tap: what followed the last silence this long */
 #define SLEEP_MS 4000u                   /* the history sleeps: a longer pause is kept as this long */
+#define ARP_NMODES 9u                    /* the ARP's modes (ARP_MODES) */
 #define HOLD_KEY 25u                     /* F#5, the last black key */
 
 /* ---------------------------------------------------------------- settings --- */
@@ -163,7 +164,7 @@ static void settings_load(void)
         || set.mpe_out > 1u || set.bend > 3u || set.page > 1u || set.phones < 2u || set.phones > 20u || set.spread > 127u
         || set.loop > 1u || (set.pcs && (set.pcs & 0x7000u) != 0u))
         settings_defaults();
-    if (set.arp_bpm < 40u || set.arp_bpm > 240u || set.arp_mode > 7u || set.arp_rate > 5u || set.arp_gate < 5u
+    if (set.arp_bpm < 40u || set.arp_bpm > 240u || set.arp_mode >= ARP_NMODES || set.arp_rate > 5u || set.arp_gate < 5u
         || set.arp_gate > 100u || set.arp_oct < 1u || set.arp_oct > 4u)   /* (before the ARP: its defaults) */
         set.arp_mode = 0, set.arp_rate = 3, set.arp_gate = 50, set.arp_oct = 1, set.arp_bpm = 120;
     if (set.arp_latch > 1u)
@@ -728,7 +729,8 @@ static void bus(uint32_t st, uint32_t d1, uint32_t d2, uint32_t to)
  * plays back as it was, not arpeggiated */
 #define ARP_MAX 16u
 #define ARP_SEQ (ARP_MAX * 4u)
-static const char *const ARP_MODES[8] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "RANDOM", "AS PLAYED", "CHORD"};
+static const char *const ARP_MODES[ARP_NMODES] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "RANDOM", "AS PLAYED",
+                                                 "CHORD", "SCALE"};   /* (0.16 SCALE: random over the scale, Alex) */
 static const char *const ARP_RATES[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 static const uint8_t ARP_DIV[6] = {1, 2, 3, 4, 6, 8};   /* steps a beat */
 static struct {
@@ -824,7 +826,31 @@ static void arp_tick(uint32_t now)
         arp.next_ms = now;
     arp_silence();                       /* (GATE 100%: legato, the last one held to here) */
     n = arp_run(idx, oct);
-    if (set.arp_mode == 7u) {            /* CHORD: all of them */
+    if (set.arp_mode == 8u) {            /* SCALE (0.16, Alex): a random tone of the scale, from the lowest note held up
+                                          * OCTAVES octaves (and its top), never the same twice in a row; on the lowest
+                                          * note's channel, at its velocity */
+        uint32_t lo = 0, k, c, cand[64], nc = 0, top, note;
+        uint16_t mask = scale_mask();
+        for (k = 1; k < arp.n; k++)
+            if (arp.note[k] < arp.note[lo])
+                lo = k;
+        top = arp.note[lo] + 12u * set.arp_oct;
+        for (c = arp.note[lo]; c <= top && c <= 127u && nc < 64u; c++)
+            if (mask >> ((c + 12u - set.tonic) % 12u) & 1u)
+                cand[nc++] = c;
+        if (nc > 1u) {                   /* (not the last one again) */
+            uint32_t w = 0;
+            for (c = 0; c < nc; c++)
+                if ((int32_t)cand[c] != arp.pos)
+                    cand[w++] = cand[c];
+            nc = w;
+        }
+        arp.rnd = arp.rnd * 1664525u + 1013904223u;
+        note = nc ? cand[(arp.rnd >> 16) % nc] : arp.note[lo];
+        arp.pos = (int32_t)note;         /* (SCALE: pos is the last note itself) */
+        bus(0x90u | arp.ch[lo], note, arp.vel[lo], LIVE | FROM_ARP);
+        arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[lo], arp.snd_n = 1;
+    } else if (set.arp_mode == 7u) {     /* CHORD: all of them */
         for (i = 0; i < n && arp.snd_n < ARP_SEQ; i++) {
             uint32_t k = idx[i], note = arp.note[k] + 12u * (uint32_t)oct[i];
             if (note > 127u)
@@ -872,12 +898,14 @@ static void arp_tick(uint32_t now)
 }
 static void all_off(void);
 static uint8_t arp_pg;                   /* the ARP layer's page: 0 MODE RATE GATE OCTAVES, 1 TEMPO LATCH */
+static void arp_handover(uint32_t on);    /* (below, after the panel's state) */
 static void arp_set(uint32_t on)         /* 0 off, 1 on, 2 on with LATCH */
 {
     static const char *const N[3] = {"OFF", "ON", "ON, LATCH"};
     if (!arp.on || !on) {                /* in or out: what sounds stops first (its offs would not find it) */
-        all_off();
-        arp_clear();
+        /* (0.16, Alex: "engaging the ARP stops the held chord") what is held, a chord (its key or HOLD) or keys in
+         * NOTES, is played again on the other side: into the ARP, or sounding as itself */
+        arp_handover(on);
     } else if (arp.on == 2u && on != 2u)
         arp_clear();                     /* (out of LATCH: what was kept goes) */
     arp.on = (uint8_t)on;
@@ -1527,6 +1555,22 @@ static void chord_key_down(uint32_t k, uint32_t vel)
         }
 }
 
+static void arp_handover(uint32_t on)    /* (arp_set) what sounds stops; what is held plays again on the other side */
+{
+    int32_t ck = ui.chord_key;
+    int keep = set.mode && ck >= 0 && (ui.hold || (ui.keys >> (uint32_t)ck & 1u));
+    uint32_t keys = set.mode ? 0u : ui.keys, k;
+    all_off();
+    arp_clear();
+    arp.on = (uint8_t)on;
+    if (keep) {
+        ui.chord_key = ck;
+        chord_sound();
+    }
+    for (k = 0; k < NKEYS; k++)
+        if (keys >> k & 1u)
+            bus(0x90u | ui.key_ch[k], ui.key_note[k], ui.vel[k] ? ui.vel[k] : 100u, LIVE);
+}
 static void all_off(void)
 {
     uint32_t k;
@@ -1664,8 +1708,16 @@ static const char *sound_name(void)
 static void sound_change_hold(void)
 {
     rt_mark();
-    int keep = set.mode && ui.chord_n && ui.chord_key >= 0 && (ui.hold || (ui.keys >> ui.chord_key & 1u));
+    /* (0.16, Alex: the ARP stopped on quick turns of PRESETS) a chord whose return is still due (a turn less than
+     * 40 ms after the last) counts as held too; with the ARP on, what it holds stays (only what sounds stops) */
+    int keep = set.mode && (ui.chord_n || ui.resound_at) && ui.chord_key >= 0
+               && (ui.hold || (ui.keys >> ui.chord_key & 1u));
     int32_t ck = ui.chord_key;
+    if (arp.on) {
+        arp_silence();
+        sound_apply();
+        return;
+    }
     all_off();
     sound_apply();
     if (keep) {
@@ -2000,7 +2052,7 @@ static void knob_info(uint32_t i, const char **label, char *val)
         static const char *const N[4] = {"MODE", "RATE", "GATE", "OCTAVES"};
         *label = N[i];
         if (i == 0)
-            text_cat(val, ARP_MODES[set.arp_mode % 8u]);
+            text_cat(val, ARP_MODES[set.arp_mode % ARP_NMODES]);
         else if (i == 1)
             text_cat(val, ARP_RATES[set.arp_rate % 6u]);
         else if (i == 2) {
@@ -2163,7 +2215,7 @@ static void knob_turn(uint32_t i, int32_t e)
         set_dirty = 1;
     } else if (l == B_ARP) {
         if (i == 0)
-            set.arp_mode = (uint8_t)((set.arp_mode + 8u + (uint32_t)d) % 8u), arp.pos = -1;
+            set.arp_mode = (uint8_t)((set.arp_mode + ARP_NMODES + (uint32_t)d) % ARP_NMODES), arp.pos = -1;
         else if (i == 1)
             set.arp_rate = (uint8_t)clamp(set.arp_rate + d, 0, 5);
         else if (i == 2)
@@ -2472,12 +2524,15 @@ static void input(void)
             app_say("KNOBS", set.page ? "SOUND" : "PLAY");
         } else if (k == B_REC)
             ui.rec_t = now ? now : 1u;
-        else if (k == B_PLAY && (ui.held == B_ARP || ui.latched == B_ARP)) {
-            /* (0.16, Alex) PLAY in the ARP's layer: the ARP on, off; with SEQ's open or held too, the recording with it */
-            int seq = ui.held == B_SEQ || ui.latched == B_SEQ, on = !arp.on;
+        else if (k == B_PLAY && (ui.held == B_ARP || ui.latched == B_ARP || arp.on)) {
+            /* (0.16, Alex) PLAY while the ARP is engaged (its layer open or held, or running: ARP lit): the ARP on,
+             * off; with SEQ's layer open or held too, the recording with it (both stop if either runs, else both
+             * start) */
+            int seq = ui.held == B_SEQ || ui.latched == B_SEQ, on = seq ? !(arp.on || player.playing) : !arp.on;
             if (ui.held >= 0)
                 ui.held_used = 1;
-            arp_set(on ? (set.arp_latch ? 2u : 1u) : 0u);
+            if ((arp.on != 0) != on)
+                arp_set(on ? (set.arp_latch ? 2u : 1u) : 0u);
             if (seq && on && !player.playing && take.count)
                 take_play(now);
             else if (seq && !on && player.playing)
@@ -2594,7 +2649,7 @@ static void input(void)
     ui.btn = btn;
     plat_glow(1);
     plat_leds(btn | (set_dirty || take_dirty ? 1u << B_SAVE : 0u)
-                  | (player.playing || (arp.on && layer_now() == B_ARP) ? 1u << B_PLAY : 0u)   /* (in ARP: the ARP's) */
+                  | (player.playing || arp.on ? 1u << B_PLAY : 0u)   /* (the recording's or the ARP's) */
                   | (layer_now() >= 0 ? 1u << layer_now() : 0u) | (set.page ? 1u << B_HOME : 0u)
                   | (arp.on ? 1u << B_ARP : 0u),
               keys | (ui.hold && set.mode ? 1u << HOLD_KEY : 0u) | (set.mode ? qual_leds() : 0u));
@@ -2648,9 +2703,10 @@ static void draw(void)
     } else if (lay == B_ARP) {           /* ARP: its modes, the one set lit; the tempo; on / latch */
         int32_t x = 10;
         char bp[32];
-        for (i = 0; i < 8u; i++) {
-            x = cv_text(x, i < 4u ? 2 : 18, &FONT_XS, ARP_MODES[i], i == set.arp_mode ? C_WHITE : C_GRAY) + 8;
-            if (i == 3u)
+        for (i = 0; i < ARP_NMODES; i++) {   /* (SCALE, the ninth: at the end of the first row) */
+            uint32_t m = i < 4u ? i : i == 4u ? 8u : i - 1u;
+            x = cv_text(x, i < 5u ? 2 : 18, &FONT_XS, ARP_MODES[m], m == set.arp_mode ? C_WHITE : C_GRAY) + 8;
+            if (i == 4u)
                 x = 10;
         }
         bp[0] = 0;
