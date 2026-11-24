@@ -47,7 +47,7 @@ VIBE_PARALLEL_AUDIO
 #define Q_ENGINE 0xFCu                   /* (Clipper, step 9) d1 | d2 << 7: Clipper's sound to play, 0x3FFF: YARD */
 #define Q_CUSER 0xFDu                    /* one of your Clipper sounds (cu_*, handed over first) */
 #define Q_ARP 0xF9u                      /* (the ARP, step 8) d1: 0 off, 1 on, 2 on with LATCH */
-#define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 3, d2: GATE (5..100) */
+#define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 4, d2: GATE (5..100) */
 #define Q_ARP_B 0xFBu                    /* d1: OCTAVES | (TEMPO - 40) >> 7 << 3, d2: (TEMPO - 40) & 127 */
 static uint8_t q_st[QN], q_d1[QN], q_d2[QN], q_rec[QN];
 static uint8_t q_live = 1;               /* (send's: 0 while a sound loads, which the history does not keep) */
@@ -643,13 +643,14 @@ static void keep_scale(void)             /* F4 on SCALE: the number kept in your
 }
 
 /* (the ARP's names, with it below) */
-static const char *const ARP_MODES[8];
+#define ARP_NMODES 9u                    /* (the FM-1's nine: 0.16 SCALE) */
+static const char *const ARP_MODES[ARP_NMODES];
 static const char *const ARP_RATES[6];
 static void all_off(void);
 static void arp_send(void)               /* its settings, to the audio */
 {
     uint32_t t = (uint32_t)set.arp_bpm - 40u;
-    send(Q_ARP_A, set.arp_mode | set.arp_rate << 3, set.arp_gate);
+    send(Q_ARP_A, set.arp_mode | set.arp_rate << 4, set.arp_gate);
     send(Q_ARP_B, set.arp_oct | (t >> 7) << 3, t & 127u);
 }
 static void arp_switch(uint32_t on)      /* on or off: what sounds stops first (its offs would not find it) */
@@ -738,7 +739,7 @@ static void page_value(uint32_t i, const char **label, char *val)   /* encoder i
         static const char *const N[4] = {"MODE", "RATE", "GATE", "OCTAVES"};
         *label = N[i];
         if (i == 0)
-            strcpy(val, ARP_MODES[set.arp_mode % 8u]);
+            strcpy(val, ARP_MODES[set.arp_mode % ARP_NMODES]);
         else if (i == 1)
             strcpy(val, ARP_RATES[set.arp_rate % 6u]);
         else if (i == 2) {
@@ -823,7 +824,7 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
         arp_send();
     } else if (page == PG_ARP) {
         if (i == 0)
-            set.arp_mode = (uint8_t)((set.arp_mode + 8u + (uint32_t)d) % 8u);
+            set.arp_mode = (uint8_t)((set.arp_mode + ARP_NMODES + (uint32_t)d) % ARP_NMODES);
         else if (i == 1) {
             int r = (int)set.arp_rate + d;
             set.arp_rate = (uint8_t)(r < 0 ? 0 : r > 5 ? 5 : r);
@@ -944,7 +945,7 @@ static void params_declare(void)
     for (i = PR_STYLE; i <= PR_HOLD; i++)
         GRP[i] = "B · CHORD";
     PRM[PR_ARP] = (vibe_param){"arp", "Arp", 0, 1, 0, "", 2, ONOFF_C};
-    PRM[PR_ARP_MODE] = (vibe_param){"arp_mode", "Arp mode", 0, 7, 0, "", 8, ARP_MODES};
+    PRM[PR_ARP_MODE] = (vibe_param){"arp_mode", "Arp mode", 0, ARP_NMODES - 1u, 0, "", ARP_NMODES, ARP_MODES};
     PRM[PR_ARP_RATE] = (vibe_param){"arp_rate", "Arp rate", 0, 5, 3, "", 6, ARP_RATES};
     PRM[PR_ARP_GATE] = (vibe_param){"arp_gate", "Arp gate", 5, 100, 50, "%", 96, 0};
     PRM[PR_ARP_OCT] = (vibe_param){"arp_octaves", "Arp octaves", 1, 4, 1, "", 4, 0};
@@ -1028,7 +1029,7 @@ static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped contr
             chord_release();
         break;
     case PR_ARP: if ((v != 0) != set.arp_on) arp_switch((uint32_t)(v != 0)); break;
-    case PR_ARP_MODE: set.arp_mode = (uint8_t)((uint32_t)v % 8u), arp_send(); break;
+    case PR_ARP_MODE: set.arp_mode = (uint8_t)((uint32_t)v % ARP_NMODES), arp_send(); break;
     case PR_ARP_RATE: set.arp_rate = (uint8_t)(v < 0 ? 0 : v > 5 ? 5 : v), arp_send(); break;
     case PR_ARP_GATE: set.arp_gate = (uint8_t)(v < 5 ? 5 : v > 100 ? 100 : v), arp_send(); break;
     case PR_ARP_OCT: set.arp_oct = (uint8_t)(v < 1 ? 1 : v > 4 ? 4 : v), arp_send(); break;
@@ -1109,7 +1110,7 @@ static void settings_load(void)          /* (the defaults are set; a good record
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
     slot = (uint8_t)(rec.slot & 7u), loop_on = (uint8_t)(rec.loop != 0);
-    if (rec.arp_bpm >= 40u && rec.arp_bpm <= 240u && rec.arp_mode < 8u && rec.arp_rate < 6u && rec.arp_gate >= 5u
+    if (rec.arp_bpm >= 40u && rec.arp_bpm <= 240u && rec.arp_mode < ARP_NMODES && rec.arp_rate < 6u && rec.arp_gate >= 5u
         && rec.arp_gate <= 100u && rec.arp_oct >= 1u && rec.arp_oct <= 4u && rec.arp_latch <= 1u) {   /* (the ARP's: as the FM-1 left them) */
         set.arp_mode = rec.arp_mode, set.arp_rate = rec.arp_rate, set.arp_gate = rec.arp_gate, set.arp_oct = rec.arp_oct;
         set.arp_bpm = rec.arp_bpm, set.arp_latch = rec.arp_latch;
@@ -1514,7 +1515,8 @@ static uint32_t arp_to_grid(int next)    /* ms to the DAW's next step on its gri
 static uint32_t arp_first_ms(void) { return arp_daw() ? a_ms + arp_to_grid(0) : a_ms + 12u; }
 #define ARP_MAX 16u
 #define ARP_SEQ (ARP_MAX * 4u)
-static const char *const ARP_MODES[8] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "RANDOM", "AS PLAYED", "CHORD"};
+static const char *const ARP_MODES[ARP_NMODES] = {"UP", "DOWN", "UP-DOWN", "DOWN-UP", "UP+DOWN", "RANDOM", "AS PLAYED",
+                                                 "CHORD", "SCALE"};
 static const char *const ARP_RATES[6] = {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"};
 static const uint8_t ARP_DIV[6] = {1, 2, 3, 4, 6, 8};   /* steps a beat */
 static struct {
@@ -1610,7 +1612,29 @@ static void arp_tick(uint32_t now)
         arp.next_ms = now;
     arp_silence();                       /* (GATE 100%: legato, the last one held to here) */
     n = arp_run(idx, oct);
-    if (acfg.mode == 7u) {            /* CHORD: all of them */
+    if (acfg.mode == 8u) {            /* SCALE (0.16, as the FM-1's): a random tone of the scale, from the lowest note
+                                       * held up OCTAVES octaves, never twice in a row; the lowest note's channel */
+        uint32_t lo = 0, k, c, cand[64], nc = 0, top, note, mask = a_mask();
+        for (k = 1; k < arp.n; k++)
+            if (arp.note[k] < arp.note[lo])
+                lo = k;
+        top = arp.note[lo] + 12u * acfg.oct;
+        for (c = arp.note[lo]; c <= top && c <= 127u && nc < 64u; c++)
+            if (mask >> ((c + 12u - a_tonic) % 12u) & 1u)
+                cand[nc++] = c;
+        if (nc > 1u) {
+            uint32_t w = 0;
+            for (c = 0; c < nc; c++)
+                if ((int32_t)cand[c] != arp.pos)
+                    cand[w++] = cand[c];
+            nc = w;
+        }
+        arp.rnd = arp.rnd * 1664525u + 1013904223u;
+        note = nc ? cand[(arp.rnd >> 16) % nc] : arp.note[lo];
+        arp.pos = (int32_t)note;
+        arp_out(0x90u | arp.ch[lo], note, arp.vel[lo]);
+        arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[lo], arp.snd_n = 1;
+    } else if (acfg.mode == 7u) {     /* CHORD: all of them */
         for (i = 0; i < n && arp.snd_n < ARP_SEQ; i++) {
             uint32_t k = idx[i], note = arp.note[k] + 12u * (uint32_t)oct[i];
             if (note > 127u)
@@ -1688,7 +1712,7 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
             arp_clear();                 /* (in, out, out of LATCH: what it held goes) */
         arp.on = (uint8_t)(d1 > 2u ? 2u : d1);
     } else if (st == Q_ARP_A) {
-        acfg.mode = (uint8_t)(d1 & 7u), acfg.rate = (uint8_t)((d1 >> 3) % 6u);
+        acfg.mode = (uint8_t)((d1 & 15u) % ARP_NMODES), acfg.rate = (uint8_t)((d1 >> 4) % 6u);
         acfg.gate = (uint8_t)(d2 < 5u ? 5u : d2 > 100u ? 100u : d2);
         arp.pos = -1;
     } else if (st == Q_ARP_B) {
@@ -2280,13 +2304,13 @@ void vibe_on_draw(uint16_t *fb)
         vg_text("REC: LAST PHRASE (HELD: ALL)   LOOPING: OVERDUB (HELD: UNDO)", 16, 194, VG_SMALL, C_DIM, 0);
     } else {                             /* ARP: its modes, on or off, its tempo (or the DAW's) */
         char nb[12];
-        for (i = 0; i < 8u; i++) {
-            int x = 16 + (int)(i % 4u) * 112, y = 70 + (int)(i / 4u) * 28, on = i == set.arp_mode;
+        for (i = 0; i < ARP_NMODES; i++) {   /* (five a row: the ninth, SCALE) */
+            int x = 16 + (int)(i % 5u) * 90, y = 70 + (int)(i / 5u) * 28, on = i == set.arp_mode;
             if (on)
-                vg_round(x, y, 106, 24, 4, PG_COLOR[PG_ARP]);
+                vg_round(x, y, 85, 24, 4, PG_COLOR[PG_ARP]);
             else
-                vg_frame(x, y, 106, 24, 1, C_FAINT);
-            vg_text(ARP_MODES[i], x + 53, y + 4, VG_MED, on ? C_BG : C_DIM, 1);
+                vg_frame(x, y, 85, 24, 1, C_FAINT);
+            vg_text(ARP_MODES[i], x + 42, y + 4, VG_MED, on ? C_BG : C_DIM, 1);
         }
         t[0] = 0;
         cat(t, set.arp_on ? "ARP ON" : "ARP OFF");

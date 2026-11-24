@@ -45,7 +45,7 @@ const char *const SYNTH_ONSET_NAMES[SYNTH_ONSETS] = {"OFF", "TONGUE", "CLICK", "
 
 /* YARD's own sounds (0.10, Alex 2026-11-22: the light synth to build on), first on PRESETS: TONE REL GLIDE ATTACK DECAY
  * RES DETUNE SUB PLUCK (GLIDE, the PLAY page's, stays as it is); mono: one voice, legato, whatever PLAY says */
-/* (0.16) each one's LEVEL measured (make loud: the same ordinary phrase's loudest moment to -26 dB, as Clipper's
+/* (0.16) each one's LEVEL measured (make loud: the same ordinary phrase's loudest moment to -18 dB (-26 before the outputs went up 8 dB), as Clipper's
  * trims): they were 16 dB apart, CLAV the quietest, SAW the loudest */
 const synth_sound_t SYNTH_SOUNDS[] = {
     {"SAW", 0, {56, 60, 30, 24, 64, 0, 0, 0, 0, [SP_LEVEL] = 52}},          /* (0.9's saw, as it was; 0.16: 6 dB down) */
@@ -550,7 +550,7 @@ void synth_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     uint32_t i, handed = 0, j, busy = 0;
     /* each voice: a seven-note chord at full velocity peaks near -10 dBFS (the FM-1's output stage distorts well
      * before digital full scale: Alex, 2026-11-21) */
-    float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.06f;
+    float gain = (float)master_q12 * (1.0f / 4096.0f) * 0.15f;   /* (0.16: 0.06 before, x 2.5 as Clipper's, clp.c) */
     if (prm[SP_LEVEL] && prm[SP_LEVEL] != 64u)  /* LEVEL: the sound's own (0 and 64: 0 dB, as before it) */
         gain *= fm_exp2f(SYNTH_LEVEL_DB(prm[SP_LEVEL]) * (1.0f / 6.0206f));
     float rel_s = 0.005f * fm_exp2f((float)prm[SP_REL] * (8.6f / 127.0f));      /* 5 ms .. 2 s */

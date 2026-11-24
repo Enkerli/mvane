@@ -3,7 +3,7 @@
  * some almost inaudible, with the same MIDI"): before, the trim only kept the hardest playing under the limiter, so a
  * pluck's peaks set its level and ordinary playing came out up to 17 dB under the median sound.
  * Now: the ordinary phrase (tools/loud_phrase.h: four-note chords at velocity 100, moderate pressure; a mono sound, a
- * line) is measured at its loudest moment (400 ms, K-weighted), and the trim brings it to TARGET_DB (-26), up to +12 dB,
+ * line) is measured at its loudest moment (400 ms, K-weighted), and the trim brings it to TARGET_DB (-18; -26 before the outputs went up 8 dB), up to +12 dB,
  * as far as the hardest playing (reduction(): velocity 127, pressure 100, chords of six) leaves the master limiter
  * working at most LIM_MAX_DB (6), the grit Alex heard at 11 dB (2026-11-22) far off. Writes app/clipper/gen/clp_trim.h
  * (Q15, above 32768 a boost), then plays every sound again with its trim: the spread and the limiting left.
@@ -18,7 +18,7 @@ int plat_cpu2_on(void) { return 0; }
 int plat_cpu2_run(void (*f)(uint32_t), uint32_t a) { (void)f, (void)a; return 0; }
 int plat_cpu2_wait(void) { return 0; }
 static int32_t lr[512];
-static double TARGET_DB = -26.0;   /* (TARGET=, LIM= in the environment: to try others) */
+static double TARGET_DB = -18.0;   /* (TARGET=, LIM= in the environment: to try others) */
 static double LIM_MAX_DB = 6.0;
 #define BOOST_MAX_DB 12.0
 #define HARD_PRS 100u        /* (Alex's recordings to 2026-11-22: pressure's median 31, its highest 112) */

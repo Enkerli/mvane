@@ -221,7 +221,8 @@ ON and LATCH are not (it starts off).
 ## Sounds
 
 PRESETS steps through the sounds in families, by how each behaves; in each family YARD's come first, then your own, then Clipper's (the full list:
-[SOUNDS.md](SOUNDS.md)). With the same MIDI they all play at about the same loudness (0.16).
+[SOUNDS.md](SOUNDS.md)). With the same MIDI they all play at about the same loudness, 8 dB louder than 0.15 (0.16):
+if the headphones distort at the top of MASTER, lower PHONES MAX (GLO on the SOUND page).
 
 | Family | What | For |
 | --- | --- | --- |

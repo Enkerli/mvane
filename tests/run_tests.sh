@@ -4,6 +4,7 @@
 # the file transfer (tools/yard.py against the simulator), the page's conversions. From the repository's root.
 set -eu
 cd "$(dirname "$0")/.."
+python3 tools/sync_check.py       # the FM-1 and the native port agree (ARP modes, YARD values, DAW numbers)
 make check
 make synth-cmp
 make clp-split

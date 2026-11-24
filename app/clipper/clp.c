@@ -689,7 +689,11 @@ void clp_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     for (b = 0; b + CTL <= n; b += CTL) {        /* Clipper's blocks (audio.c audio_block): Q15 -> 24-bit */
         uint32_t i;
         mix_block(lr + 2u * b, CTL);
-        for (i = 0; i < 2u * CTL; i++)
-            lr[2u * b + i] <<= 7;
+        for (i = 0; i < 2u * CTL; i++) {         /* (0.16, Alex: sustained sounds too quiet in a room) x 2.5 (+8 dB)
+                                                  * after the limiter, not into it: the ceiling about -3 dBFS, was
+                                                  * -11; YARD the same (synth.c), so the two stay matched */
+            int32_t v = lr[2u * b + i] * 320;
+            lr[2u * b + i] = v > 8388607 ? 8388607 : v < -8388607 ? -8388607 : v;
+        }
     }
 }

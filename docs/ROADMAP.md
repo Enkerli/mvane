@@ -65,6 +65,12 @@ chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The
    (CLAV -35.6, BASS -32.3, SAW -19.9; a mono voice about 6 dB under a chord); now a LEVEL per sound (the ONSET page's
    third value, CC 29, -12 to +12 dB, kept with the sound; natively a DAW parameter), the factory values measured to
    -26 dB, all 13 within 0.2 dB of it.
+   **Then the level itself (0.16, Alex: "sustained volume remains an issue ... unusable" in a quiet room; Chords EZ
+   and YARD's quieter than before):** every sound at -26 dB was the matching's doing, under an output whose ceiling
+   was about -11 dBFS (Clipper's limiter, then its scaling: the headroom from the analog-distortion work). Both
+   engines now 8 dB up after their limiters (x 2.5: the ceiling about -3 dBFS), so the matching holds and the
+   limiter works no more than before (ordinary playing: none for half the sounds, under 0.4 dB for nine in ten): the
+   sounds at -18 dB, Afro Keys with Alex's FX -16.8. PHONES MAX is there if the headphones distort again.
 5. **Program changes followed** (Alex): a program change on MIDI in picks the sound (YARD's factory and user sounds,
    then Clipper's, in the PRESETS order; bank select for the rest), and the recorder keeps it, so a recording replays
    its changes of sound; sending one when the sound changes on the device, as an option. Today none are read.

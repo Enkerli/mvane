@@ -1,6 +1,6 @@
 # ONSET (0.15, Vane's attack transients): a noise burst at each note's start over the note whatever its envelope.
 # PAD opens slowly: its first 40 ms near silent alone, a CHIFF heard with ONSET at full; a legato note in MONO has none.
-# (0.16: PAD's LEVEL 4 dB down, every figure with it: alone about -48, with CHIFF about -39)
+# (0.16: PAD's LEVEL 4 dB down, then every output 8 dB up: alone about -40, with CHIFF about -31)
 # app/build/host/mvane-yard_host app/tests/onset.txt app/build/host
 wait 600
 spin ALGO -1
@@ -9,7 +9,7 @@ wait 200
 peakreset
 midi 90 3C 7F
 wait 40
-expect peak_db_max -44
+expect peak_db_max -36
 midi 80 3C 00
 wait 1500
 # CHIFF (CC 27: its type, the middle of its range; CC 28: its level)
@@ -20,7 +20,7 @@ expect onset 3
 peakreset
 midi 90 3C 7F
 wait 40
-expect peak_db_min -41
+expect peak_db_min -33
 midi 80 3C 00
 wait 1500
 # its level 0: none again
@@ -29,7 +29,7 @@ wait 20
 peakreset
 midi 90 3C 7F
 wait 40
-expect peak_db_max -44
+expect peak_db_max -36
 midi 80 3C 00
 wait 1500
 # (0.16) LEVEL (CC 29; 64 is 0 dB, half a dB a step): PAD at 56 (-4 dB) as made; at 76 (+6 dB), held 1 s, its
@@ -38,7 +38,7 @@ expect level 56
 peakreset
 midi 90 3C 7F
 wait 1000
-expect peak_db_max -37
+expect peak_db_max -29
 midi 80 3C 00
 wait 2500
 midi B0 1D 4C
@@ -47,7 +47,7 @@ expect level 76
 peakreset
 midi 90 3C 7F
 wait 1000
-expect peak_db_min -30
+expect peak_db_min -22
 midi 80 3C 00
 wait 2500
 midi B0 1D 38

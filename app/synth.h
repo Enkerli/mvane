@@ -24,7 +24,7 @@ enum { SP_TONE, SP_REL, SP_GLIDE, SP_ATTACK, SP_DECAY, SP_RES, SP_DETUNE, SP_SUB
  * (Assets/transients/gen_inharmonic.py, its recipes), over the note whatever its envelope; ONSET LVL its level */
 /* LEVEL (0.16, Alex: sounds "vary widely in overall loudness"): the sound's own level, in half dB from 64 (0 dB),
  * -12 to +12 dB as the panel turns it (40..88); 0, a sound from before it, is 0 dB too. The factory sounds' are
- * measured (make loud: the same ordinary phrase to -26 dB, as Clipper's trims) */
+ * measured (make loud: the same ordinary phrase to -18 dB, as Clipper's trims) */
 #define SYNTH_LEVEL_DB(v) ((v) ? ((float)(v) - 64.0f) * 0.5f : 0.0f)
 #define SYNTH_LEVEL_LO 40u
 #define SYNTH_LEVEL_HI 88u
