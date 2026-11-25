@@ -142,6 +142,49 @@ int main(void)
         rec_put(&r, now += 5, 0xD1, 1, 0);
         assert(!r.full);
     }
+    /* overdub from mid-pass (rec_mark_splice): the pass's first part copied after the mark, so the capture at the
+     * pass's end is the whole pass, its first notes at their own times, the new note at its own */
+    {
+        static rec_take loop, layer;
+        rec_player p;
+        uint32_t i, t, seen = 0;
+        rec_unlock(&r);
+        rec_put(&r, now += 1000, 0x90, 60, 100);       /* the loop: C at 0, off at 300, E at 500, off at 700; 1000 ms */
+        rec_put(&r, now += 300, 0x80, 60, 0);
+        rec_put(&r, now += 200, 0x90, 64, 100);
+        rec_put(&r, now += 200, 0x80, 64, 0);
+        assert(rec_capture(&r, now, 900, &loop));
+        loop.duration_ms = 1000u;
+        rec_play_start(&p, &loop, now += 1000);         /* a pass: polled to 400 ms, then the tap */
+        t = now;
+        ngot = 0;
+        for (clock_ms = t; clock_ms <= t + 400u; clock_ms++)
+            rec_play_poll(&p, clock_ms, emit, 0);
+        assert(ngot >= 2 && got[ngot - 1].st == 0x80 && got[ngot - 1].d1 == 60);   /* (a prefix first: the latest pressure) */
+        {
+            uint32_t m = rec_mark_splice(&r, t + 400u, &loop, p.pos, 400u);
+            assert(m != r.head);
+            for (clock_ms = t + 401u; clock_ms <= t + 1000u; clock_ms++) {   /* the rest of the pass into the history */
+                unsigned before = ngot;
+                rec_play_poll(&p, clock_ms, emit, 0);
+                for (i = before; i < ngot; i++)
+                    rec_put(&r, clock_ms, got[i].st, got[i].d1, got[i].d2);
+                if (clock_ms == t + 800u)
+                    rec_put(&r, clock_ms, 0x90, 67, 90), rec_put(&r, clock_ms + 50u, 0x80, 67, 0);   /* the overdub */
+            }
+            assert(rec_capture_from(&r, m, 1000u, &layer));
+        }
+        play(&layer);
+        for (i = 0; i < ngot; i++) {
+            uint32_t at = got[i].t - 1000000u;
+            if (got[i].st == 0x90 && got[i].d1 == 60) seen |= 1, assert(at == 0);
+            if (got[i].st == 0x80 && got[i].d1 == 60) seen |= 2, assert(at == 300);
+            if (got[i].st == 0x90 && got[i].d1 == 64) seen |= 4, assert(at >= 500 && at <= 502);
+            if (got[i].st == 0x90 && got[i].d1 == 67) seen |= 8, assert(at >= 800 && at <= 802);
+        }
+        assert(seen == 15);
+        rec_unlock(&r);
+    }
     /* unlocked, the ring keeps the newest */
     for (unsigned i = 0; i < 10000; i++)
         rec_put(&r, now += 5, 0xD1, (uint8_t)(i & 127), 0);

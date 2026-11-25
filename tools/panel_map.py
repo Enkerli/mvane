@@ -62,13 +62,13 @@ t(418, 230, "and its four knobs", 12, CORAL, 600, "middle")
 for i in range(4):
     knob(610 + i * 104, 92, 22, f"K{i + 1}", ["as the", "screen says"] if i == 0 else [])
 r(568, 160, 404, 196, TRAY, 18)
-ROW1 = [("FX", ["sends /", "+SAVE: keep"]), ("SEL", ["SCALE", "layer"]), ("ENV", ["(unused)"]), ("LFO", ["(unused)"]),
+ROW1 = [("FX", ["effects;", "+SAVE: keep"]), ("SEL", ["SCALE", "layer"]), ("ENV", ["envelope;", "+SAVE: keep"]), ("LFO", ["(unused)"]),
         ("EDIT", ["CHORD /", "SOUND"]), ("GLO", ["SETTINGS /", "MORE"])]
 ROW2 = [("HOME", ["PLAY / SOUND", "page"]), ("SAVE", ["settings +", "recording"]), ("ARP", ["layer; lit:", "PLAY on/off"]),
         ("SEQ", ["RECORD-", "INGS layer"]), ("PLAY", ["play / stop;", "ARP lit: ARP"]), ("REC", ["tap: phrase", "hold: all"])]
-LAYER = {"FX", "SEL", "EDIT", "GLO", "SEQ", "ARP"}
+LAYER = {"FX", "SEL", "ENV", "EDIT", "GLO", "SEQ", "ARP"}
 for i, (n, role) in enumerate(ROW1):
-    button(578 + i * 65, 172, 58, 82, n, role, CORAL if n in LAYER else (DIM if n in ("ENV", "LFO") else None))
+    button(578 + i * 65, 172, 58, 82, n, role, CORAL if n in LAYER else (DIM if n == "LFO" else None))
 for i, (n, role) in enumerate(ROW2):
     button(578 + i * 65, 264, 58, 82, n, role, CORAL if n in LAYER else (TEAL if n == "HOME" else None))
 t(770, 376, "coral: a layer button (hold it and turn, or tap to open, tap to close)", 11.5, CORAL, 600, "middle")
@@ -164,14 +164,17 @@ row("EDIT, PLAY page", [["VOICING", "CLOSE OPEN", "WIDE PAIRS"], ["VOICES", "3 t
 row("EDIT, SOUND page", [["DETUNE / WAVE", "/ ONSET"], ["SUB / PW", "/ ONSET LVL"], ["RES / NOISE", "/ LEVEL"],
                          ["PLUCK / FILTER", "/ -"], ["the next page", "(three); SAVE:", "keep the sound"]],
     "a YARD sound", CORAL)
-row("", [["engine 1-4 / 5-8", "/ ATTACK"], ["... / DECAY"], ["... / SUSTAIN"], ["... / RELEASE"], ["the next page", "SAVE: keep it"]],
+row("", [["engine 1 / 5"], ["engine 2 / 6"], ["engine 3 / 7"], ["engine 4 / 8"], ["the other page", "SAVE: keep it"]],
     "a Clipper sound", CORAL)
-row("FX", [["DRIVE"], ["CHORUS"], ["DELAY"], ["REVERB"], ["the reverb's model", "(YARD: as EDIT)"]],
-    "Clipper's sends", CORAL)
+row("ENV", [["ATTACK"], ["DECAY"], ["SUSTAIN", "(YARD: PLUCK)"], ["RELEASE"], ["SAVE: keep", "the sound"]],
+    "every sound's envelope", CORAL)
+row("FX", [["DRIVE / SPACE", "SPACE: more reverb,", "delay and width"], ["CHORUS / ROOM", "ROOM: the reverb's", "model"],
+           ["DELAY / -"], ["REVERB / -"], ["the other page", "SAVE: keep it"]],
+    "the effects (YARD: none yet)", CORAL)
 row("SEL", [["thousands", "0 to 4"], ["hundreds"], ["tens"], ["units"], ["the named list;", "SAVE: keep the", "number in yours"]],
     "SCALE: its number", CORAL)
 row("SEQ", [["SLOT", "1 to 8"], ["LOOP", "ON OFF"], [], [], ["the slot"]], "RECORDINGS", CORAL)
-row("ARP", [["MODE / TEMPO", "... CHORD SCALE"], ["RATE / LATCH"], ["GATE"], ["OCTAVES"], ["the other page"]],
+row("ARP", [["MODE / TEMPO", "... CHORD SCALE"], ["RATE / LATCH"], ["GATE / VELO", "VELO: contrast kept"], ["OCTAVES / FEEL", "FEEL: accents"], ["the other page"]],
     "lit: PLAY on, off", CORAL)
 
 section("Errands")
@@ -192,7 +195,7 @@ ERR = [   # (the errand's name, the task as a user test asks it, the answer)
     ("Keep what you just played", "Keep the last phrase you played as a recording in slot 3.",
      "tap SEQ, SELECT to 3, tap SEQ - play - tap REC (held: the whole history) - SAVE"),
     ("Loop and overdub", "Loop a recording, add a layer, then undo it.",
-     "tap SEQ - K2 LOOP ON - tap SEQ - PLAY - tap REC: a layer at the next pass; hold REC: undo"),
+     "tap SEQ - K2 LOOP ON - tap SEQ - PLAY - tap REC: overdub from now, a layer each pass; hold REC: undo"),
     ("The arpeggiator", "Turn the arpeggiator on, latched, at 1/16.",
      "tap ARP - K2 RATE to 1/16 - SELECT, K2 LATCH ON - PLAY (the ARP on) - tap ARP"),
     ("Edit and keep a sound", "Make CLAV 3 dB quieter and keep it as your own.",
@@ -205,7 +208,7 @@ for a, _, b in ERR:
     t(300, y + 20, b, 13, TXT)
     y += 36
 y += 10
-t(W / 2, y, "mvane yard 0.16 - tools/panel_map.py", 11, SOFT, 500, "middle", True)
+t(W / 2, y, "mvane yard 0.17 - tools/panel_map.py", 11, SOFT, 500, "middle", True)
 H = y + 20
 
 svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" '

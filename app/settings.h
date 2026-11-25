@@ -45,7 +45,9 @@ typedef struct {
     uint8_t onset, onset_lvl;            /* (0.15) YARD's ONSET and ONSET LVL (its p[]'s fourteenth and fifteenth) */
     uint8_t level;                       /* (0.16) YARD's LEVEL (its p[]'s sixteenth; 0: from before it, 0 dB) */
     uint8_t loud;                        /* (0.16) LOUD, the output's compressor: 0 OFF, 1 +3 DB, 2 +6 DB (app/loud.h) */
-    uint8_t room[1];                    /* (for settings to come: 0 their default, so no new record is needed) */
+    uint8_t arp_vel;                     /* (0.17) the ARP's velocity: VELO (the contrast kept) in the high nibble, FEEL
+                                          * (accents, a little randomness) in the low; each 0 its default, 1..11 0..100% in
+                                          * 10% steps (the last of the room: a record from before reads as the defaults) */
 } settings_t;
 typedef char settings_same_size[sizeof(settings_t) == 52u ? 1 : -1];   /* (MVA: as 0.11 wrote it: pcs took room) */
 

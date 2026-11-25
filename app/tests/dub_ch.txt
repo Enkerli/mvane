@@ -32,15 +32,15 @@ wait 20
 midi 93 40 64
 expect in_ch 3
 midi 83 40 00
-# overdub a pass on channel 1: it lands on 16; the next layer's then goes to 15
+# overdub a pass on channel 1 (0.17: from the tap): it lands on 16; the next layer's then goes to 15
 tap REC
-wait 450
+wait 100
 expect overdub 2
 midi 90 3E 64
 wait 20
 expect in_ch 15
 midi 80 3E 00
-wait 450
+wait 250
 expect layers 1
 midi 90 3E 64
 wait 20

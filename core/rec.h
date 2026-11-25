@@ -65,6 +65,13 @@ uint32_t rec_capture(rec_ring *r, uint32_t now_ms, uint32_t gap_ms, rec_take *ta
 /* Overdub: a time word at now_ms (its index: where a pass starts), and the take from that word to the head, its
  * length as given (a loop's), locked as a capture is */
 uint32_t rec_mark(rec_ring *r, uint32_t now_ms);
+/* Overdub from now, in a pass under way (0.17, Alex: "start right away instead of waiting for the next loop"): a mark
+ * at now_ms, then the take's first n words copied (what the pass has played so far, the take's prefix with them: a
+ * player's pos) and a time word bringing them to at_ms (the pass's time now). From the mark the history then holds the
+ * pass from its top, as an overdub from the top would, and a capture from it at the pass's end is the whole pass. The
+ * take's own words may be in the same ring (locked: never written over). Returns the mark, or r->head when the
+ * history has no room (full set) */
+uint32_t rec_mark_splice(rec_ring *r, uint32_t now_ms, const rec_take *take, uint32_t n, uint32_t at_ms);
 uint32_t rec_capture_from(rec_ring *r, uint32_t start, uint32_t duration_ms, rec_take *take);
 void rec_unlock(rec_ring *r);            /* the capture is saved, or let go: the history may write over it again */
 

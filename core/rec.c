@@ -186,6 +186,29 @@ uint32_t rec_mark(rec_ring *r, uint32_t now_ms)
     return r->head - 1u;
 }
 
+uint32_t rec_mark_splice(rec_ring *r, uint32_t now_ms, const rec_take *take, uint32_t n, uint32_t at_ms)
+{
+    uint32_t i, t = 0, m, gap;
+    if (n > take->count)
+        n = take->count;
+    if (rec__room(r) < n + 8u) {         /* (the mark, the words, the time words to at_ms, and room after) */
+        r->full = 1;
+        return r->head;
+    }
+    m = rec_mark(r, now_ms);
+    for (i = 0; i < n; i++) {
+        uint32_t w = rec_word(take, i);
+        t += rec__word_dt(w);
+        rec__push(r, w);
+    }
+    for (gap = at_ms > t ? at_ms - t : 0u; gap;) {   /* to the pass's time now: the next event's dt counts from now_ms */
+        uint32_t g = gap > 0xFFFFFFu ? 0xFFFFFFu : gap;
+        rec__push(r, (g >> 16) << 24 | (g & 0xFFFFu));
+        gap -= g;
+    }
+    return m;
+}
+
 uint32_t rec_capture_from(rec_ring *r, uint32_t start, uint32_t duration_ms, rec_take *take)
 {
     uint32_t n = rec_count(r), t, last_t;

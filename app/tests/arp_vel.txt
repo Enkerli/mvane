@@ -1,0 +1,54 @@
+# The ARP's velocity (0.17, Alex: a light key under a loud ARP was jarring; the steps all alike): VELO keeps 40% of
+# each note's contrast with the mean of the notes held (at least 32), FEEL (30%) accents the beat and adds a little
+# randomness. ARP's second page: K3 VELO, K4 FEEL. app/build/host/mvane-yard_host app/tests/arp_vel.txt app/build/host
+wait 600
+spin ALGO -1
+tap ARP
+tap PLAY
+tap ARP
+wait 20
+expect arp 1
+# UP at 1/16: three keys hard, one barely touched (C4 at 10): its step is not near silent
+key 7 down 10
+key 9 down 127
+key 11 down 127
+key 12 down 127
+wait 20
+expect arp_note 60
+expect arp_vel >60
+expect arp_vel <100
+wait 125
+expect arp_vel >95
+wait 125
+wait 125
+wait 125
+expect arp_note 60
+expect arp_vel >60
+expect arp_vel <100
+# VELO to EVEN, FEEL OFF: every step at the mean (97)
+press ARP
+spin SELECT 1
+spin K3 -4
+spin K4 -3
+wait 30
+shot arp_vel.png
+release ARP
+wait 500
+expect arp_vel 97
+wait 125
+expect arp_vel 97
+# VELO AS PLAYED: the light key as it was (at least 32)
+press ARP
+spin K3 10
+release ARP
+wait 875
+expect arp_note 60
+expect arp_vel 32
+key 7 up
+key 9 up
+key 11 up
+key 12 up
+wait 200
+tap PLAY
+wait 50
+expect arp 0

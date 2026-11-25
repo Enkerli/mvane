@@ -110,7 +110,7 @@ static void settings_defaults(void)
     set.pcs = (uint16_t)(0x8000u | 2741u);
     set.loop = 0;
     set.arp_mode = 0, set.arp_rate = 3, set.arp_gate = 50, set.arp_oct = 1, set.arp_bpm = 120;
-    mvane_zero(set.room, sizeof set.room);
+    set.arp_vel = 0;
 }
 
 static void settings_load(void)
@@ -130,7 +130,7 @@ static void settings_load(void)
         settings_defaults();
         mvane_copy(&set, &r.v11b, sizeof r.v11b);
         set.magic = SET_MAGIC, set.spread = 0, set.pcs = 0, set.loop = 0;
-        mvane_zero(set.room, sizeof set.room);
+        set.arp_vel = 0;
     } else if (n == (int)sizeof r.v11 && r.v11.magic == SET_MAGIC_11) {   /* a 0.11 build's: the same, PHONES 100% */
         settings_defaults();
         mvane_copy(&set, &r.v11, sizeof r.v11);
@@ -744,9 +744,35 @@ static struct {
     uint8_t n, held;                     /* its notes; how many still held (LATCH: 0, all let go) */
     uint8_t note[ARP_MAX], ch[ARP_MAX], vel[ARP_MAX], down[ARP_MAX];   /* in the order played */
     uint8_t snd_n, snd_note[ARP_SEQ], snd_ch[ARP_SEQ];   /* sounding now (CHORD: several) */
-    uint32_t next_ms, off_ms, rnd;
+    uint32_t next_ms, off_ms, rnd, vrnd, step;   /* (vrnd: FEEL's, apart from RANDOM's; step: steps since the first) */
     int32_t pos, dir;                    /* where in the run, and which way (the bouncing modes) */
 } arp;
+/* (0.17, Alex: "if the current arp is playing at vel 127 and I lightly hit a key, the effect is more jarring than it
+ * should be"; "we should probably vary velocity in arpeggiated notes") A step's velocity: VELO keeps that much of the
+ * contrast between its note's velocity and the mean of the notes held (100% AS PLAYED, 0% EVEN: all at the mean; 40%
+ * by default), never under ARP_VEL_MIN; FEEL (30% by default) accents the beat (its first step up, the half beat a
+ * little, the others down) and adds a little randomness, as a player's hand would */
+#define ARP_VEL_MIN 32
+static uint8_t arp_last_vel;             /* (the last step's: the host's checks) */
+static uint32_t arp_velo(void) { return set.arp_vel >> 4 ? ((set.arp_vel >> 4) - 1u) * 10u : 40u; }
+static uint32_t arp_feel(void) { return set.arp_vel & 15u ? ((set.arp_vel & 15u) - 1u) * 10u : 30u; }
+static uint32_t arp_velocity(uint32_t k)
+{
+    uint32_t i, sum = 0, div = ARP_DIV[set.arp_rate % 6u], in = arp.step % div, feel = arp_feel();
+    int32_t mean, v;
+    for (i = 0; i < arp.n; i++)
+        sum += arp.vel[i];
+    mean = arp.n ? (int32_t)(sum / arp.n) : arp.vel[k];
+    v = mean + ((int32_t)arp.vel[k] - mean) * (int32_t)arp_velo() / 100;
+    if (feel) {
+        arp.vrnd = arp.vrnd * 1664525u + 1013904223u;
+        v += (in == 0u ? 16 : div >= 4u && in == div / 2u ? 4 : -8) * (int32_t)feel / 100;
+        v += ((int32_t)((arp.vrnd >> 16) % 21u) - 10) * (int32_t)feel / 100;
+    }
+    v = v < ARP_VEL_MIN ? ARP_VEL_MIN : v > 127 ? 127 : v;
+    arp_last_vel = (uint8_t)v;
+    return (uint32_t)v;
+}
 static void arp_silence(void)            /* its sounding notes off */
 {
     uint32_t i;
@@ -781,7 +807,7 @@ static int arp_take(uint32_t st, uint32_t d1, uint32_t d2)
         arp.vel[i] = (uint8_t)d2, arp.down[i] = 1, arp.held++;
         if (arp.n == 1u && !arp.snd_n) { /* the first note: a step at once (12 ms on: the rest of a chord pressed
                                           * together joins it), from the start of the run */
-            arp.next_ms = plat_ms() + 12u, arp.pos = -1, arp.dir = 1;
+            arp.next_ms = plat_ms() + 12u, arp.pos = -1, arp.dir = 1, arp.step = 0;
         }
     } else if (i < arp.n) {
         if (arp.down[i])
@@ -854,14 +880,14 @@ static void arp_tick(uint32_t now)
         arp.rnd = arp.rnd * 1664525u + 1013904223u;
         note = nc ? cand[(arp.rnd >> 16) % nc] : arp.note[lo];
         arp.pos = (int32_t)note;         /* (SCALE: pos is the last note itself) */
-        bus(0x90u | arp.ch[lo], note, arp.vel[lo], LIVE | FROM_ARP);
+        bus(0x90u | arp.ch[lo], note, arp_velocity(lo), LIVE | FROM_ARP);
         arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[lo], arp.snd_n = 1;
     } else if (set.arp_mode == 7u) {     /* CHORD: all of them */
         for (i = 0; i < n && arp.snd_n < ARP_SEQ; i++) {
             uint32_t k = idx[i], note = arp.note[k] + 12u * (uint32_t)oct[i];
             if (note > 127u)
                 continue;
-            bus(0x90u | arp.ch[k], note, arp.vel[k], LIVE | FROM_ARP);
+            bus(0x90u | arp.ch[k], note, arp_velocity(k), LIVE | FROM_ARP);
             arp.snd_note[arp.snd_n] = (uint8_t)note, arp.snd_ch[arp.snd_n++] = arp.ch[k];
         }
     } else {
@@ -895,12 +921,13 @@ static void arp_tick(uint32_t now)
         arp.pos = p;
         k = idx[p], note = arp.note[k] + 12u * (uint32_t)oct[p];
         if (note <= 127u) {
-            bus(0x90u | arp.ch[k], note, arp.vel[k], LIVE | FROM_ARP);
+            bus(0x90u | arp.ch[k], note, arp_velocity(k), LIVE | FROM_ARP);
             arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[k], arp.snd_n = 1;
         }
     }
     arp.off_ms = arp.next_ms + step * set.arp_gate / 100u;
     arp.next_ms += step;
+    arp.step++;
 }
 static void all_off(void);
 static uint8_t arp_pg;                   /* the ARP layer's page: 0 MODE RATE GATE OCTAVES, 1 TEMPO LATCH */
@@ -922,7 +949,7 @@ static void arp_set(uint32_t on)         /* 0 off, 1 on, 2 on with LATCH */
  * pl_tonic); after a change each goes to the same degree of the new scale (a scale of another size: the degree in
  * proportion), the same octave, a note outside the scale kept as far from the degree below it, the key's move the
  * shortest (-5 .. +6). A note's off and pressure follow its on (pl_map) */
-/* Overdub: REC while a take loops. From the top of the next pass the take's own playing goes into the history with
+/* Overdub: REC while a take loops. From then (0.17; before, from the top of the next pass) the take's own playing goes into the history with
  * what is played over it, and at the pass's end that pass (rec_capture_from, from its mark: the loop's length) is
  * the take: a layer. Again each pass, until REC again (at the end of that pass) or PLAY. REC held: the last layer
  * undone (one). The history keeps the take before as the undo (locked with the new) */
@@ -1641,15 +1668,35 @@ static void ov_lock(void)                /* the undo's words kept too, if they a
         take.start - (hist.head - rec_count(&hist)))
         hist.lock = ov.undo.start, hist.locked = 1;
 }
+/* (0.17, Alex: "the overdub should start right away instead of waiting for the next loop") REC while it loops: the
+ * overdub from now. What the pass has played so far is copied into the history after the mark (rec_mark_splice), so
+ * the pass captured at its end is whole, from its top. Right at the end of a pass, or with no room: from the next */
+static void ov_start_now(void)
+{
+    uint32_t now = plat_ms(), at = now - player.start_ms, m;
+    if (!player.playing || at >= take.duration_ms) {
+        ov.armed = 1;
+        app_say("OVERDUB", "AT THE TOP");
+        return;
+    }
+    m = rec_mark_splice(&hist, now, &take, player.pos, at);
+    if (m == hist.head) {
+        app_say("OVERDUB", "HISTORY FULL: SAVE");
+        return;
+    }
+    ov.on = 1, ov.mark = m, hist.sleep_ms = 0;
+    app_say("OVERDUB", "NOW");
+}
 static void ov_rec_tap(void)             /* REC tapped while a take loops */
 {
     if (ov.on) {
         ov.ending ^= 1u;
         app_say("OVERDUB", ov.ending ? "ENDS AT THE TOP" : "GOES ON");
-    } else {
-        ov.armed ^= 1u;
-        app_say("OVERDUB", ov.armed ? "AT THE TOP" : "OFF");
-    }
+    } else if (ov.armed) {               /* (waiting for the top: REC again, not at all) */
+        ov.armed = 0;
+        app_say("OVERDUB", "OFF");
+    } else
+        ov_start_now();
     ui.redraw = 1;
 }
 static void take_play(uint32_t at);
@@ -1941,41 +1988,130 @@ static const char *const QUANT_N[3] = {"OFF", "BASIC", "FULL"};
 static const char *const PLAY_N[4] = {"POLY", "MONO", "POLY+BR", "MONO+BR"};
 static int32_t layer_now(void) { return ui.held >= 0 ? ui.held : ui.latched; }
 static int clp_on(void);
-/* EDIT follows the knobs' page (Alex, 2026-11-22): on PLAY the chords' layer, on SOUND the sound's own editing (a
- * YARD sound: its two pages, SELECT between; FX shows them too). The layer the knobs answer to */
+/* EDIT follows the knobs' page (Alex, 2026-11-22): on PLAY the chords' layer, on SOUND the sound's own editing. The
+ * sound's layers (0.17, Alex: "the distinction between layers of FX is a bit confusing ... some envelope controls
+ * appear in FX"), the same three for every sound, whatever its engine:
+ *   EDIT (on SOUND)  the engine's own values: YARD's oscillators, filter and onset; a Clipper engine's eight
+ *   ENV              the envelope: ATTACK DECAY SUSTAIN RELEASE (YARD: PLUCK for SUSTAIN, its one-knob pluck)
+ *   FX               the effects: DRIVE CHORUS DELAY REVERB, then SPACE (Clipper's macro: more reverb, delay and
+ *                    width) and ROOM (the reverb's model) together; YARD has none yet
+ * SAVE in any of them keeps the sound. The layer the knobs answer to */
 static int sound_edit(void) { return layer_now() == B_EDIT && set.page; }
 #define L_CEDIT 100                      /* (the knobs on a Clipper sound's editing: clp_edit_*) */
 #define L_OUT 101                        /* (GLO on the SOUND page: the output, PHONES MAX) */
+#define L_YEDIT 102                      /* (a YARD sound's editing: its three pages) */
+#define CLP_ENG_PAGES 2u                 /* (EDIT's: clp_edit's pages 0, 1; its page 2, the envelope, is ENV's) */
+#define CLP_ENV_PAGE 2u
+static int sound_layer(void) { return sound_edit() || layer_now() == B_FX || layer_now() == B_ENV; }
 static int32_t layer_knobs(void)
 {
     if (sound_edit())
-        return clp_on() ? L_CEDIT : B_FX;
+        return clp_on() ? L_CEDIT : L_YEDIT;
     return layer_now() == B_GLO && set.page ? L_OUT : layer_now();
 }
 static const char *layer_name(int32_t l)
 {
-    return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX"
+    return l == B_EDIT ? (sound_edit() ? "SOUND" : "CHORD") : l == B_FX ? "FX" : l == B_ENV ? "ENVELOPE"
            : l == B_GLO ? (set.page ? "MORE" : "SETTINGS")
            : l == B_SEQ ? "RECORDINGS" : l == B_SEL ? "SCALE" : l == B_ARP ? "ARP" : 0;
+}
+/* YARD's values as the layers show and turn them (EDIT's three pages, ENV) */
+static const uint8_t YED_P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
+                                    {SP_ONSET, SP_ONSET_LVL, SP_LEVEL, SP_N}};
+static const uint8_t YED_CC[3][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
+                                     {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE},
+                                     {SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL, SYNTH_CC_LEVEL, 0}};
+static const char *const YED_N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
+                                        {"ONSET", "ONSET LVL", "LEVEL", "-"}};
+static const uint8_t YENV_P[4] = {SP_ATTACK, SP_DECAY, SP_PLUCK, SP_REL};
+static const uint8_t YENV_CC[4] = {SYNTH_CC_ATTACK, SYNTH_CC_DECAY, SYNTH_CC_PLUCK, SYNTH_CC_REL};
+static const char *const YENV_N[4] = {"ATTACK", "DECAY", "PLUCK", "RELEASE"};
+static const char *const FX_N[2][4] = {{"DRIVE", "CHORUS", "DELAY", "REVERB"}, {"SPACE", "ROOM", "-", "-"}};
+static uint8_t fx_pg;                    /* FX's page: 0 the sends, 1 SPACE and ROOM */
+
+static void yard_text(uint32_t w, char *val)   /* a YARD value as the screen says it */
+{
+    static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
+    uint32_t v = w < SP_N ? synth_param(w) : 0u;
+    if (w >= SP_N)
+        ;
+    else if (w == SP_ONSET)
+        text_cat(val, SYNTH_ONSET_NAMES[SYNTH_ONSET(v) % SYNTH_ONSETS]);
+    else if (w == SP_LEVEL) {            /* in dB, half steps */
+        int32_t h = v ? (int32_t)v - 64 : 0;
+        char t[8];
+        if (h > 0)
+            text_cat(val, "+");
+        else if (h < 0)
+            text_cat(val, "-"), h = -h;
+        int_text(h / 2, t);
+        text_cat(val, t);
+        if (h & 1)
+            text_cat(val, ".5");
+        text_cat(val, " DB");
+    } else if (w == SP_WAVE)
+        text_cat(val, WAVE_N[SYNTH_WAVE(v)]);
+    else if (w == SP_FMODE)
+        text_cat(val, FMODE_N[SYNTH_FMODE(v)]);
+    else
+        int_text((int32_t)v, val);
+}
+static void yard_turn(uint32_t w, uint32_t cc, const char *name, int32_t e)   /* a YARD value turned, recorded */
+{
+    const char *label;
+    char val[16];
+    if (w >= SP_N)
+        return;
+    if (w == SP_ONSET) {                 /* ONSET: OFF and the ten, a turn a step (each one's middle value) */
+        int32_t t = clamp((int32_t)SYNTH_ONSET(synth_param(w)) + (e > 0 ? 1 : -1), 0, (int32_t)SYNTH_ONSETS - 1);
+        knob_set(w, cc, ((uint32_t)t * 128u + 64u) / SYNTH_ONSETS, name);
+    } else if (w == SP_LEVEL) {          /* LEVEL: half a dB a turn, -12 to +12 dB (0, from before it: 0 dB) */
+        uint32_t v = synth_param(w);
+        knob_set(w, cc, clamp((int32_t)(v ? v : 64u) + (e > 0 ? 1 : -1), (int32_t)SYNTH_LEVEL_LO, (int32_t)SYNTH_LEVEL_HI),
+                 name);
+    } else if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
+        int32_t nz = clamp((int32_t)SYNTH_WAVE(synth_param(w)) + (e > 0 ? 1 : -1), 0, 2);
+        knob_set(w, cc, nz == 0 ? 0 : nz == 1 ? 64 : 127, name);
+    } else {
+        turn_knob(w, cc, e, name);
+        return;
+    }
+    label = name, val[0] = 0;
+    yard_text(w, val);
+    app_say(label, val);
 }
 
 static void knob_info(uint32_t i, const char **label, char *val)
 {
     static const char *const SAW_N[4] = {"TONE", "ATTACK", "DECAY", "RELEASE"};
     static const uint8_t SAW_P[4] = {SP_TONE, SP_ATTACK, SP_DECAY, SP_REL};
-    static const char *const YFX_N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
-                                            {"ONSET", "ONSET LVL", "LEVEL", "-"}};
-    static const uint8_t YFX_P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
-                                        {SP_ONSET, SP_ONSET_LVL, SP_LEVEL, SP_N}};
-    static const char *const WAVE_N[3] = {"SAW", "PULSE", "TRI"}, *const FMODE_N[3] = {"LOW", "BAND", "HIGH"};
     static const char *const MAC_N[4] = {"BRITE", "TIMBR", "MOTN", "SPACE"};
-    static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
     int32_t l = layer_knobs();
     val[0] = 0;
     *label = "";
-    if (l == L_CEDIT) {                  /* a Clipper sound's editing: its engine's values, its envelope */
-        *label = clp_edit_label(ui.cedit, i);
-        clp_edit_text(ui.cedit, i, val);
+    if (l == L_CEDIT) {                  /* a Clipper sound's editing: its engine's eight values */
+        *label = clp_edit_label(ui.cedit % CLP_ENG_PAGES, i);
+        clp_edit_text(ui.cedit % CLP_ENG_PAGES, i, val);
+    } else if (l == B_ENV && clp_on()) { /* ENV: a Clipper sound's envelope */
+        *label = clp_edit_label(CLP_ENV_PAGE, i);
+        clp_edit_text(CLP_ENV_PAGE, i, val);
+    } else if (l == B_ENV) {             /* ENV: YARD's */
+        *label = YENV_N[i];
+        yard_text(YENV_P[i], val);
+    } else if (l == L_YEDIT) {           /* YARD's editing: its three pages, SELECT between */
+        uint32_t pg = ui.yfx % 3u;
+        *label = YED_N[pg][i];
+        yard_text(YED_P[pg][i], val);
+    } else if (l == B_FX && clp_on()) {  /* the effects: the sends; then SPACE and ROOM */
+        *label = FX_N[fx_pg & 1u][i];
+        if (!(fx_pg & 1u))
+            int_text((int32_t)clp_fx(i), val);
+        else if (i == 0)
+            int_text((int32_t)clp_macro(3), val);
+        else if (i == 1)
+            text_cat(val, clp_reverb_step(0));
+    } else if (l == B_FX) {              /* YARD: none yet */
+        *label = "-";
     } else if (l == L_OUT) {             /* GLO on SOUND: the output */
         if (i == 0) {
             static const char *const DB[21] = {"", "", "-20 DB", "-16", "-14", "-12", "-10", "-9", "-8", "-7", "-6",
@@ -2011,33 +2147,6 @@ static void knob_info(uint32_t i, const char **label, char *val)
             text_cat(val, set.bass ? "ON" : "OFF");
         else
             text_cat(val, set.bank ? "QUALITY" : "SCALE");
-    } else if (l == B_FX) {
-        uint32_t pg = ui.yfx % 3u, v = synth_param(YFX_P[pg][i]);   /* (YARD: its three pages, SELECT between) */
-        *label = clp_on() ? FX_N[i] : YFX_N[pg][i];
-        if (clp_on())
-            int_text((int32_t)clp_fx(i), val);
-        else if (YFX_P[pg][i] == SP_N)
-            ;
-        else if (YFX_P[pg][i] == SP_ONSET)
-            text_cat(val, SYNTH_ONSET_NAMES[SYNTH_ONSET(v) % SYNTH_ONSETS]);
-        else if (YFX_P[pg][i] == SP_LEVEL) {   /* in dB, half steps */
-            int32_t h = v ? (int32_t)v - 64 : 0;
-            char t[8];
-            if (h > 0)
-                text_cat(val, "+");
-            else if (h < 0)
-                text_cat(val, "-"), h = -h;
-            int_text(h / 2, t);
-            text_cat(val, t);
-            if (h & 1)
-                text_cat(val, ".5");
-            text_cat(val, " DB");
-        } else if (YFX_P[pg][i] == SP_WAVE)
-            text_cat(val, WAVE_N[SYNTH_WAVE(v)]);
-        else if (YFX_P[pg][i] == SP_FMODE)
-            text_cat(val, FMODE_N[SYNTH_FMODE(v)]);
-        else
-            int_text((int32_t)v, val);
     } else if (l == B_GLO) {
         static const char *const N[4] = {"PLAY", "USB AUDIO", "MPE OUT", "BEND"};
         *label = N[i];
@@ -2050,13 +2159,23 @@ static void knob_info(uint32_t i, const char **label, char *val)
         else
             int_text(BEND_RANGES[set.bend & 3u], val);
     } else if (l == B_ARP && arp_pg) {   /* ARP's second page: TEMPO LATCH */
-        static const char *const N[4] = {"TEMPO", "LATCH", "-", "-"};
+        static const char *const N[4] = {"TEMPO", "LATCH", "VELO", "FEEL"};
         *label = N[i];
         if (i == 0) {
             int_text(set.arp_bpm, val);
             text_cat(val, " BPM");
         } else if (i == 1)
             text_cat(val, set.arp_latch ? "ON" : "OFF");
+        else if (i == 2 && arp_velo() == 100u)
+            text_cat(val, "AS PLAYED");
+        else if (i == 2 && !arp_velo())
+            text_cat(val, "EVEN");
+        else if (i == 3 && !arp_feel())
+            text_cat(val, "OFF");
+        else {
+            int_text((int32_t)(i == 2 ? arp_velo() : arp_feel()), val);
+            text_cat(val, "%");
+        }
     } else if (l == B_ARP) {             /* ARP: MODE RATE GATE OCTAVES */
         static const char *const N[4] = {"MODE", "RATE", "GATE", "OCTAVES"};
         *label = N[i];
@@ -2162,42 +2281,33 @@ static void knob_turn(uint32_t i, int32_t e)
             set.type = (uint8_t)(set.bank * CHORD_BANK + set.type % CHORD_BANK);
         }
         harmony_changed();
+    } else if (l == L_YEDIT) {           /* YARD's editing: its three pages */
+        uint32_t pg = ui.yfx % 3u;
+        yard_turn(YED_P[pg][i], YED_CC[pg][i], YED_N[pg][i], e);
+        return;
+    } else if (l == B_ENV) {             /* the envelope: Clipper's, or YARD's (recorded, its CCs) */
+        if (clp_on()) {
+            clp_edit_turn(CLP_ENV_PAGE, i, e);
+            set_dirty = 1;
+            knob_info(i, &label, val);
+            app_say(label, val);
+        } else
+            yard_turn(YENV_P[i], YENV_CC[i], YENV_N[i], e);
+        return;
     } else if (l == B_FX) {
         static const uint8_t CC[4] = {12, 93, 94, 91};   /* DRIVE (mvane yard's CC 12), CHORUS, DELAY, REVERB */
-        static const char *const FX_N[4] = {"DRIVE", "CHORUS", "DELAY", "REVERB"};
-        if (!clp_on()) {                 /* YARD: no effects; its pages (SELECT between) */
-            static const uint8_t P[3][4] = {{SP_DETUNE, SP_SUB, SP_RES, SP_PLUCK}, {SP_WAVE, SP_PW, SP_NOISE, SP_FMODE},
-                                            {SP_ONSET, SP_ONSET_LVL, SP_LEVEL, SP_N}};
-            static const uint8_t YC[3][4] = {{SYNTH_CC_DETUNE, SYNTH_CC_SUB, SYNTH_CC_RES, SYNTH_CC_PLUCK},
-                                             {SYNTH_CC_WAVE, SYNTH_CC_PW, SYNTH_CC_NOISE, SYNTH_CC_FMODE},
-                                             {SYNTH_CC_ONSET, SYNTH_CC_ONSET_LVL, SYNTH_CC_LEVEL, 0}};
-            static const char *const N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAVE", "PW", "NOISE", "FILTER"},
-                                                {"ONSET", "ONSET LVL", "LEVEL", "-"}};
-            uint32_t pg = ui.yfx % 3u, w = P[pg][i];
-            if (w == SP_N)
-                return;
-            if (w == SP_ONSET) {         /* ONSET: OFF and the ten, a turn a step (each one's middle value) */
-                int32_t t = clamp((int32_t)SYNTH_ONSET(synth_param(w)) + (e > 0 ? 1 : -1), 0, (int32_t)SYNTH_ONSETS - 1);
-                knob_set(w, YC[pg][i], ((uint32_t)t * 128u + 64u) / SYNTH_ONSETS, N[pg][i]);
-                knob_info(i, &label, val);
-                app_say(label, val);
-            } else if (w == SP_LEVEL) {  /* LEVEL: half a dB a turn, -12 to +12 dB (0, from before it: 0 dB) */
-                uint32_t v = synth_param(w);
-                int32_t nv = clamp((int32_t)(v ? v : 64u) + (e > 0 ? 1 : -1), (int32_t)SYNTH_LEVEL_LO, (int32_t)SYNTH_LEVEL_HI);
-                knob_set(w, YC[pg][i], nv, N[pg][i]);
-                knob_info(i, &label, val);
-                app_say(label, val);
-            } else if (w == SP_WAVE || w == SP_FMODE) {   /* a choice of three: a turn a step (0, 64, 127) */
-                uint32_t z = SYNTH_WAVE(synth_param(w));
-                int32_t nz = clamp((int32_t)z + (e > 0 ? 1 : -1), 0, 2);
-                knob_set(w, YC[pg][i], nz == 0 ? 0 : nz == 1 ? 64 : 127, N[pg][i]);
-                knob_info(i, &label, val);
-                app_say(label, val);
-            } else
-                turn_knob(w, YC[pg][i], e, N[pg][i]);
+        if (!clp_on()) {                 /* YARD: no effects yet */
+            app_say("YARD", "NO EFFECTS YET");
             return;
         }
-        cc_turn(CC[i], clp_fx(i), e, FX_N[i]);
+        if (!(fx_pg & 1u))
+            cc_turn(CC[i], clp_fx(i), e, FX_N[0][i]);
+        else if (i == 0)
+            cc_turn(19u, clp_macro(3), e, "SPACE");   /* (the SOUND page's K4 too: CC 19, recorded) */
+        else if (i == 1) {
+            app_say("ROOM", clp_reverb_step(d));
+            set_dirty = 1;
+        }
         return;
     } else if (l == B_GLO) {
         if (i == 0) {
@@ -2223,6 +2333,11 @@ static void knob_turn(uint32_t i, int32_t e)
             set.arp_latch = (uint8_t)(e > 0);
             if (arp.on)
                 arp_set(set.arp_latch ? 2u : 1u);
+        } else {                         /* VELO, FEEL: 0..100% in 10% steps (the nibble 1..11) */
+            uint32_t sh = i == 2 ? 4u : 0u;
+            int32_t c = (int32_t)((i == 2 ? arp_velo() : arp_feel()) / 10u) + 1 + e;
+            c = clamp(c, 1, 11);
+            set.arp_vel = (uint8_t)((set.arp_vel & ~(15u << sh)) | (uint32_t)c << sh);
         }
         set_dirty = 1;
     } else if (l == B_ARP) {
@@ -2303,9 +2418,9 @@ static void knob_turn(uint32_t i, int32_t e)
 static void select_turn(int32_t e)       /* SELECT: what the context lists */
 {
     int32_t l = layer_knobs(), d = e > 0 ? 1 : -1;
-    if (l == L_CEDIT) {                  /* a Clipper sound's editing: the next page */
-        static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
-        ui.cedit = (uint8_t)((ui.cedit + CLP_EDIT_PAGES + (uint32_t)d) % CLP_EDIT_PAGES);
+    if (l == L_CEDIT) {                  /* a Clipper sound's editing: its other page (the envelope: ENV) */
+        static const char *const PG[CLP_ENG_PAGES] = {"ENGINE 1-4", "ENGINE 5-8"};
+        ui.cedit = (uint8_t)((ui.cedit + CLP_ENG_PAGES + (uint32_t)d) % CLP_ENG_PAGES);
         app_say("EDIT", PG[ui.cedit]);
         ui.redraw = 1;
         return;
@@ -2317,15 +2432,18 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         if (ui.chord_n)
             chord_sound();
         app_say("TYPE", CHORD_TYPE_NAMES[set.type]);
-    } else if (l == B_FX) {              /* the reverb's model; YARD's: its other page */
-        if (clp_on())
-            app_say("REVERB", clp_reverb_step(d));
-        else {
-            static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET ONSET LVL LEVEL"};
-            ui.yfx = (uint8_t)((ui.yfx + 3u + (uint32_t)d) % 3u);
-            app_say("YARD", PG[ui.yfx]);
-            ui.redraw = 1;
-        }
+    } else if (l == L_YEDIT) {           /* YARD's editing: the next page */
+        static const char *const PG[3] = {"DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER", "ONSET ONSET LVL LEVEL"};
+        ui.yfx = (uint8_t)((ui.yfx + 3u + (uint32_t)d) % 3u);
+        app_say("YARD", PG[ui.yfx]);
+        ui.redraw = 1;
+    } else if (l == B_FX) {              /* the effects' other page (as EDIT's and ARP's: SELECT, the next page) */
+        if (clp_on()) {
+            fx_pg ^= 1u;
+            app_say("FX", fx_pg ? "SPACE ROOM" : "DRIVE CHORUS DELAY REVERB");
+        } else
+            app_say("YARD", "NO EFFECTS YET");
+        ui.redraw = 1;
     } else if (l == B_GLO) {             /* USB: a computer, or host to a MIDI device (the Diosynth) */
         plat_usb_host(e > 0);
         app_say("USB", e > 0 ? "HOST: A DEVICE" : "TO A COMPUTER");
@@ -2333,7 +2451,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
         slot_step(d);
     else if (l == B_ARP) {               /* ARP: its other page */
         arp_pg ^= 1u;
-        app_say("ARP", arp_pg ? "TEMPO LATCH" : "MODE RATE GATE OCTAVES");
+        app_say("ARP", arp_pg ? "TEMPO LATCH VELO FEEL" : "MODE RATE GATE OCTAVES");
         ui.redraw = 1;
     } else if (l == B_SEL) {             /* SCALE: the named scales */
         char t[16];
@@ -2523,7 +2641,7 @@ static void input(void)
                     app_say("OCTAVE", t);
                 }
             }
-        } else if (k == B_EDIT || k == B_FX || k == B_GLO || k == B_SEQ || k == B_SEL || k == B_ARP) {   /* a layer: held, or a tap opens it */
+        } else if (k == B_EDIT || k == B_FX || k == B_ENV || k == B_GLO || k == B_SEQ || k == B_SEL || k == B_ARP) {   /* a layer: held, or a tap opens it */
             ui.held = (int8_t)k;
             ui.held_used = 0;
         } else if (k == B_HOME) {        /* the knobs' page: PLAY / SOUND (GLO and EDIT, which follow it, stay open) */
@@ -2563,7 +2681,7 @@ static void input(void)
             if (ui.held >= 0)
                 ui.held_used = 1;
             scale_store();
-        } else if (k == B_SAVE && (layer_now() == B_FX || sound_edit())) {   /* FX (or EDIT on SOUND) and SAVE: this
+        } else if (k == B_SAVE && sound_layer()) {   /* FX (or EDIT on SOUND) and SAVE: this
                                                                              * sound kept, YARD's or Clipper's */
             if (ui.held >= 0)
                 ui.held_used = 1;
@@ -2677,9 +2795,16 @@ static void label_value(int32_t x, int32_t y, const char *label, const char *val
     cv_text(x, y + 14, &FONT_S, value, C_HI);
 }
 
+/* (0.17, discoverability) the sound's layers' line: its engine, and where the rest of the sound is */
+static void sound_layers_line(const char *engine)
+{
+    int32_t x = cv_text(10, 26, &FONT_XS, engine ? engine : "", C_HI);
+    cv_text(x + 8, 26, &FONT_XS, "EDIT  ENV  FX", C_DIM);
+}
+
 static void draw(void)
 {
-    char t[24];
+    char t[96];                          /* (the chord line: tonic, scale, quality, style, voices, bass, number: 24 overran) */
     uint32_t now = plat_ms(), i;
     int32_t lay = layer_now();
     cv_begin(240, 32, C_BLACK);
@@ -2731,7 +2856,7 @@ static void draw(void)
         }
         text_cat(bp, " BPM");
         cv_text(10, 32, &FONT_S, bp, arp.on ? C_HI : C_GRAY);
-        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE, RATE ...   PLAY: ON, OFF" : "SELECT: TEMPO, LATCH   PLAY: ON, OFF",
+        cv_text(10, 50, &FONT_XS, arp_pg ? "SELECT: MODE, RATE ...   PLAY: ON, OFF" : "SELECT: TEMPO, LATCH, VELO   PLAY: ON, OFF",
                 C_GRAY);
     } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
         int h = plat_usb_host_state();
@@ -2755,12 +2880,26 @@ static void draw(void)
                 cv_rect(x + 1, 25, 5, 5, C_BLACK);
         }
         cv_text(10, 44, &FONT_XS, "K1-K4: DIGITS  SELECT: THE LIST  SAVE: KEEP IT", C_GRAY);
-    } else if (lay == B_EDIT && sound_edit() && clp_on()) {   /* SOUND: a Clipper sound's three pages */
-        static const char *const PG[CLP_EDIT_PAGES] = {"ENGINE 1-4", "ENGINE 5-8", "ENVELOPE"};
+    } else if (lay == B_EDIT && sound_edit() && clp_on()) {   /* SOUND: a Clipper sound's two pages */
+        static const char *const PG[CLP_ENG_PAGES] = {"ENGINE 1-4", "ENGINE 5-8"};
         int32_t x = 10;
-        for (i = 0; i < CLP_EDIT_PAGES; i++)
-            x = cv_text(x, 4, &FONT_S, PG[i], i == ui.cedit ? C_WHITE : C_GRAY) + 12;
+        for (i = 0; i < CLP_ENG_PAGES; i++)
+            x = cv_text(x, 4, &FONT_S, PG[i], i == ui.cedit % CLP_ENG_PAGES ? C_WHITE : C_GRAY) + 12;
+        sound_layers_line(clp_sound_engine(clp_at()));
         cv_text(10, 44, &FONT_XS, "SELECT: NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
+    } else if (lay == B_ENV) {           /* ENV: the envelope, every sound */
+        cv_text(10, 4, &FONT_S, clp_on() ? "ATTACK DECAY SUSTAIN RELEASE" : "ATTACK DECAY PLUCK RELEASE", C_WHITE);
+        sound_layers_line(clp_on() ? clp_sound_engine(clp_at()) : "YARD");
+        cv_text(10, 44, &FONT_XS, "SAVE: KEEP THE SOUND", C_GRAY);
+    } else if (lay == B_FX && clp_on()) {   /* FX: the sends, then SPACE and ROOM */
+        cv_text(10, 4, &FONT_S, "1/2 SENDS", fx_pg ? C_GRAY : C_WHITE);
+        cv_text(100, 4, &FONT_S, "2/2 SPACE, ROOM", fx_pg ? C_WHITE : C_GRAY);
+        sound_layers_line(clp_sound_engine(clp_at()));
+        cv_text(10, 44, &FONT_XS, "SELECT: NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
+    } else if (lay == B_FX) {            /* FX: YARD has none yet */
+        cv_text(10, 4, &FONT_S, "YARD HAS NO EFFECTS YET", C_WHITE);
+        sound_layers_line("YARD");
+        cv_text(10, 44, &FONT_XS, "A CLIPPER SOUND: DRIVE CHORUS DELAY REVERB", C_GRAY);
     } else if (lay == B_EDIT && sound_edit()) {   /* SOUND: YARD's three pages */
         /* (0.16, the first user test: three pages' names did not fit) this page's, then the next one's */
         static const char *const PG[3] = {"1/3 DETUNE SUB RES PLUCK", "2/3 WAVE PW NOISE FILTER", "3/3 ONSET, LEVEL"};
@@ -2804,7 +2943,7 @@ static void draw(void)
         }
         text_cat(t, set.bass ? "+BASS" : "");
         {
-            char pcs[8] = " ";
+            char pcs[8] = "  ";
             int_text((int32_t)scale_num(), pcs + 2);   /* the set's number (music-suite: C major 2741) */
             text_cat(t, pcs);
         }
@@ -3224,6 +3363,8 @@ int app_expect(const char *what, int *got)
         *got = arp.n;
     else if (!strcmp(what, "arp_snd"))   /* its notes sounding now */
         *got = arp.snd_n;
+    else if (!strcmp(what, "arp_vel"))   /* (0.17) the last step's velocity */
+        *got = arp_last_vel;
     else if (!strcmp(what, "arp_note"))  /* the last it played */
         *got = arp.snd_n ? arp.snd_note[0] : -1;
     else if (!strcmp(what, "pcs_named")) /* the scale has a name (the list's, the user's, or a known one) */
@@ -3304,6 +3445,8 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_macro(0);
     else if (!strcmp(what, "chorus"))   /* .. its CHORUS send (CC 93) */
         *got = (int)clp_fx(1);
+    else if (!strcmp(what, "space"))    /* .. its SPACE macro (CC 19; 0.17: FX's second page too) */
+        *got = (int)clp_macro(3);
     else if (!strcmp(what, "reverb"))   /* the reverb's model now */
         *got = (int)clp_reverb_type();
     else if (!strcmp(what, "ncuser"))   /* the user's Clipper sounds */

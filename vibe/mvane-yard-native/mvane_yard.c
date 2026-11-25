@@ -1532,9 +1532,24 @@ static struct {
     uint8_t n, held;                     /* its notes; how many still held (LATCH: 0, all let go) */
     uint8_t note[ARP_MAX], ch[ARP_MAX], vel[ARP_MAX], down[ARP_MAX];   /* in the order played */
     uint8_t snd_n, snd_note[ARP_SEQ], snd_ch[ARP_SEQ];   /* sounding now (CHORD: several) */
-    uint32_t next_ms, off_ms, rnd;
+    uint32_t next_ms, off_ms, rnd, vrnd, step;
     int32_t pos, dir;                    /* where in the run, and which way (the bouncing modes) */
 } arp;
+/* (0.17, as the FM-1's arp_velocity, at its defaults: VELO 40%, FEEL 30%; the FM-1's ARP layer sets them) a step's
+ * velocity: 40% of the contrast with the mean of the notes held, at least 32, the beat accented, a little random */
+static uint32_t arp_velocity(uint32_t k)
+{
+    uint32_t i, sum = 0, div = ARP_DIV[acfg.rate % 6u], in = arp.step % div;
+    int32_t mean, v;
+    for (i = 0; i < arp.n; i++)
+        sum += arp.vel[i];
+    mean = arp.n ? (int32_t)(sum / arp.n) : arp.vel[k];
+    v = mean + ((int32_t)arp.vel[k] - mean) * 40 / 100;
+    arp.vrnd = arp.vrnd * 1664525u + 1013904223u;
+    v += (in == 0u ? 16 : div >= 4u && in == div / 2u ? 4 : -8) * 30 / 100;
+    v += ((int32_t)((arp.vrnd >> 16) % 21u) - 10) * 30 / 100;
+    return (uint32_t)(v < 32 ? 32 : v > 127 ? 127 : v);
+}
 static void arp_silence(void)            /* its sounding notes off */
 {
     uint32_t i;
@@ -1569,7 +1584,7 @@ static int arp_take(uint32_t st, uint32_t d1, uint32_t d2)
         arp.vel[i] = (uint8_t)d2, arp.down[i] = 1, arp.held++;
         if (arp.n == 1u && !arp.snd_n) { /* the first note: a step at once (12 ms on: the rest of a chord pressed
                                           * together joins it), from the start of the run */
-            arp.next_ms = arp_first_ms(), arp.pos = -1, arp.dir = 1;
+            arp.next_ms = arp_first_ms(), arp.pos = -1, arp.dir = 1, arp.step = 0;
         }
     } else if (i < arp.n) {
         if (arp.down[i])
@@ -1640,14 +1655,14 @@ static void arp_tick(uint32_t now)
         arp.rnd = arp.rnd * 1664525u + 1013904223u;
         note = nc ? cand[(arp.rnd >> 16) % nc] : arp.note[lo];
         arp.pos = (int32_t)note;
-        arp_out(0x90u | arp.ch[lo], note, arp.vel[lo]);
+        arp_out(0x90u | arp.ch[lo], note, arp_velocity(lo));
         arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[lo], arp.snd_n = 1;
     } else if (acfg.mode == 7u) {     /* CHORD: all of them */
         for (i = 0; i < n && arp.snd_n < ARP_SEQ; i++) {
             uint32_t k = idx[i], note = arp.note[k] + 12u * (uint32_t)oct[i];
             if (note > 127u)
                 continue;
-            arp_out(0x90u | arp.ch[k], note, arp.vel[k]);
+            arp_out(0x90u | arp.ch[k], note, arp_velocity(k));
             arp.snd_note[arp.snd_n] = (uint8_t)note, arp.snd_ch[arp.snd_n++] = arp.ch[k];
         }
     } else {
@@ -1681,12 +1696,13 @@ static void arp_tick(uint32_t now)
         arp.pos = p;
         k = idx[p], note = arp.note[k] + 12u * (uint32_t)oct[p];
         if (note <= 127u) {
-            arp_out(0x90u | arp.ch[k], note, arp.vel[k]);
+            arp_out(0x90u | arp.ch[k], note, arp_velocity(k));
             arp.snd_note[0] = (uint8_t)note, arp.snd_ch[0] = arp.ch[k], arp.snd_n = 1;
         }
     }
     arp.off_ms = arp.next_ms + step * acfg.gate / 100u;
     arp.next_ms = arp_daw() ? now + arp_to_grid(1) : arp.next_ms + step;   /* (the DAW playing: on its grid) */
+    arp.step++;
 }
 static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
 {
@@ -1736,8 +1752,16 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
                 a_undo();
             else if (ov.on)
                 ov.ending ^= 1u;
-            else
-                ov.armed ^= 1u;
+            else if (ov.armed)
+                ov.armed = 0;
+            else {                       /* (0.17, as the FM-1) from now: the pass so far copied after the mark */
+                uint32_t at = a_ms - player.start_ms, m = at < take.duration_ms
+                    ? rec_mark_splice(&hist, a_ms, &take, player.pos, at) : hist.head;
+                if (m != hist.head)
+                    ov.on = 1, ov.mark = m, hist.sleep_ms = 0;
+                else
+                    ov.armed = 1;        /* (at a pass's very end, or no room: from the next) */
+            }
         } else
             a_capture(d1 ? 0u : PHRASE_GAP_MS);
     } else if (st == Q_PLAY) {

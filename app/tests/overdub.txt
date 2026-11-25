@@ -1,5 +1,5 @@
 # Overdub (0.12): REC while a take loops layers what is played over it, a pass at a time, from the top of the next
-# pass; REC again ends it at the end of that pass; REC held undoes the last layer.
+# pass (0.17: from the tap, the pass so far kept); REC again ends it at the end of that pass; REC held undoes the last layer.
 # app/build/host/mvane-yard_host app/tests/overdub.txt app/build/host
 wait 600
 spin ALGO -1
@@ -17,23 +17,22 @@ spin K2 1
 release SEQ
 tap PLAY
 wait 100
-# REC: overdub from the top of the next pass
+# REC: overdub from now (0.17), in the pass under way
 tap REC
 wait 20
-expect overdub 1
-expect playing 1
-wait 330
 expect overdub 2
-# over the second pass: C4, 100 ms
+# over the rest of this pass: C4, 100 ms
 key 7 down 100
 wait 100
 key 7 up
-wait 300
-# the pass is the take: a layer, with the C in it; the third pass plays both
+wait 200
+# the pass's end: the pass is the take, whole from its top (the E it played before REC too): a layer, with the C
 expect layers 1
 expect overdub 2
 expect take >4
 wait 20
+expect pl_last 64
+wait 100
 expect pl_last 60
 shot overdub.png
 # REC again: it ends at the end of this pass (one more layer: this pass, nothing new in it)
