@@ -46,6 +46,20 @@ generation, ProgGenie; then six more from Alex the same day (program changes, a 
 chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The assessment behind the Vane items:
 [VANE.md](VANE.md). `app/synth.c` is shared by the FM-1 and the native port, so YARD's additions land in both.
 
+**Alex's notes of 2026-11-25 (0.17)**: done: the overdub from the tap (the pass so far copied after the mark,
+`rec_mark_splice`); the ARP's VELO (the contrast kept, at least 32) and FEEL (accents, a little randomness); a sound's
+three layers, the same for every engine (EDIT the engine's own, ENV the envelope, FX the effects with SPACE and ROOM
+together); favourites (SAVE held; FAVOURITES first on PRESETS); the same effects on many sounds (the page,
+`yard.py sounds --fx`, `ysb.py fx`); a "Download all" ZIP loaded back on the page. Next from them:
+- **YARD's effects**: route YARD through Clipper's buses (chorus, delay, reverb, SPACE) so FX means the same on every
+  sound; its CPU on the FM-1 to measure first (YARD's point is being light).
+- **House effects**: one set of sends and SPACE over every sound as it loads, Clipper's 337 too ("across the board"
+  without making each one yours: the user's bank holds 32); a new settings record (the last byte of room went to the
+  ARP's VELO and FEEL).
+- **Headroom**: with FX up, sounds get louder without distortion (Alex, on headphones): measure the effects' peaks
+  against the limiter (`make loud` with the sends up) before raising anything; a LOUD step of +9 DB if it holds.
+- **Native**: VELO and FEEL as DAW parameters (the port plays the defaults, 40% and 30%); ENV and FX pages there too.
+
 **Small, a session or less each**
 1. **Native: MIDI in on a free channel while a recording plays** (the FM-1's 0.13.2, for the Diosynth's overdubs).
 2. **Native: SAVE's copy spread over blocks** (now one block, up to 17% of it in Node).

@@ -226,9 +226,9 @@ footer button { font-size: 13px; padding: 3px 9px; }
   <section class="card" id="yardCard" hidden>
     <h2>Your sounds and scales</h2>
     <h3 class="sub">YARD</h3>
-    <p class="meta" id="yardMeta">Your own YARD sounds: on the FM-1, FX held and SAVE keeps the one playing. They come
+    <p class="meta" id="yardMeta">Your own YARD sounds: on the FM-1, EDIT, ENV or FX held and SAVE keeps the one playing. They come
       after YARD's nine on PRESETS.</p>
-    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th>Mono</th><th>Tone</th><th>Release</th><th>Glide</th>
+    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th title="A favourite: first on PRESETS, in FAVOURITES">★</th><th>Mono</th><th>Tone</th><th>Release</th><th>Glide</th>
       <th>Attack</th><th>Decay</th><th>Res</th><th>Detune</th><th>Sub</th><th>Pluck</th><th>Wave</th><th>PW</th><th>Noise</th>
       <th>Filter</th><th>Onset</th><th>Onset level</th><th>Level (dB)</th><th></th></tr></thead>
       <tbody id="ysounds"></tbody></table></div>
@@ -238,8 +238,21 @@ footer button { font-size: 13px; padding: 3px 9px; }
       <tbody id="scales"></tbody></table></div>
     <h3 class="sub">Clipper</h3>
     <p class="meta" id="clipMeta"></p>
-    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th>Sound</th><th>Reverb</th><th>Changes (name=value)</th><th></th></tr></thead>
+    <div class="ytab"><table><thead><tr><th>#</th><th>Name</th><th title="A favourite: first on PRESETS, in FAVOURITES">★</th><th>Sound</th><th>Reverb</th><th>Changes (name=value)</th><th></th></tr></thead>
       <tbody id="csounds"></tbody></table></div>
+    <h3 class="sub">The same effects on many sounds</h3>
+    <p class="meta">Each value set here goes on every Clipper sound above (or the favourites only), replacing its own;
+      a field left empty leaves each sound's as it is. 0 to 127, as FX shows them on the FM-1. Then Send to the FM-1.</p>
+    <div class="row fxrow">
+      <label>DRIVE <input id="bDST" type="number" min="0" max="127" step="1"></label>
+      <label>CHORUS <input id="bCHO" type="number" min="0" max="127" step="1"></label>
+      <label>DELAY <input id="bDLY" type="number" min="0" max="127" step="1"></label>
+      <label>REVERB <input id="bREV" type="number" min="0" max="127" step="1"></label>
+      <label>SPACE <input id="bSPACE" type="number" min="0" max="127" step="1"></label>
+      <label>ROOM <select id="bROOM"><option value="">as each has it</option></select></label>
+      <label><input id="bFav" type="checkbox"> favourites only</label>
+      <button id="bApply" type="button">Apply to the sounds</button>
+    </div>
     <div class="row">
       <button id="yAdd" type="button">Add a YARD sound</button>
       <button id="cAdd" type="button">Add a Clipper sound</button>
@@ -247,7 +260,7 @@ footer button { font-size: 13px; padding: 3px 9px; }
       <button id="ySend" class="go" type="button">Send to the FM-1</button>
       <button id="yRead" type="button">Read again</button>
       <button id="yGet" type="button">Download (JSON)</button>
-      <label class="btn">Load a file<input id="yPut" type="file" accept=".json,.ysb"></label>
+      <label class="btn">Load a file<input id="yPut" type="file" accept=".json,.ysb,.zip"></label>
     </div>
     <p class="note">Sending replaces the FM-1's own sounds and scales with these. Scales: a pitch-class set's number,
       0 to 4095 (each semitone above the key a bit: the key 1, a semitone 2, a whole tone 4 ... the major seventh 2048;
@@ -256,8 +269,10 @@ footer button { font-size: 13px; padding: 3px 9px; }
       FM-1 lists them after its own, from LYDIAN to CHROMATIC, on SCALE and on SEL's layer
       (whose SAVE keeps the number set). A scale without a name shows as its number. YARD: values 0 to 127; GLIDE is kept with the
       sound, the FM-1 plays its own (the PLAY page's). Clipper: a factory sound and up to 14 of its parameters changed,
-      by name or #number (BRITE, TIMBR, MOTN, SPACE: a HYBRID sound's M1..M4); on the FM-1, FX held and SAVE keeps a
-      Clipper sound's macros, sends and reverb this way.</p>
+      by name or #number (BRITE, TIMBR, MOTN, SPACE: a HYBRID sound's M1..M4); on the FM-1, EDIT, ENV or FX held and SAVE
+      keeps a Clipper sound's macros, envelope, sends and reverb this way. ★: a favourite, first on PRESETS (in
+      FAVOURITES, and in its family too); on the FM-1, SAVE held a moment on those layers marks the sound playing (again:
+      no longer). Load a file takes a JSON or .ysb of sounds, or a whole "Download all" ZIP (its sounds and scales).</p>
   </section>
 
   <section class="card" id="setCard" hidden>
@@ -291,8 +306,8 @@ footer button { font-size: 13px; padding: 3px 9px; }
 <script type="module">
 import { Companion, findCompanions } from "./lib/companion.js";
 import { readTake, writeTake, writeMid, readMid, notesOf, flatten } from "./take.js";
-import { toJson as ysbToJson, fromJson as ysbFromJson, PARAMS as YP, DEFAULT as YDEF, ONSETS, N as YN, CN, SN, OV, label as clpLabel, paramOf } from "./ysb.js";
-import { zip } from "./zip.js";
+import { toJson as ysbToJson, fromJson as ysbFromJson, fx as ysbFx, PARAMS as YP, DEFAULT as YDEF, ONSETS, N as YN, CN, SN, OV, label as clpLabel, paramOf } from "./ysb.js";
+import { zip, unzip } from "./zip.js";
 let knownScales = [];
 fetch("./scale_names.json").then((r) => r.json()).then((j) => { knownScales = j; if (scales.length) showScales(); }).catch(() => {});
 let clpNames = null;
@@ -520,16 +535,23 @@ async function readSounds() {
     return true;
   } catch (e) { say(`Couldn't read your sounds: ${e.message}`, true); return false; }
 }
+function favBox(s) {                             // (0.17) a favourite: first on PRESETS, in FAVOURITES
+  const b = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!s.favourite, title: "A favourite" });
+  b.onchange = () => { s.favourite = b.checked; };
+  b.setAttribute("aria-label", "favourite");
+  return b;
+}
 function showSounds() {
   $("yardMeta").textContent = ysounds.length
     ? `${ysounds.length} of ${YN}: after YARD's nine on PRESETS.`
-    : "None yet: on the FM-1, FX held and SAVE keeps the YARD sound playing; or Add one here.";
+    : "None yet: on the FM-1, EDIT, ENV or FX held and SAVE keeps the YARD sound playing; or Add one here.";
   $("ysounds").replaceChildren(...ysounds.map((s, i) => {
     const tr = document.createElement("tr"), cell = (el) => { const td = document.createElement("td"); td.append(el); tr.append(td); };
     const num = document.createElement("span"); num.textContent = s.slot ?? "·"; cell(num);
     const name = Object.assign(document.createElement("input"), { type: "text", maxLength: 12, value: s.name });
     name.oninput = () => { s.name = name.value.toUpperCase(); };
     name.setAttribute("aria-label", "name"); cell(name);
+    cell(favBox(s));
     const mono = Object.assign(document.createElement("input"), { type: "checkbox", checked: !!s.mono });
     mono.onchange = () => { s.mono = mono.checked; };
     mono.setAttribute("aria-label", "mono"); cell(mono);
@@ -635,14 +657,16 @@ const chgText = (c) => c.changes.map((x) => {      // M1=84, #34=6 when the labe
   return `${t}=${x.value}`;
 }).join(", ");
 function showClipper() {
+  fillRooms();
   $("clipMeta").textContent = csounds.length ? `${csounds.length} of ${CN}: in the family of the sound each starts from.`
-    : "None yet: on the FM-1, FX held and SAVE keeps the Clipper sound playing (its macros, sends, reverb); or Add one here.";
+    : "None yet: on the FM-1, EDIT, ENV or FX held and SAVE keeps the Clipper sound playing (its macros, envelope, sends, reverb); or Add one here.";
   $("cAdd").disabled = !clpNames || csounds.length >= CN;
   $("csounds").replaceChildren(...csounds.map((c, i) => {
     const tr = document.createElement("tr"), cell = (el) => { const td = document.createElement("td"); td.append(el); tr.append(td); };
     const num = document.createElement("span"); num.textContent = c.slot ?? "·"; cell(num);
     const name = Object.assign(document.createElement("input"), { type: "text", maxLength: 12, value: c.name });
     name.oninput = () => { c.name = name.value.toUpperCase(); }; name.setAttribute("aria-label", "name"); cell(name);
+    cell(favBox(c));
     const snd = document.createElement("select");
     for (const x of clpNames ? clpNames.sounds : []) {
       const o = Object.assign(document.createElement("option"), { value: `${x.engine}/${x.preset}`, textContent: `${x.name} (${x.engine_name})` });
@@ -716,12 +740,42 @@ $("yPut").onchange = async (e) => {
   e.target.value = "";
   if (!f) return;
   try {
-    const raw = new Uint8Array(await f.arrayBuffer());
-    const j = /\.ysb$/i.test(f.name) ? ysbToJson(raw, clpNames) : ysbToJson(ysbFromJson(JSON.parse(new TextDecoder().decode(raw)), clpNames), clpNames);
+    let raw = new Uint8Array(await f.arrayBuffer()), kind = f.name;
+    if (/\.zip$/i.test(f.name)) {                // (0.17) a "Download all" ZIP: its sounds and scales (the bank, or its JSON)
+      const files = unzip(raw), b = files.find((x) => x.name === "yard.ysb") || files.find((x) => /\.json$/i.test(x.name) && /sounds/.test(x.name));
+      if (!b) throw new Error("no yard.ysb or sounds JSON in it");
+      raw = b.bytes, kind = b.name;
+    }
+    const j = /\.ysb$/i.test(kind) ? ysbToJson(raw, clpNames) : ysbToJson(ysbFromJson(JSON.parse(new TextDecoder().decode(raw)), clpNames), clpNames);
     ysounds = j.sounds, csounds = j.clipper, scales = j.scales || [];
     showSounds();
     say(`${f.name}: ${ysounds.length} YARD and ${csounds.length} Clipper sounds. Send to the FM-1 to keep them there.`);
   } catch (err) { say(`Couldn't read ${f.name}: ${err.message}`, true); }
+};
+
+// (0.17, Alex) the same effects on many sounds at once (ysb.js fx, as tools/ysb.py fx and yard.py sounds --fx)
+function fillRooms() {
+  if (!clpNames || $("bROOM").options.length > 1) return;
+  for (const r of clpNames.reverb.names) $("bROOM").append(Object.assign(document.createElement("option"), { value: r, textContent: r }));
+}
+$("bApply").onclick = () => {
+  try {
+    fillRooms();
+    const values = {};
+    for (const k of ["DST", "CHO", "DLY", "REV", "SPACE"]) {
+      const x = $(`b${k}`).value.trim();
+      if (x === "") continue;
+      const v = Number(x);
+      if (!Number.isInteger(v) || v < 0 || v > 127) throw new Error(`${k}: ${x}, not 0..127`);
+      values[k] = v;                           // (SPACE: Clipper's macro; a HYBRID sound's, its M4, as on the panel)
+    }
+    const reverb = $("bROOM").value || null;
+    if (!Object.keys(values).length && !reverb) { say("Set a value (or a ROOM) first.", true); return; }
+    const r = ysbFx(csounds, clpNames, values, { reverb, favourites: $("bFav").checked });
+    showClipper();
+    say(`${r.done} Clipper sound${r.done === 1 ? "" : "s"} changed here: Send to the FM-1 to keep them there.` +
+        (r.skipped.length ? ` Left as they were: ${r.skipped.map((x) => `${x.name} (${x.why})`).join("; ")}.` : ""), !!r.skipped.length);
+  } catch (e) { say(`Couldn't apply: ${e.message}`, true); }
 };
 
 $("getSet").onclick = async () => {

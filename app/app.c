@@ -262,10 +262,12 @@ static void scale_set(uint32_t num)      /* a new number: the named one it is, i
  * and SAVE. The bank: "MVYB", version 1, its size; then YB_N sounds of 32 bytes: a name (12, NUL-padded), flags (bit 0
  * used, bit 1 mono), the nine parameters (TONE REL GLIDE ATTACK DECAY RES DETUNE SUB PLUCK, 0..127), zeros */
 #define YB_MAGIC 0x4259564Du             /* "MVYB" */
+#define YB_FAV 4u                        /* (0.17, Alex: "a way to identify favourites") a sound's flag, YARD's and Clipper's:
+                                          * listed first in PRESETS, in FAVOURITES, as well as in its family */
 #define YB_N 32u
 typedef struct {
     char name[12];
-    uint8_t flags;                       /* 1 used, 2 mono */
+    uint8_t flags;                       /* 1 used, 2 mono, 4 a favourite (0.17) */
     uint8_t p[SP_N];
     uint8_t pad[32 - 12 - 1 - SP_N];
 } yb_sound_t;
@@ -275,7 +277,7 @@ typedef struct {
 #define CB_MAGIC 0x4243564Du             /* "MVCB" */
 typedef struct {
     char name[12];
-    uint8_t flags, engine, preset;
+    uint8_t flags, engine, preset;       /* (flags: 1 used, 4 a favourite, 0.17) */
     int8_t rtype;
     uint8_t n, pad[3];
     struct {
@@ -307,7 +309,7 @@ typedef char yb_sound_is_32[sizeof(yb_sound_t) == 32u ? 1 : -1];
 static yard_bank_t ybank;
 static synth_sound_t yuser[YB_N];        /* the used ones, in slot order, as PRESETS lists them */
 static char yuser_name[YB_N][13];
-static uint8_t yuser_slot[YB_N], nyuser;
+static uint8_t yuser_slot[YB_N], nyuser, yuser_fav[YB_N];
 static void yard_bank_index(void)
 {
     uint32_t i, k;
@@ -323,6 +325,7 @@ static void yard_bank_index(void)
             yuser_name[nyuser][0] = 'U', yuser_name[nyuser][1] = (char)('1' + i % 9u), yuser_name[nyuser][2] = 0;
         yuser[nyuser].name = yuser_name[nyuser];
         yuser[nyuser].mono = (uint8_t)((b->flags >> 1) & 1u);
+        yuser_fav[nyuser] = (uint8_t)(b->flags & YB_FAV ? 1u : 0u);
         for (k = 0; k < SP_N; k++)
             yuser[nyuser].p[k] = b->p[k] > 127u ? 127u : b->p[k];
         yuser_slot[nyuser++] = (uint8_t)i;
@@ -330,7 +333,7 @@ static void yard_bank_index(void)
 }
 /* the user's Clipper sounds in PRESETS's order: each one's place in the bank and its factory sound's in clp's list
  * (one whose sound is not in this build is left out) */
-static uint8_t cuser_slot[YB_N], ncuser;
+static uint8_t cuser_slot[YB_N], ncuser, cuser_fav[YB_N];
 static uint16_t cuser_base[YB_N];
 static char cuser_name[YB_N][13];
 static void clp_bank_index(void)
@@ -350,6 +353,7 @@ static void clp_bank_index(void)
         if (b->n > CLP_OV_MAX)
             b->n = CLP_OV_MAX;
         cuser_base[ncuser] = (uint16_t)at;
+        cuser_fav[ncuser] = (uint8_t)(b->flags & YB_FAV ? 1u : 0u);
         cuser_slot[ncuser++] = (uint8_t)i;
     }
 }
@@ -400,9 +404,17 @@ static uint32_t yard_fam(const synth_sound_t *y)   /* YARD's: mono a lead, PLUCK
 {
     return y->mono ? 1u : y->p[SP_PLUCK] >= 64u ? 2u : 0u;
 }
+#define FAM_FAV 7u                       /* (0.17) FAVOURITES: the user's sounds marked so, before every family */
+static const char *fam_name(uint32_t f) { return f == FAM_FAV ? "FAVOURITES" : clp_family_name(f); }
 static void plist_build(void)
 {
     uint32_t f, i, n = 0;
+    for (i = 0; i < nyuser && n < PL_MAX; i++)   /* (each also in its own family, below) */
+        if (yuser_fav[i])
+            pfam[n] = FAM_FAV, plist[n++] = (uint16_t)(PL_USER | i);
+    for (i = 0; i < ncuser && n < PL_MAX; i++)
+        if (cuser_fav[i])
+            pfam[n] = FAM_FAV, plist[n++] = (uint16_t)(PL_CUSER | i);
     for (f = 0; f < 7u; f++) {
         for (i = 0; i < SYNTH_NSOUNDS && n < PL_MAX; i++)
             if (yard_fam(&SYNTH_SOUNDS[i]) == f)
@@ -1228,7 +1240,7 @@ static struct {
     chord_voicing prev;
     uint8_t have_prev;
     char chord_name[16];
-    uint32_t rec_t;
+    uint32_t rec_t, save_t;              /* (save_t: SAVE pressed on a sound's layer: a tap or a hold, 0.17) */
     uint32_t link;
     uint32_t hist_ms, hist_at;
     uint32_t slot_warn;                  /* when a slot change last warned of an unsaved take */
@@ -1819,7 +1831,7 @@ static void sound_pick(int32_t e)        /* PRESETS (or SELECT, by family): the 
                 synth_set(i, ycur()->p[i]), knob[i] = ycur()->p[i];
     set_dirty = 1;
     sound_change_hold();
-    app_say(clp_family_name(pfam[set.sound < plist_n ? set.sound : 0u]), sound_name());
+    app_say(fam_name(pfam[set.sound < plist_n ? set.sound : 0u]), sound_name());
 }
 
 /* FX held, SAVE: the YARD sound as the knobs have it into the user's bank: over itself if it is a user sound, else
@@ -1858,7 +1870,7 @@ static void scale_store(void)            /* SAVE on SEL's SCALE layer: the numbe
     ui.redraw = 1;
 }
 
-static void yard_store(void)
+static void yard_store(int fav)          /* fav: 1 the sound a favourite as well, -1 no longer, 0 as it was */
 {
     rt_flash();
     uint32_t i, slot = YB_N, k;
@@ -1886,6 +1898,8 @@ static void yard_store(void)
             ybank.s[slot].name[k] = t[k];
         ybank.s[slot].flags = (uint8_t)(1u | (src->mono ? 2u : 0u));
     }
+    if (fav)
+        ybank.s[slot].flags = (uint8_t)(fav > 0 ? ybank.s[slot].flags | YB_FAV : ybank.s[slot].flags & ~YB_FAV);
     for (k = 0; k < SP_N; k++)
         ybank.s[slot].p[k] = (uint8_t)synth_param(k);
     if (plat_store_save(OBJ_YARD, &ybank, sizeof ybank)) {
@@ -1901,13 +1915,13 @@ static void yard_store(void)
     for (k = 0; k < 12u && ybank.s[slot].name[k]; k++)
         t[k] = ybank.s[slot].name[k];
     t[k] = 0;
-    app_say("SAVED", t);
+    app_say(fav > 0 ? "FAVOURITE" : fav < 0 ? "NOT A FAVOURITE" : "SAVED", t);
 }
 
 /* FX held, SAVE on a Clipper sound: what differs from its factory sound (the macros and sends, a file's changes; at
  * most CLP_OV_MAX) and the reverb's model into the user's bank: over itself if it is a user sound, else into the
  * first free slot, named after its sound and a +; the bank saved, the new one playing */
-static void clp_user_store(void)
+static void clp_user_store(int fav)      /* (fav: as yard_store's) */
 {
     uint32_t i, slot = YB_N, k, n, key = clp_sound_key(clp_at());
     uint8_t id[CLP_OV_MAX];
@@ -1933,7 +1947,9 @@ static void clp_user_store(void)
             b->name[k] = nm[k];
         b->name[k] = '+';
     }
-    b->flags = 1u;
+    b->flags = (uint8_t)(1u | (b->flags & YB_FAV));   /* (0.17: a favourite stays one) */
+    if (fav)
+        b->flags = (uint8_t)(fav > 0 ? b->flags | YB_FAV : b->flags & ~YB_FAV);
     b->engine = (uint8_t)(key >> 8), b->preset = (uint8_t)key;
     b->rtype = (int8_t)clp_reverb_type();
     n = clp_changes(id, v, CLP_OV_MAX);
@@ -1953,7 +1969,7 @@ static void clp_user_store(void)
     for (k = 0; k < 12u && b->name[k]; k++)
         t[k] = b->name[k];
     t[k] = 0;
-    app_say("SAVED", t);
+    app_say(fav > 0 ? "FAVOURITE" : fav < 0 ? "NOT A FAVOURITE" : "SAVED", t);
 }
 
 static void slot_step(int32_t d)          /* SEQ / HOME: the next or previous slot's take */
@@ -2681,14 +2697,12 @@ static void input(void)
             if (ui.held >= 0)
                 ui.held_used = 1;
             scale_store();
-        } else if (k == B_SAVE && sound_layer()) {   /* FX (or EDIT on SOUND) and SAVE: this
-                                                                             * sound kept, YARD's or Clipper's */
+        } else if (k == B_SAVE && sound_layer()) {   /* EDIT on SOUND, ENV or FX and SAVE: this sound kept,
+                                                      * YARD's or Clipper's: tapped, kept; held, a favourite too
+                                                      * (again on a favourite: no longer), below */
             if (ui.held >= 0)
                 ui.held_used = 1;
-            if (clp_on())
-                clp_user_store();
-            else
-                yard_store();
+            ui.save_t = now ? now : 1u;
         } else if (k == B_SAVE) {
             int bad;
             rt_flash();
@@ -2714,6 +2728,17 @@ static void input(void)
         for (k = EN_K1; k < NE; k++)     /* (0.16) the knobs' labels unlit: they are another layer's now */
             ui.knob_at[k] = 0;
         ui.redraw = 1;
+    }
+    if (ui.save_t && (!(btn >> B_SAVE & 1u) || now - ui.save_t >= 700u)) {   /* SAVE on a sound's layer */
+        int fav = 0;
+        if (btn >> B_SAVE & 1u)          /* (held: the favourite flips) */
+            fav = (cuser_on() ? cuser_fav[(pl_now() & 0x0FFFu) % YB_N] : user_on() ? yuser_fav[(pl_now() & 0x0FFFu) % YB_N]
+                               : 0) ? -1 : 1;
+        ui.save_t = 0;
+        if (clp_on())
+            clp_user_store(fav);
+        else
+            yard_store(fav);
     }
     if (ui.rec_t) {                      /* REC: held, the whole history; a tap, the last phrase */
         if (btn >> B_REC & 1u) {
@@ -3449,6 +3474,8 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_macro(3);
     else if (!strcmp(what, "reverb"))   /* the reverb's model now */
         *got = (int)clp_reverb_type();
+    else if (!strcmp(what, "fav"))      /* (0.17) the sound playing is a favourite */
+        *got = cuser_on() ? cuser_fav[(pl_now() & 0x0FFFu) % YB_N] : user_on() ? yuser_fav[(pl_now() & 0x0FFFu) % YB_N] : 0;
     else if (!strcmp(what, "ncuser"))   /* the user's Clipper sounds */
         *got = ncuser;
     else if (!strcmp(what, "cuser"))    /* a user's Clipper sound plays */

@@ -11,7 +11,9 @@
     tools/yard.py settings [OUT]          the settings as a file (default settings.bin); --put FILE sends one back
     tools/yard.py sounds [OUT.json]       your own sounds, YARD's and Clipper's (FX and SAVE keep them on the FM-1) as JSON (default
                                           yard-sounds.json; .ysb: the bank as it is); --put FILE (.json or .ysb) sends
-                                          them, replacing the FM-1's
+                                          them, replacing the FM-1's; --fx "CHO=4,REV=8,SPACE=12" (0.17) sets those
+                                          on every Clipper sound of yours on the FM-1 (--favourites: only those;
+                                          --reverb MODEL as well), and sends them back
     tools/yard.py ls                      what the FM-1 has
 
 Options: --port NAME (part of the FM-1's MIDI port name), --serve-cmd CMD (a host simulator instead of an FM-1:
@@ -158,6 +160,9 @@ def main(argv=None, link=None):
     p.add_argument("--mvt", action="store_true", help="take: keep the .mvt beside the MIDI file")
     p.add_argument("--mpe", action="store_true", help="take: the MPE channels kept (a DAW may split them into clips)")
     p.add_argument("--put", metavar="FILE", help="settings, sounds: send this file to the FM-1")
+    p.add_argument("--fx", metavar="NAME=V,...", help="sounds: these changes on your Clipper sounds, sent back")
+    p.add_argument("--reverb", metavar="MODEL", help="sounds --fx: the reverb's model too (ROOM PLATE HALL SHIMR)")
+    p.add_argument("--favourites", action="store_true", help="sounds --fx: only your favourites")
     p.add_argument("--port")
     p.add_argument("--serve-cmd")
     a = p.parse_args(argv)
@@ -219,7 +224,19 @@ def main(argv=None, link=None):
                 print(f"settings -> {out}")
         elif a.cmd == "sounds":
             i = c.index_of(SOUNDS)["index"]
-            if a.put:
+            if a.fx:                         # (0.17) the same changes on many sounds: read, changed, sent back
+                try:
+                    vals = {k.strip(): int(v) for k, v in (x.split("=", 1) for x in a.fx.split(",") if x.strip())}
+                    j = ysb.to_json(bytes(c.read(i)))
+                    n, skipped = ysb.fx(j, vals, a.reverb, a.favourites)
+                    raw = ysb.from_json(j)
+                except ValueError as e:
+                    raise SystemExit(f"--fx: {e}")
+                c.write(i, raw)
+                print(f"{n} Clipper sound{'' if n == 1 else 's'} changed on the FM-1 ({a.fx})")
+                for name, why in skipped:
+                    print(f"  {name}: left as it was ({why})")
+            elif a.put:
                 data = open(a.put, "rb").read()
                 try:
                     raw = data if a.put.endswith(".ysb") else ysb.from_json(json.loads(data))

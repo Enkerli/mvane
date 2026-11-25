@@ -5,15 +5,15 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromJson, toJson, SIZE, SIZE1, SIZE2 } from "./ysb.js";
+import { fromJson, toJson, fx, SIZE, SIZE1, SIZE2 } from "./ysb.js";
 
 const names = JSON.parse(readFileSync(new URL("./clp_names.json", import.meta.url)));
 const d = mkdtempSync(join(tmpdir(), "ysb-"));
 const mine = { format: "mvane-yard-sounds", version: 2, sounds: [
   { slot: 3, name: "Glass Keys", mono: false, tone: 80, release: 70, glide: 30, attack: 2, decay: 50, res: 30, detune: 40, sub: 0, pluck: 90,
     wave: 64, pw: 30, noise: 5, filter: 127, onset: 40, onset_level: 90, level: 70 },
-  { name: "reed", mono: true, tone: 45, res: 10 }],
-  clipper: [{ name: "Glassy", sound: "GLASS PAD", reverb: "hall", changes: [{ name: "BRITE", value: 84 }, { id: 34, value: 6 }] },
+  { name: "reed", mono: true, tone: 45, res: 10, favourite: true }],
+  clipper: [{ name: "Glassy", sound: "GLASS PAD", reverb: "hall", favourite: true, changes: [{ name: "BRITE", value: 84 }, { id: 34, value: 6 }] },
             { slot: 5, name: "Organ+", sound: "SOUL ORGAN", changes: [] }],
   scales: [{ name: "Hijaz", pcs: 1459 }, { slot: 4, name: "", pcs: 2373 }] };
 const js = fromJson(mine, names);
@@ -38,4 +38,20 @@ if (toJson(v1, names).sounds.length !== 2) throw new Error("a version 1 bank");
 let threw = false;
 try { fromJson({ sounds: [{ slot: 1, name: "X", tone: 200 }] }, names); } catch (e) { threw = true; }
 if (!threw) throw new Error("tone 200 taken");
+// (0.17) favourites both ways, in both; the same FX on every Clipper sound (CHO replaced, REV and SPACE added), as ysb.py's
+if (!back.sounds[0].favourite || back.sounds[1].favourite || !c[0].favourite || c[1].favourite) throw new Error("favourites");
+{
+  const r = fx(back.clipper, names, { CHO: 4, REV: 8, "#99": 12 }, { reverb: "plate" });
+  if (r.done !== 2 || r.skipped.length) throw new Error(`fx: ${JSON.stringify(r)}`);
+  const g = back.clipper[0].changes.map((x) => `${x.id}=${x.value}`).join(" ");
+  if (g !== "122=84 34=4 36=8 99=12" || back.clipper[1].reverb !== "PLATE") throw new Error(`fx: ${g}`);
+  writeFileSync(join(d, "fxin.json"), JSON.stringify(mine));
+  execFileSync("python3", [new URL("../tools/ysb.py", import.meta.url).pathname, "fx", join(d, "fxin.json"), join(d, "fx.ysb"),
+    "CHO=4", "REV=8", "#99=12", "--reverb", "plate"]);
+  const mine2 = toJson(fromJson(JSON.parse(readFileSync(join(d, "fxin.json"))), names), names);
+  fx(mine2.clipper, names, { CHO: 4, REV: 8, "#99": 12 }, { reverb: "plate" });
+  if (Buffer.compare(Buffer.from(fromJson(mine2, names)), readFileSync(join(d, "fx.ysb")))) throw new Error("fx: ysb.js and ysb.py differ");
+  const f = fx(back.clipper, names, { CHO: 1 }, { favourites: true });
+  if (f.done !== 1 || back.clipper[1].changes.length !== 3) throw new Error("fx: favourites only");
+}
 console.log("ysb.js: all checks passed (the same bytes as ysb.py, YARD's and Clipper's sounds, scales, and back)");

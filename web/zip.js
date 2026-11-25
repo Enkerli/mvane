@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// A ZIP archive of files kept as they are (stored, no compression): what "Download all" gives. zip([{name, bytes}])
+// A ZIP archive of files kept as they are (stored, no compression): what "Download all" gives. zip([{name, bytes}]);
+// unzip(bytes) reads one back (0.17: its stored files; a compressed one is left out) -> [{name, bytes}]
 const T = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -33,5 +34,23 @@ export function zip(files, when = new Date()) {
   const all = [...parts, ...dir, new Uint8Array(e.buffer)], out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
   let o = 0;
   for (const p of all) out.set(p, o), o += p.length;
+  return out;
+}
+
+export function unzip(raw) {
+  const v = new DataView(raw.buffer, raw.byteOffset, raw.byteLength), dec = new TextDecoder(), out = [];
+  let e = raw.length - 22;
+  while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;   // the end of the central directory
+  if (e < 0) throw new Error("not a ZIP file");
+  let o = v.getUint32(e + 16, true);
+  for (let k = v.getUint16(e + 10, true); k > 0; k--) {
+    if (v.getUint32(o, true) !== 0x02014b50) throw new Error("a damaged ZIP file");
+    const method = v.getUint16(o + 10, true), size = v.getUint32(o + 20, true), nl = v.getUint16(o + 28, true);
+    const xl = v.getUint16(o + 30, true), cl = v.getUint16(o + 32, true), at = v.getUint32(o + 42, true);
+    const name = dec.decode(raw.subarray(o + 46, o + 46 + nl));
+    const data = at + 30 + v.getUint16(at + 26, true) + v.getUint16(at + 28, true);
+    if (method === 0) out.push({ name, bytes: raw.subarray(data, data + size) });
+    o += 46 + nl + xl + cl;
+  }
   return out;
 }

@@ -2,6 +2,7 @@
 // Your own sounds, YARD's and Clipper's, and your scales: the FM-1's bank (yard.ysb, app.c yard_bank_t) to lists and
 // back; the format of tools/ysb.py (version 3; version 2, 0.11's, had no scales; version 1, 0.10's, YARD's only). Clipper's names (web/clp_names.json, make
 // clp-names) turn a change's label into its parameter and back.
+export const FAV = 4;                             // (0.17) a sound's flag: a favourite (first in PRESETS, in FAVOURITES)
 export const MAGIC = 0x4259564d, CMAGIC = 0x4243564d, SMAGIC = 0x4253564d, N = 32, CN = 32, SN = 16, OV = 14, HYBRID = 12;
 export const SIZE1 = 8 + 32 * N, SIZE2 = SIZE1 + 8 + 64 * CN, SIZE = SIZE2 + 8 + 16 * SN;
 export const PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave", "pw", "noise", "filter",
@@ -57,7 +58,7 @@ export function toJson(raw, names) {            // yard.ysb's bytes -> {format, 
   for (let i = 0; i < N; i++) {
     const o = 8 + 32 * i;
     if (!(raw[o + 12] & 1)) continue;
-    const s = { slot: i + 1, name: getName(raw, o), mono: !!(raw[o + 12] & 2) };
+    const s = { slot: i + 1, name: getName(raw, o), mono: !!(raw[o + 12] & 2), favourite: !!(raw[o + 12] & FAV) };
     PARAMS.forEach((k, j) => { s[k] = Math.min(127, raw[o + 13 + j]); });
     out.sounds.push(s);
   }
@@ -78,7 +79,8 @@ export function toJson(raw, names) {            // yard.ysb's bytes -> {format, 
     }
     const r = names ? rtype - names.reverb.min : -1;
     out.clipper.push({ slot: i + 1, name: getName(raw, o), engine, preset, sound: names ? soundName(names, engine, preset) : "?",
-      reverb: names && r >= 0 && r < names.reverb.names.length ? names.reverb.names[r] : null, changes });
+      reverb: names && r >= 0 && r < names.reverb.names.length ? names.reverb.names[r] : null,
+      favourite: !!(raw[o + 12] & FAV), changes });
   }
   return out;
 }
@@ -91,7 +93,7 @@ export function fromJson(d, names) {            // the lists -> yard.ysb's bytes
   slots(d.sounds, N, "YARD sounds").forEach((s, i) => {
     if (!s) return;
     const o = 8 + 32 * i, name = putName(raw, o, s, `USER ${i + 1}`);
-    raw[o + 12] = 1 | (s.mono ? 2 : 0);
+    raw[o + 12] = 1 | (s.mono ? 2 : 0) | (s.favourite ? FAV : 0);
     PARAMS.forEach((k, j) => {
       const x = s[k] ?? DEFAULT[k];
       if (!Number.isInteger(x) || x < 0 || x > 127) throw new Error(`${name}: ${k} ${x}, not 0..127`);
@@ -118,7 +120,7 @@ export function fromJson(d, names) {            // the lists -> yard.ysb's bytes
     }
     const ch = s.changes || [];
     if (ch.length > OV) throw new Error(`${name}: ${ch.length} changes, ${OV} at most`);
-    raw[o + 12] = 1, raw[o + 13] = engine, raw[o + 14] = preset;
+    raw[o + 12] = 1 | (s.favourite ? FAV : 0), raw[o + 13] = engine, raw[o + 14] = preset;
     v.setInt8(o + 15, rtype);
     raw[o + 16] = ch.length;
     ch.forEach((c, k) => {
@@ -139,4 +141,33 @@ export function fromJson(d, names) {            // the lists -> yard.ysb's bytes
     v.setUint16(o + 12, 0x8000 | s.pcs, true);
   });
   return raw;
+}
+
+// (0.17, Alex: "applying some similar FX across the board") the same changes on many Clipper sounds: values
+// {label or #id: value} (CHO, REV, DLY, DST, SPACE, or any of a sound's parameters), each replacing that parameter's
+// change or added; reverb a model's name, or null (as each has it); favourites: only those. A sound that would pass
+// OV changes keeps its own. -> {done, skipped: [{name, why}]}; as tools/ysb.py fx
+export const FX_IDS = { DRIVE: 33, DST: 33, CHORUS: 34, CHO: 34, DELAY: 35, DLY: 35, REVERB: 36, REV: 36 };   // (the sends,
+// whatever the engine: an engine's own values may share a label, DST)
+export function fx(clipper, names, values, { reverb = null, favourites = false } = {}) {
+  if (reverb !== null && !names.reverb.names.includes(String(reverb).toUpperCase()))
+    throw new Error(`reverb ${reverb}, not one of ${names.reverb.names.join(", ")}`);
+  let done = 0;
+  const skipped = [];
+  for (const s of clipper) {
+    if (favourites && !s.favourite) continue;
+    try {
+      const ch = (s.changes || []).map((c) => ({ ...c, id: c.id ?? paramOf(names, c.name, s.engine) }));
+      for (const [k, v] of Object.entries(values)) {
+        const id = FX_IDS[String(k).toUpperCase()] ?? paramOf(names, k, s.engine), hit = ch.find((c) => c.id === id);
+        if (hit) hit.value = v;
+        else ch.push({ id, name: label(names, id, s.engine), value: v });
+      }
+      if (ch.length > OV) { skipped.push({ name: s.name, why: `${ch.length} changes, ${OV} at most` }); continue; }
+      s.changes = ch;
+      if (reverb !== null) s.reverb = String(reverb).toUpperCase();
+      done++;
+    } catch (e) { skipped.push({ name: s.name, why: e.message }); }
+  }
+  return { done, skipped };
 }

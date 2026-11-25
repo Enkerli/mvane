@@ -5,9 +5,10 @@
 The bank, version 3 (0.12: the user's scales; version 2, 0.11's, 3088 bytes, without them; version 1, 0.10's, had the
 YARD part only, 1032 bytes):
   "MVYB" (little-endian 0x4259564D), version, 32, two zeros; 32 YARD sounds of 32 bytes: a name (12, NUL-padded,
-  printable ASCII), flags (bit 0 used, bit 1 mono), the thirteen parameters 0..127 in synth.h's order (0.10 wrote
+  printable ASCII), flags (bit 0 used, bit 1 mono, bit 2 a favourite: 0.17), the thirteen parameters 0..127 in synth.h's order (0.10 wrote
   nine: the other four at 0), six zeros;
-  "MVCB" (0x4243564D), 32, three zeros; 32 Clipper sounds of 64 bytes: a name (12), flags (bit 0 used), the factory
+  "MVCB" (0x4243564D), 32, three zeros; 32 Clipper sounds of 64 bytes: a name (12), flags (bit 0 used, bit 2 a
+  favourite), the factory
   sound it starts from (engine, preset), the reverb's model (signed: -1 as it is), how many changes (up to 14), three
   zeros, 14 changes of 3 bytes (Clipper's parameter P_*, a signed 16-bit value, little-endian), two zeros;
   "MVSB" (0x4253564D), 16, three zeros; 16 scales of 16 bytes: a name (12; empty: the screen shows its number),
@@ -18,7 +19,13 @@ TRIANGLE), "pw", "noise", "filter" (0..42 LOW, 43..84 BAND, 85..127 HIGH)}], "cl
 "preset", "sound" (its name, to read), "reverb" (ROOM, PLATE, HALL, SHIMR or null), "changes": [{"id", "name" (to
 read), "value"}]}]}; a sound without a slot takes the first free one; a Clipper sound may name its sound ("sound")
 instead of its engine and preset, a change its parameter ("name", when one has that label) instead of its id: BRITE,
-TIMBR, MOTN and SPACE are a HYBRID sound's M1..M4, as on the panel.
+TIMBR, MOTN and SPACE are a HYBRID sound's M1..M4, as on the panel. Either kind may have "favourite": true (0.17:
+first in PRESETS, in FAVOURITES; SAVE held on the FM-1 marks one).
+
+Batch changes (0.17, Alex: "applying some similar FX across the board"): fx() sets the same changes on many Clipper
+sounds at once (all of them, or the favourites), each change replacing the sound's own of that parameter:
+    tools/ysb.py fx IN OUT CHO=4 REV=8 SPACE=12 [--reverb HALL] [--favourites]
+(IN and OUT .json or .ysb; then tools/yard.py sounds --put OUT, or the page's Load a file, Send to the FM-1).
 """
 import json
 import os
@@ -26,6 +33,7 @@ import struct
 import sys
 
 MAGIC, CMAGIC, SMAGIC, N, CN, SN, OV = 0x4259564D, 0x4243564D, 0x4253564D, 32, 32, 16, 14
+FAV = 4                                             # (0.17) a sound's flag: a favourite
 HYBRID = 12                                         # (Clipper's HYBRID engine: its macros are its EDIT values M1..M4)
 SIZE1 = 8 + 32 * N
 SIZE2 = SIZE1 + 8 + 64 * CN
@@ -63,7 +71,8 @@ def _yard(raw, out):
         b = raw[8 + 32 * i: 8 + 32 * (i + 1)]
         if not b[12] & 1:
             continue
-        s = {"slot": i + 1, "name": b[:12].split(b"\0", 1)[0].decode("ascii", "replace"), "mono": bool(b[12] & 2)}
+        s = {"slot": i + 1, "name": b[:12].split(b"\0", 1)[0].decode("ascii", "replace"), "mono": bool(b[12] & 2),
+             "favourite": bool(b[12] & FAV)}
         s.update({k: min(127, b[13 + j]) for j, k in enumerate(PARAMS)})
         out["sounds"].append(s)
 
@@ -97,7 +106,8 @@ def to_json(raw):
         r = rtype - rev["min"]
         out["clipper"].append({"slot": i + 1, "name": b[:12].split(b"\0", 1)[0].decode("ascii", "replace"),
                                "engine": engine, "preset": preset, "sound": sound_name(engine, preset),
-                               "reverb": rev["names"][r] if 0 <= r < len(rev["names"]) else None, "changes": ch})
+                               "reverb": rev["names"][r] if 0 <= r < len(rev["names"]) else None,
+                               "favourite": bool(b[12] & FAV), "changes": ch})
     return out
 
 
@@ -138,7 +148,7 @@ def from_json(d):
             continue
         o, b = 8 + 32 * i, _name(s, f"USER {i + 1}")
         raw[o:o + len(b)] = b
-        raw[o + 12] = 1 | (2 if s.get("mono") else 0)
+        raw[o + 12] = 1 | (2 if s.get("mono") else 0) | (FAV if s.get("favourite") else 0)
         for j, k in enumerate(PARAMS):
             v = s.get(k, DEFAULT[k])
             if not isinstance(v, int) or not 0 <= v <= 127:
@@ -172,7 +182,7 @@ def from_json(d):
         if len(ch) > OV:
             raise ValueError(f"{b.decode()}: {len(ch)} changes, {OV} at most")
         raw[o:o + len(b)] = b
-        raw[o + 12], raw[o + 13], raw[o + 14] = 1, engine, preset
+        raw[o + 12], raw[o + 13], raw[o + 14] = 1 | (FAV if s.get("favourite") else 0), engine, preset
         struct.pack_into("<bB", raw, o + 15, rtype, len(ch))
         for k, c in enumerate(ch):
             pid = c.get("id")
@@ -204,10 +214,102 @@ def from_json(d):
     return bytes(raw)
 
 
-if __name__ == "__main__":                          # ysb.py IN.ysb|IN.json OUT.json|OUT.ysb: one to the other
-    src, dst = sys.argv[1], sys.argv[2]
-    data = open(src, "rb").read()
-    if src.endswith(".json"):
-        open(dst, "wb").write(from_json(json.loads(data)))
+FX_IDS = {"DRIVE": 33, "DST": 33, "CHORUS": 34, "CHO": 34, "DELAY": 35, "DLY": 35, "REVERB": 36, "REV": 36}
+"""(0.17) the effects' sends by name, whatever the engine (an engine's own values may share a label: DST)"""
+
+
+def _pid(name, engine):
+    """a change's parameter by its label (or #id; the sends by FX_IDS), as from_json reads one"""
+    n, t = names(), str(name).strip().upper()
+    if t.lstrip("#").isdigit():
+        return int(t.lstrip("#"))
+    if t in FX_IDS:
+        return FX_IDS[t]
+    if t in ("BRITE", "TIMBR", "MOTN", "SPACE") and engine == HYBRID:
+        return n["edit0"] + 4 + ["BRITE", "TIMBR", "MOTN", "SPACE"].index(t)
+    ids = [p for p in range(n["params"]) if label(p, engine) == t]
+    if len(ids) != 1:
+        raise ValueError(f"{name}: {len(ids)} parameters by that name (use #id)")
+    return ids[0]
+
+
+def fx(d, values, reverb=None, favourites=False):
+    """(0.17) the same changes on many Clipper sounds: values {label or #id: value} (CHO, REV, DLY, DST, SPACE, or
+    any of the sound's parameters), each replacing that parameter's change or added; reverb, a model's name or None
+    (as each has it). favourites: only those. Returns (how many changed, [(name, why not)]): a sound that would
+    pass 14 changes keeps its own"""
+    if reverb is not None and str(reverb).upper() not in names()["reverb"]["names"]:
+        raise ValueError(f"reverb {reverb!r}, not one of {', '.join(names()['reverb']['names'])}")
+    done, skipped = 0, []
+    for s in d.get("clipper", []):
+        if favourites and not s.get("favourite"):
+            continue
+        engine = s.get("engine")
+        if engine is None:
+            m = [x for x in names()["sounds"] if x["name"] == str(s.get("sound", "")).upper()]
+            if not m:
+                skipped.append((s.get("name", "?"), f"no Clipper sound named {s.get('sound')!r}"))
+                continue
+            engine = m[0]["engine"]
+        ch = [dict(c) for c in s.get("changes", [])]
+        for c in ch:                                # (each change by its id from here)
+            if c.get("id") is None:
+                c["id"] = _pid(c.get("name", ""), engine)
+        for k, v in values.items():
+            pid = _pid(k, engine)
+            hit = [c for c in ch if c["id"] == pid]
+            if hit:
+                hit[0]["value"] = int(v)
+            else:
+                ch.append({"id": pid, "name": label(pid, engine), "value": int(v)})
+        if len(ch) > OV:
+            skipped.append((s.get("name", "?"), f"{len(ch)} changes, {OV} at most"))
+            continue
+        s["changes"] = ch
+        if reverb is not None:
+            s["reverb"] = str(reverb).upper()
+        done += 1
+    return done, skipped
+
+
+def _read(path):
+    data = open(path, "rb").read()
+    return json.loads(data) if path.endswith(".json") else to_json(data)
+
+
+def _write(path, d):
+    if path.endswith(".json"):
+        open(path, "w").write(json.dumps(d, indent=2) + "\n")
     else:
-        open(dst, "w").write(json.dumps(to_json(data), indent=2) + "\n")
+        open(path, "wb").write(from_json(d))
+
+
+if __name__ == "__main__":
+    # ysb.py IN.ysb|IN.json OUT.json|OUT.ysb: one to the other
+    # ysb.py fx IN OUT NAME=VALUE ... [--reverb MODEL] [--favourites]: the same changes on many Clipper sounds
+    args = sys.argv[1:]
+    if args and args[0] == "fx":
+        fav, rv, vals, rest = "--favourites" in args, None, {}, []
+        args = [x for x in args[1:] if x != "--favourites"]
+        while args:
+            x = args.pop(0)
+            if x == "--reverb":
+                rv = args.pop(0)
+            elif "=" in x:
+                k, v = x.split("=", 1)
+                vals[k] = int(v)
+            else:
+                rest.append(x)
+        if len(rest) != 2:
+            raise SystemExit("ysb.py fx IN OUT NAME=VALUE ... [--reverb MODEL] [--favourites]")
+        d = _read(rest[0])
+        try:
+            n, skipped = fx(d, vals, rv, fav)
+            _write(rest[1], d)
+        except ValueError as e:
+            raise SystemExit(f"ysb: {e}")
+        print(f"{n} Clipper sound{'' if n == 1 else 's'} changed -> {rest[1]}")
+        for name, why in skipped:
+            print(f"  {name}: left as it was ({why})")
+    else:
+        _write(args[1], _read(args[0]))

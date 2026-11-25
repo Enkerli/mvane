@@ -36,14 +36,16 @@ native (`mvane yard native`, below).
 1. **Two knob pages.** K1 to K4 are either the **PLAY** page (QUANT, KEY, SCALE, GLIDE) or the **SOUND** page (the
    sound's four main values). **HOME** switches them; HOME is lit on SOUND. The screen names the four knobs above
    them, always.
-2. **Layers.** FX, SEL, EDIT, GLO, SEQ and ARP each change what K1 to K4 and SELECT do. **Hold** the button and turn
+2. **Layers.** FX, SEL, ENV, EDIT, GLO, SEQ and ARP each change what K1 to K4 and SELECT do. **Hold** the button and turn
    (let go: back), or **tap** it to leave the layer open and tap it again to close it. The screen names the open
    layer. **EDIT and GLO follow the page**: on PLAY, EDIT is the CHORD layer and GLO the SETTINGS; on SOUND, EDIT is
    the sound's editing and GLO is MORE. With one of them open, HOME flips it to its other half.
 3. **SELECT moves through what the layer lists**: on the pages, the sound families; in a layer, its list (the chord
    type, the slot, the scale, the next page).
 
-ENV and LFO do nothing in mvane yard yet.
+**A sound's three layers** (0.17), the same for every sound, whatever its engine (the screen names the engine on
+each): **EDIT** on the SOUND page, the engine's own values; **ENV**, the envelope; **FX**, the effects. SAVE in any of
+them keeps the sound; SAVE held a moment keeps it as a favourite too. LFO does nothing in mvane yard yet.
 
 ## Errands
 
@@ -56,9 +58,12 @@ ENV and LFO do nothing in mvane yard yet.
 | Host a USB MIDI device (a Diosynth) | GLO, turn SELECT right; left: back to the computer (see USB) |
 | Use a scale by its number | Tap SEL, set the digits with K1 to K4 (2741 C major, 1723 PCO); SAVE keeps it in your list; tap SEL |
 | Keep what you just played | Tap REC: the last phrase (hold REC: the whole history); PLAY to hear it, PLAY to stop; SAVE into the slot |
-| Loop and overdub | Tap SEQ, K2 LOOP ON, tap SEQ; PLAY; tap REC: a layer from the next pass; tap REC again: stop at its end; hold REC: undo the last |
+| Loop and overdub | Tap SEQ, K2 LOOP ON, tap SEQ; PLAY; tap REC: overdub from now (the pass whole at its end: a layer); tap REC again: stop at the pass's end; hold REC: undo the last |
 | Another slot | Tap SEQ, turn SELECT (or K1), tap SEQ |
-| Edit a sound and keep it | HOME to SOUND, tap EDIT, turn (SELECT: the next page), SAVE, tap EDIT |
+| Edit a sound and keep it | HOME to SOUND, tap EDIT, turn (SELECT: the next page), SAVE, tap EDIT; the envelope: tap ENV; the effects: tap FX |
+| Mark a sound a favourite | With EDIT (SOUND page), ENV or FX open, hold SAVE a moment: FAVOURITE; it is first on PRESETS, in FAVOURITES (again: no longer one) |
+| Softer contrast in the ARP | Tap ARP, SELECT (the second page), K3 VELO down (EVEN: all alike), K4 FEEL (accents), tap ARP |
+| The same effects on all your sounds | The page's Your sounds: CHORUS, REVERB, SPACE ..., Apply, Send to the FM-1 (or `tools/yard.py sounds --fx "CHO=4,REV=8,SPACE=12"`) |
 | Everything off | OCT- and OCT+ together |
 
 ## The screen
@@ -96,12 +101,13 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **GLO** on the SOUND page: MORE | PHONES MAX (100% to 10%) | SPREAD (MPE glide: OFF, 100% to 400%) | LOUD (OFF, +3 DB, +6 DB: the output's compressor) | | |
 | **EDIT** on the PLAY page: CHORD | VOICING (CLOSE, OPEN, WIDE, PAIRS) | VOICES (3 to 6) | BASS (ON, OFF) | BANK (QUALITY, SCALE) | the chord type |
 | **EDIT** on the SOUND page, a YARD sound (three pages) | DETUNE / WAVE / ONSET | SUB / PW / ONSET LVL | RES / NOISE / LEVEL | PLUCK / FILTER / - | the next page; SAVE keeps the sound |
-| **EDIT** on the SOUND page, a Clipper sound (three pages) | its engine's values 1 / 5 / ATTACK | 2 / 6 / DECAY | 3 / 7 / SUSTAIN | 4 / 8 / RELEASE | the next page; SAVE keeps the sound |
-| **FX**, a Clipper sound | DRIVE | CHORUS | DELAY | REVERB (sends; CC 12, 93, 94, 91) | the reverb's model; SAVE keeps the sound |
-| **FX**, a YARD sound | as EDIT on the SOUND page | | | | |
+| **EDIT** on the SOUND page, a Clipper sound (two pages) | its engine's values 1 / 5 | 2 / 6 | 3 / 7 | 4 / 8 | the other page; SAVE keeps the sound |
+| **ENV** (0.17), every sound | ATTACK | DECAY | SUSTAIN (YARD: PLUCK) | RELEASE | SAVE keeps the sound |
+| **FX**, a Clipper sound (two pages, 0.17) | DRIVE / SPACE | CHORUS / ROOM (the reverb's model) | DELAY / - | REVERB / - (sends; CC 12, 93, 94, 91; SPACE 19) | the other page; SAVE keeps the sound |
+| **FX**, a YARD sound | none yet (YARD has no effects) | | | | |
 | **SEL**: SCALE | thousands (0 to 4) | hundreds | tens | units (at most 4095) | the named list, then yours; SAVE keeps the number in your list |
 | **SEQ**: RECORDINGS | SLOT (1 to 8) | LOOP (OFF, ON) | | | the slot |
-| **ARP** (PLAY while ARP is lit: the ARP on, off) | MODE / TEMPO | RATE / LATCH | GATE | OCTAVES | the other page |
+| **ARP** (PLAY while ARP is lit: the ARP on, off) | MODE / TEMPO | RATE / LATCH | GATE / VELO | OCTAVES / FEEL | the other page |
 
 ### Buttons and encoders
 
@@ -113,12 +119,12 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **SELECT** | What the layer lists (above); on the pages, the next or previous family's first sound |
 | **HOME** | The PLAY page / the SOUND page (lit); with GLO or EDIT open, their other half |
 | **OCT- / OCT+** | The octave (-2 to +2); both together: panic, everything off |
-| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub from the next pass (again: stop at its end); hold, undo the last layer |
+| **REC** | Tap: keep the last phrase (everything since the last 3 s of silence). Hold: keep the whole history. While a recording loops: tap, overdub from now (again: stop at the pass's end); hold, undo the last layer |
 | **PLAY** | Play / stop the recording. While ARP is lit (its layer open or held, or the arpeggiator running): the arpeggiator on, off; with SEQ's open or held as well: both together |
-| **SAVE** | The settings, and the recording into its slot (stop it first). With SEL open: the scale into your list. With FX open, or EDIT on the SOUND page: the sound |
+| **SAVE** | The settings, and the recording into its slot (stop it first). With SEL open: the scale into your list. With EDIT on the SOUND page, ENV or FX open: the sound (held a moment: as a favourite too, or no longer one) |
 | **ARP** | Its layer, as the others; lit while open or running (PLAY then: the arpeggiator on, off) |
-| **FX, SEL, EDIT, GLO, SEQ, ARP** | Their layers (above) |
-| **ENV, LFO** | Nothing yet |
+| **FX, SEL, ENV, EDIT, GLO, SEQ, ARP** | Their layers (above) |
+| **LFO** | Nothing yet |
 
 ## Playing
 
@@ -196,12 +202,16 @@ well, PLAY starts the arpeggiator and the recording together, and stops both if 
 key held, or HOLD) goes into the arpeggiator when it starts, and sounds again as a chord when it stops; so do the
 keys held in NOTES. Changing the sound while it runs keeps its notes. The layer's knobs: MODE (UP, DOWN,
 UP-DOWN, DOWN-UP, UP+DOWN, RANDOM, AS PLAYED, CHORD, SCALE), RATE (1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32), GATE (5% to 100%),
-OCTAVES (1 to 4); SELECT: TEMPO (40 to 240 BPM) and LATCH. It plays what would sound, a step at a time: in NOTES the
+OCTAVES (1 to 4); SELECT: TEMPO (40 to 240 BPM), LATCH, **VELO** and **FEEL** (0.17). VELO is how much of each
+note's velocity contrast the steps keep, against the mean of the notes held: 40% by default, so a key barely touched
+under a loud chord is softer, not near silent (AS PLAYED at 100%, EVEN at 0%: all at the mean); no step goes under
+32. FEEL (30% by default; OFF to 100%) accents each beat's first step, a little less the half beat, and adds a
+little randomness, as a hand would. It plays what would sound, a step at a time: in NOTES the
 keys you hold, in CHORDS the chord's voices (the bass too), and the notes coming in over MIDI. UP-DOWN and DOWN-UP
 turn at the ends without repeating them, UP+DOWN repeats them, RANDOM never plays the same twice in a row, CHORD plays
 them all together (a comping rhythm), **SCALE** (0.16) plays a random tone of the scale, from the lowest note held up
 OCTAVES octaves, never the same twice in a row (weights by degree, the root most, are on the roadmap). Each note goes out on its key's channel at its velocity, so that key's pressure
-shapes it. **LATCH** keeps the notes after you let go; a new press after letting go of everything starts a new set.
+shapes it (its velocity through VELO and FEEL). **LATCH** keeps the notes after you let go; a new press after letting go of everything starts a new set.
 A recording keeps what the ARP played, and is not arpeggiated again when it plays. Its settings are kept with SAVE;
 ON and LATCH are not (it starts off).
 
@@ -273,20 +283,31 @@ most (`make clp-trim`). The PLAY page's GLIDE applies to every sound as it loads
 
 ### Your own sounds
 
-FX (or EDIT on the SOUND page) open, then **SAVE** keeps the sound playing (over itself if it is already yours), up
+EDIT on the SOUND page, ENV or FX open, then **SAVE** keeps the sound playing (over itself if it is already yours), up
 to 32 of YARD's and 32 of Clipper's, kept across a restart.
 - A **YARD** sound: its sixteen values, saved under its source's name and its place (CLAV 3), listed in its family after YARD's (mono: LEADS EZ; PLUCK 64
   or more: HITS EZ; else CHORDS EZ).
-- A **Clipper** sound: a factory sound and up to 14 changes (its macros, its engine's values and envelope on EDIT,
-  its sends on FX) and the reverb's model; saved as its sound's name and a + (GLASS PAD+), first in that sound's
-  family.
+- A **Clipper** sound: a factory sound and up to 14 changes (its macros, its engine's values on EDIT, its envelope
+  on ENV, its sends and SPACE on FX) and the reverb's model; saved as its sound's name and a + (GLASS PAD+), first in
+  that sound's family.
+- **Favourites** (0.17): SAVE held a moment on those layers keeps the sound and marks it a favourite (FAVOURITE on the
+  screen; a factory sound becomes yours first). Favourites come first on PRESETS, in a family of their own,
+  FAVOURITES, and stay in their own family too. Held again on a favourite: no longer one. The page's ★ column
+  marks them too.
 
 On the computer they are one file, `yard.ysb`: the page's **Your sounds** card lists them to edit, add or remove,
-send back, or save as JSON; `tools/yard.py sounds` fetches them as JSON, `--put mine.json` sends them. In the JSON a
+mark as favourites, send back, or save as JSON; **Load a file** takes a JSON, a `.ysb`, or a whole **Download all**
+ZIP (its sounds and scales); `tools/yard.py sounds` fetches them as JSON, `--put mine.json` sends them.
+
+**The same effects on many sounds** (0.17): the card's row of DRIVE, CHORUS, DELAY, REVERB, SPACE and ROOM sets
+those on every Clipper sound of yours (or the favourites only), replacing each one's own, a field left empty leaving
+it be; then Send to the FM-1. From the command line, on the FM-1 at once: `tools/yard.py sounds --fx
+"CHO=4,REV=8,SPACE=12" [--reverb HALL] [--favourites]`; on files: `tools/ysb.py fx IN.json OUT.json CHO=4 REV=8
+SPACE=12`. A sound that would pass 14 changes is left as it was (and named). YARD's sounds have no effects yet. In the JSON a
 YARD sound is `{"slot", "name", "mono", "tone", "release", "glide", "attack", "decay", "res", "detune", "sub",
 "pluck", "wave", "pw", "noise", "filter", "onset", "onset_level", "level"}` (0 to 127; wave and filter 0, 64, 127;
 level 64 is 0 dB, a half dB a step), a Clipper sound `{"slot", "name", "sound" (or "engine" and "preset"), "reverb",
-"changes": [{"id" or "name", "value"}]}`.
+"changes": [{"id" or "name", "value"}]}`; either may have `"favourite": true`.
 
 ## The recorder
 
@@ -300,9 +321,9 @@ level 64 is 0 dB, a half dB a step), a Clipper sound `{"slot", "name", "sound" (
   in proportion.
 - **LOOP** (SEQ, K2): the recording plays again from its start when it ends, on time (the screen: LOOPING). The loop
   is the recording's length: from its first note to where you tapped REC.
-- **Overdub**: while it loops, tap **REC**. From the top of the next pass (OVERDUB AT TOP, then OVERDUB 1, 2 ...)
-  what you play goes in with the recording, and at the end of each pass that pass becomes the recording: a layer. Tap
-  REC again to stop at the end of the pass; PLAY stops at once (the pass under way is not kept). **Hold REC** while it
+- **Overdub**: while it loops, tap **REC**: from that moment (0.17; before, from the next pass) what you play goes in
+  with the recording (OVERDUB 1, 2 ...), and at the end of each pass that pass becomes the recording, whole from its
+  top: a layer. Tap REC again to stop at the end of the pass; PLAY stops at once (the pass under way is not kept). **Hold REC** while it
   loops: the last layer undone. Each layer is a copy in the history, so a long, busy loop fills it sooner.
 - **SAVE** writes the recording into the current slot (stop it first; the sound pauses while the flash is written).
 - **Slots**: SEQ, then SELECT (or K1), picks one of eight. Moving away from a recording not saved: the first turn
@@ -345,4 +366,4 @@ device. Meanwhile there is no computer: no USB audio, no files. GLO, SELECT left
   and crash (felucca-bsp's docs/CPU.md). If mvane yard crashes or glitches on Clipper's sounds, say so.
 - The FM-1's analog stage can distort at high levels with headphones: PHONES MAX lowers the top.
 - Clipper's sounds use both cores (half the voices each); some cost far more than others: watch CPU on the screen.
-- ENV and LFO are not used yet; the knobs' CCs are fixed (a map that makes sense is on the roadmap).
+- LFO is not used yet; YARD has no effects yet (FX says so); the knobs' CCs are fixed (a map that makes sense is on the roadmap).

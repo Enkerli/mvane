@@ -97,6 +97,17 @@ def main():
         clip = json.load(open(os.path.join(d, "back.json")))["clipper"]
         assert [(c["slot"], c["name"], c["sound"], c["reverb"]) for c in clip] == [(1, "GLASSY", "GLASS PAD", "HALL")], clip
         assert [(c["id"], c["name"], c["value"]) for c in clip[0]["changes"]] == [(122, "M1", 20), (34, "CHO", 6)], clip
+        # (0.17) a favourite kept both ways; the same FX on every Clipper sound at once (CHO replaced, REV and SPACE added)
+        mine["clipper"][0]["favourite"] = True
+        json.dump(mine, open(os.path.join(d, "mine.json"), "w"))
+        assert yard.main(["sounds", "--put", os.path.join(d, "mine.json")], link) == 0
+        link.run(50)
+        assert yard.main(["sounds", "--fx", "CHO=4,REV=8,DLY=2", "--reverb", "plate"], link) == 0
+        assert yard.main(["sounds", os.path.join(d, "fx.json")], link) == 0
+        clip = json.load(open(os.path.join(d, "fx.json")))["clipper"]
+        assert clip[0]["favourite"] and clip[0]["reverb"] == "PLATE", clip
+        assert [(c["name"], c["value"]) for c in clip[0]["changes"]] == [("M1", 20), ("CHO", 4), ("REV", 8), ("DLY", 2)], clip
+        r = link.cmd("expect ncuser 1"); assert r[-1].strip().startswith("ok"), r
         print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out, YARD and Clipper sounds in and out)")
     finally:
         link.close()

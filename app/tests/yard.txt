@@ -318,8 +318,35 @@ expect cuser 1
 expect brite 84
 expect chorus 6
 expect reverb 2
+# favourites (0.17): SAVE held on a sound's layer keeps it as a favourite too: first in PRESETS, in FAVOURITES (as well
+# as in its family); held again: no longer one
+expect fav 0
+press ENV
+press SAVE
+wait 800
+release SAVE
+release ENV
+wait 50
+expect fav 1
+expect family 7
+expect sound 0
 sound SAW
 wait 300
+expect sound 1
+sound GLASSY
+wait 300
+expect family 7
+press FX
+press SAVE
+wait 800
+release SAVE
+release FX
+wait 50
+expect fav 0
+expect family 3
+sound SAW
+wait 300
+expect sound 0
 # a 0.10 settings record (YARD's nine): moved on, the new four at 0
 settings_10
 reboot
