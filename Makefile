@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c99 -Wall -Wextra -Werror -Wsign-compare
 B = build/desktop
-.PHONY: loud check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim clp-names
+.PHONY: loud loud-test check host fwsc clean clp-cost synth-cmp clp-expr clp-split clp-race clp-bank yard-race yard-render clp-trim clp-names
 check: $(B)/harmony_demo $(B)/rec_test $(B)/chords_test
 	$(B)/harmony_demo
 	$(B)/rec_test
@@ -52,6 +52,11 @@ loud:   # every sound's loudness, Clipper's (trims on) and YARD's, for the same 
 	$(B)/clp_loud > $(B)/clp_loud.txt
 	$(B)/yard_loud > $(B)/yard_loud.txt
 	cat $(B)/clp_loud.txt $(B)/yard_loud.txt | awk '{print $$NF, $$0}' | sort -n | cut -d' ' -f2- | sed -n '1,5p;$$p'   # the quietest five, the loudest
+
+loud-test:   # LOUD, the output's compressor (app/loud.h): Clipper's sounds at OFF, +3 DB, +6 DB, nothing clipped
+	@mkdir -p $(B)
+	$(CC) -O2 -std=gnu99 -w -DPLAT_HOST -Iapp/clipper -Iapp/clipper/src -Iapp/clipper/gen -Iapp/clipper/hal -Iapp -Ibase/include tools/loud_test.c -o $(B)/loud_test -lm
+	$(B)/loud_test
 
 onset-cal:   # ONSET's levels (app/synth.c's table): each burst's mean peak, the gain to 0.85
 	@mkdir -p $(B)

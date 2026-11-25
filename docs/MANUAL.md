@@ -52,6 +52,7 @@ ENV and LFO do nothing in mvane yard yet.
 | Play with a wind controller (POLY+BREATH) | On the PLAY page (HOME unlit): tap GLO, turn K1 to POLY+BR (or MONO+BR), tap GLO |
 | Record the FM-1 into the computer at full level | PLAY page: tap GLO, turn K2 to FULL (MASTER: it follows the volume), tap GLO |
 | Make the headphones quieter at the top | HOME to SOUND (lit): tap GLO (MORE), turn K1 (PHONES MAX), tap GLO |
+| Make it louder in headphones | HOME to SOUND: tap GLO (MORE), turn K3 (LOUD) to +3 DB or +6 DB, tap GLO |
 | Host a USB MIDI device (a Diosynth) | GLO, turn SELECT right; left: back to the computer (see USB) |
 | Use a scale by its number | Tap SEL, set the digits with K1 to K4 (2741 C major, 1723 PCO); SAVE keeps it in your list; tap SEL |
 | Keep what you just played | Tap REC: the last phrase (hold REC: the whole history); PLAY to hear it, PLAY to stop; SAVE into the slot |
@@ -92,7 +93,7 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | Layer | K1 | K2 | K3 | K4 | SELECT |
 | --- | --- | --- | --- | --- | --- |
 | **GLO** on the PLAY page: SETTINGS | PLAY (POLY, MONO, POLY+BR, MONO+BR) | USB AUDIO (MASTER: at the volume; FULL: full level) | MPE OUT (ON, OFF) | BEND (12, 24, 48, 96) | the USB port: right, host to a MIDI device; left, a computer |
-| **GLO** on the SOUND page: MORE | PHONES MAX (100% to 10%) | SPREAD (MPE glide: OFF, 100% to 400%) | | | |
+| **GLO** on the SOUND page: MORE | PHONES MAX (100% to 10%) | SPREAD (MPE glide: OFF, 100% to 400%) | LOUD (OFF, +3 DB, +6 DB: the output's compressor) | | |
 | **EDIT** on the PLAY page: CHORD | VOICING (CLOSE, OPEN, WIDE, PAIRS) | VOICES (3 to 6) | BASS (ON, OFF) | BANK (QUALITY, SCALE) | the chord type |
 | **EDIT** on the SOUND page, a YARD sound (three pages) | DETUNE / WAVE / ONSET | SUB / PW / ONSET LVL | RES / NOISE / LEVEL | PLUCK / FILTER / - | the next page; SAVE keeps the sound |
 | **EDIT** on the SOUND page, a Clipper sound (three pages) | its engine's values 1 / 5 / ATTACK | 2 / 6 / DECAY | 3 / 7 / SUSTAIN | 4 / 8 / RELEASE | the next page; SAVE keeps the sound |
@@ -223,6 +224,12 @@ ON and LATCH are not (it starts off).
 PRESETS steps through the sounds in families, by how each behaves; in each family YARD's come first, then your own, then Clipper's (the full list:
 [SOUNDS.md](SOUNDS.md)). With the same MIDI they all play at about the same loudness, 8 dB louder than 0.15 (0.16):
 if the headphones distort at the top of MASTER, lower PHONES MAX (GLO on the SOUND page).
+
+**LOUD** (GLO on the SOUND page, K3): a gentle compressor on the output, for headphones straight from the FM-1 (its
+analog output is clean and flat into a line input, but weaker into headphones: measured against USB, 2026-11-24).
++3 DB brings a held chord up about 3 dB, +6 DB about 5, the peaks staying under full scale; quiet tails and reverbs
+come up most. It is on the render, so a USB recording has it too; OFF by default, kept with SAVE. Natively, the DAW
+parameter Loud.
 
 | Family | What | For |
 | --- | --- | --- |

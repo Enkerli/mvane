@@ -58,6 +58,10 @@ if pr[:len(PR_015)] != PR_015:
 if "PR_MODE = PR_SP0 + SP_N_SET" not in NAT:
     bad.append("the port's YARD block in the DAW is not 0.15's thirteen (PR_MODE = PR_SP0 + SP_N_SET)")
 
+# LOUD (0.16): the same compressor, the same steps, on both
+if '#include "loud.h"' not in APP or '#include "../../app/loud.h"' not in NAT:
+    bad.append("LOUD: app/loud.h not in both")
+
 if bad:
     print("sync_check: the FM-1 and the native port disagree:")
     for b in bad:

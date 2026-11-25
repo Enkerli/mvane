@@ -1,0 +1,33 @@
+# LOUD (0.16, Alex: headphones from the FM-1 too quiet): GLO on the SOUND page, K3: OFF, +3 DB, +6 DB, the output's
+# compressor; a held chord louder (its peaks about 2 dB up at +6 DB, its average about 5), under full scale. app/build/host/mvane-yard_host app/tests/loud_out.txt app/build/host
+wait 600
+master 4096
+expect loud 0
+key w0 down 100,40
+wait 1500
+peakreset
+wait 1000
+expect peak_db_max -8
+key w0 up
+wait 1500
+tap HOME
+tap GLO
+turn K3 2
+shot loud.png
+tap GLO
+tap HOME
+expect loud 2
+key w0 down 100,40
+wait 1500
+peakreset
+wait 1000
+expect peak_db_min -8
+expect peak_db_max -1
+key w0 up
+wait 1500
+tap HOME
+tap GLO
+turn K3 -5
+tap GLO
+tap HOME
+expect loud 0

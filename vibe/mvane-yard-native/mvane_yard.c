@@ -28,6 +28,7 @@ void *memcpy(void *d, const void *s, size_t n);
 #include "../../core/chords.c"
 #include "../../core/scale_names.h"
 #include "../../app/settings.h"
+#include "../../app/loud.h"               /* LOUD, the output's compressor (as the FM-1's: a DAW parameter here) */
 #include "../../core/rec.c"
 #include "clp.h"                         /* (Clipper: clipper.c, its own unit) */
 
@@ -45,6 +46,7 @@ VIBE_PARALLEL_AUDIO
 #define Q_TAKE 0xF7u                     /* d1: the file image to play from (0, 1), d2: 1 none (an empty slot) */
 #define Q_EXPORT 0xF8u                   /* d1: the file image to copy the recording into (and play from) */
 #define Q_ENGINE 0xFCu                   /* (Clipper, step 9) d1 | d2 << 7: Clipper's sound to play, 0x3FFF: YARD */
+#define Q_LOUD 0xFEu                     /* d1: LOUD, 0 OFF, 1 +3 DB, 2 +6 DB */
 #define Q_CUSER 0xFDu                    /* one of your Clipper sounds (cu_*, handed over first) */
 #define Q_ARP 0xF9u                      /* (the ARP, step 8) d1: 0 off, 1 on, 2 on with LATCH */
 #define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 4, d2: GATE (5..100) */
@@ -85,6 +87,7 @@ static struct {
     uint8_t play;                        /* 0 POLY, 1 MONO, 2 POLY+BR, 3 MONO+BR */
     uint8_t hold, started;
     uint8_t arp_on, arp_mode, arp_rate, arp_gate, arp_oct, arp_bpm, arp_latch;   /* (the ARP's, as the FM-1's) */
+    uint8_t loud;                        /* LOUD (0.16), as the FM-1's */
     uint32_t sound;
     uint8_t val[SP_N];                   /* YARD's values as last sent */
 } set;
@@ -890,12 +893,12 @@ static const char *const BANK_C[2] = {"SCALE", "QUALITY"}, *const VOICES_C[4] = 
  * where they were, the later ones (ONSET, ONSET LVL, LEVEL) after the ARP's */
 enum { PR_SOUND, PR_PLAY, PR_SP0, PR_MODE = PR_SP0 + SP_N_SET, PR_KEY, PR_QUANT, PR_PCS, PR_STYLE, PR_VOICES, PR_BASS,
        PR_BANK, PR_HOLD, PR_ARP, PR_ARP_MODE, PR_ARP_RATE, PR_ARP_GATE, PR_ARP_OCT, PR_ARP_LATCH, PR_ARP_BPM, PR_SPX0,
-       PR_N = PR_SPX0 + SP_N - SP_N_SET };
+       PR_LOUD = PR_SPX0 + SP_N - SP_N_SET, PR_N };   /* (0.16 LOUD: after everything, so no number moves) */
 static uint32_t pr_of_sp(uint32_t p) { return p < SP_N_SET ? PR_SP0 + p : PR_SPX0 + p - SP_N_SET; }
 static int sp_of_pr(uint32_t i)          /* the YARD value a DAW parameter is, or -1 */
 {
     return i >= PR_SP0 && i < PR_SP0 + SP_N_SET ? (int)(i - PR_SP0)
-           : i >= PR_SPX0 && i < PR_N ? (int)(i - PR_SPX0 + SP_N_SET) : -1;
+           : i >= PR_SPX0 && i < PR_LOUD ? (int)(i - PR_SPX0 + SP_N_SET) : -1;
 }
 static vibe_param PRM[PR_N];
 static const char *GRP[PR_N];
@@ -953,6 +956,7 @@ static void params_declare(void)
     PRM[PR_ARP_BPM] = (vibe_param){"arp_tempo", "Arp tempo", 40, 240, 120, "BPM", 201, 0};
     for (i = PR_ARP; i <= PR_ARP_BPM; i++)
         GRP[i] = "C · ARP";
+    PRM[PR_LOUD] = (vibe_param){"loud", "Loud", 0, LOUD_STEPS - 1u, 0, "", LOUD_STEPS, LOUD_NAMES}, GRP[PR_LOUD] = "A · TONE";
     vibe_params(PRM, PR_N);
     vibe_param_groups(GRP);
 }
@@ -964,6 +968,7 @@ static float param_now(uint32_t i)       /* a parameter's value as the panel has
                : p == SP_LEVEL ? SYNTH_LEVEL_DB(v) : (float)v;
     }
     switch (i) {
+    case PR_LOUD: return (float)set.loud;
     case PR_SOUND: return (float)set.sound;
     case PR_PLAY: return (float)set.play;
     case PR_MODE: return (float)set.mode;
@@ -1009,6 +1014,7 @@ static void param_apply(uint32_t i, float value)   /* the DAW (or a mapped contr
         return;
     }
     switch (i) {
+    case PR_LOUD: set.loud = (uint8_t)(v < 0 ? 0 : v >= (int)LOUD_STEPS ? (int)LOUD_STEPS - 1 : v), send(Q_LOUD, set.loud, 0); break;
     case PR_SOUND: if ((uint32_t)v != set.sound) sound_pick((uint32_t)v); break;
     case PR_PLAY: if ((uint32_t)v != set.play) play_set((uint32_t)v); break;
     case PR_MODE: if ((uint32_t)v != set.mode) all_off(), set.mode = (uint8_t)(v != 0); break;
@@ -1058,7 +1064,7 @@ static void settings_save(void)
     rec.scale = set.scale, rec.pcs = (uint16_t)(0x8000u | (set.pcs & 0xFFFu));
     for (i = 0; i < SP_N_SET; i++)
         rec.p[i] = set.val[i];
-    rec.onset = set.val[SP_ONSET], rec.onset_lvl = set.val[SP_ONSET_LVL], rec.level = set.val[SP_LEVEL];
+    rec.onset = set.val[SP_ONSET], rec.onset_lvl = set.val[SP_ONSET_LVL], rec.level = set.val[SP_LEVEL], rec.loud = set.loud;
     rec.type = set.type, rec.style = set.style, rec.bass = set.bass, rec.voices = set.voices, rec.bank = set.bank;
     rec.play = set.play, rec.quant = set.quant;
     rec.sound = (uint16_t)(set.sound < SYNTH_NSOUNDS ? 0x4000u | set.sound       /* (the FM-1's codes: app.c) */
@@ -1084,7 +1090,7 @@ static void settings_load(void)          /* (the defaults are set; a good record
     }
     for (i = 0; i < SP_N_SET; i++)
         bad |= rec.p[i] > 127u;
-    bad |= rec.onset > 127u || rec.onset_lvl > 127u || rec.level > 127u;
+    bad |= rec.onset > 127u || rec.onset_lvl > 127u || rec.level > 127u || rec.loud >= LOUD_STEPS;
     if (bad || rec.mode > 1u || rec.tonic > 11u || !(rec.pcs & 0x8000u) || rec.quant > 2u || rec.voices < 3u
         || rec.voices > CHORD_MAX || rec.style >= CHORD_STYLES || rec.bass > 1u || rec.bank > 1u
         || rec.type >= CHORD_NTYPES || rec.play > 3u)
@@ -1107,6 +1113,7 @@ static void settings_load(void)          /* (the defaults are set; a good record
         param_set(i, rec.p[i]);
     if (!sound_clp(set.sound))
         param_set(SP_ONSET, rec.onset), param_set(SP_ONSET_LVL, rec.onset_lvl), param_set(SP_LEVEL, rec.level);
+    set.loud = rec.loud, send(Q_LOUD, set.loud, 0);
     vibe_keys_octave(rec.octave + 1);
     page = rec.page ? PG_SOUND : PG_PLAY;
     slot = (uint8_t)(rec.slot & 7u), loop_on = (uint8_t)(rec.loop != 0);
@@ -1319,6 +1326,7 @@ static uint64_t a_frames;                /* (audio) the frames done */
 static uint32_t a_ms;
 static uint8_t a_loop, a_tonic, a_take_img = 2;   /* (the file image the recording plays from: 2, none / the history) */
 static uint16_t a_pcs = 2741u;
+static uint8_t a_loud_step;               /* LOUD (Q_LOUD) */
 static struct { uint8_t armed, on, ending, has_undo, layers; uint32_t mark; } ov;
 static uint16_t pl_mask;
 static uint8_t pl_tonic, pl_map[16][128];
@@ -1705,6 +1713,8 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
         a_pcs = (uint16_t)(d1 | d2 << 7);
     else if (st == Q_TONIC)
         a_tonic = (uint8_t)(d1 % 12u);
+    else if (st == Q_LOUD)
+        a_loud_step = (uint8_t)(d1 < LOUD_STEPS ? d1 : 0u);
     else if (st == Q_LOOP)
         a_loop = (uint8_t)(d1 != 0);
     else if (st == Q_ARP) {
@@ -1827,6 +1837,10 @@ void vibe_on_audio(const float *in, float *out_l, float *out_r, int frames)
             clp_out((int32_t *)lr + 2 * at, (uint32_t)n);
         else
             synth_render(lr + 2 * at, (uint32_t)n, 4096u);
+    }
+    {
+        static loud_t loud;              /* (LOUD: after either engine, as the FM-1's) */
+        loud_block(&loud, lr, (uint32_t)frames, a_loud_step, (float)srate);
     }
     a_frames += (uint64_t)frames;
     a_publish();

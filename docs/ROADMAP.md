@@ -71,6 +71,11 @@ chord quantize, lead sheets, the overdub's playflow, the plugin of its own). The
    engines now 8 dB up after their limiters (x 2.5: the ceiling about -3 dBFS), so the matching holds and the
    limiter works no more than before (ordinary playing: none for half the sounds, under 0.4 dB for nine in ten): the
    sounds at -18 dB, Afro Keys with Alex's FX -16.8. PHONES MAX is there if the headphones distort again.
+   **Then headphones (0.16):** USB and analog recorded together (Alex, 2026-11-24): the analog output is flat
+   within 0.3 dB from 31 Hz to 8 kHz, its polarity inverted, and drives a line input to full scale; headphones on the
+   same jack are what is weak. **LOUD** (GLO on SOUND, K3; `app/loud.h`, both places): a compressor on the output,
+   +3 DB (2:1) or +6 DB (4:1), a held chord about 3 and 5 dB up, peaks under full scale (`make loud-test`,
+   `app/tests/loud_out.txt`).
 5. **Program changes followed** (Alex): a program change on MIDI in picks the sound (YARD's factory and user sounds,
    then Clipper's, in the PRESETS order; bank select for the rest), and the recorder keeps it, so a recording replays
    its changes of sound; sending one when the sound changes on the device, as an option. Today none are read.

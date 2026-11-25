@@ -6,6 +6,7 @@ set -eu
 cd "$(dirname "$0")/.."
 python3 tools/sync_check.py       # the FM-1 and the native port agree (ARP modes, YARD values, DAW numbers)
 make check
+make loud-test
 make synth-cmp
 make clp-split
 make clp-race
@@ -24,6 +25,7 @@ app/build/host/mvane-yard_host app/tests/arp.txt app/build/host >> build/host.lo
 app/build/host/mvane-yard_host app/tests/dub_ch.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/breath.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/onset.txt app/build/host >> build/host.log
+app/build/host/mvane-yard_host app/tests/loud_out.txt app/build/host >> build/host.log
 if grep -q '^FAIL' build/host.log; then grep '^FAIL' build/host.log; exit 1; fi
 python3 tools/yard_test.py
 node web/take_test.mjs

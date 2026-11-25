@@ -39,6 +39,7 @@ typedef char app_block_fits_synth[APP_BLOCK <= SYNTH_BLOCK ? 1 : -1];   /* synth
 
 /* ---------------------------------------------------------------- settings --- */
 #include "settings.h"
+#include "loud.h"                        /* LOUD: the output's compressor (GLO on SOUND, K3) */
 typedef struct {                         /* (MVA9, 0.11-beta's: up to PHONES MAX) */
     uint32_t magic;
     uint8_t mode, tonic, scale;
@@ -91,6 +92,7 @@ static void settings_defaults(void)
         set.p[i] = P[i];
     set.onset = set.onset_lvl = 0;
     set.level = SYNTH_SOUNDS[0].p[SP_LEVEL];   /* (SAW's, as PRESETS gives it) */
+    set.loud = 0;
     set.type = 0;
     set.style = CHORD_OPEN;
     set.bass = 1;
@@ -157,7 +159,7 @@ static void settings_load(void)
         bad = 1;
     for (i = 0; i < SP_N_SET; i++)
         bad |= set.p[i] > 127u;
-    bad |= set.onset > 127u || set.onset_lvl > 127u || set.level > 127u;
+    bad |= set.onset > 127u || set.onset_lvl > 127u || set.level > 127u || set.loud >= LOUD_STEPS;
     if (bad || set.mode > 1u || set.tonic > 11u || set.scale >= CHORD_NSCALES + 16u || set.octave < -2 || set.octave > 2
         || set.type >= CHORD_NTYPES || set.style >= CHORD_STYLES || set.bass > 1u || set.usb_full > 1u
         || set.voices < 3u || set.voices > CHORD_MAX || set.bank > 1u || set.play > 3u || set.quant > 2u
@@ -632,6 +634,10 @@ static void app_render_(int32_t *lr, uint32_t n, uint32_t master_q12)
         clp_render(lr, n, master_q12);
     else
         synth_render(lr, n, master_q12);
+    {
+        static loud_t loud;              /* (LOUD: after both engines, the same for either) */
+        loud_block(&loud, lr, n, set.loud, 44100.0f);
+    }
 }
 
 void app_panic(void) { synth_panic(); clp_panic(); }
@@ -1989,6 +1995,9 @@ static void knob_info(uint32_t i, const char **label, char *val)
                 int_text(100 + 300 * (int32_t)set.spread / 127, val);
                 text_cat(val, "%");
             }
+        } else if (i == 2) {             /* LOUD: the output's compressor (app/loud.h) */
+            *label = "LOUD";
+            text_cat(val, LOUD_NAMES[set.loud % LOUD_STEPS]);
         } else
             *label = "-";
     } else if (l == B_EDIT) {
@@ -2126,6 +2135,9 @@ static void knob_turn(uint32_t i, int32_t e)
             set.spread = (uint8_t)clamp((int32_t)set.spread + e * 4, 0, 127);
             set_dirty = 1;
             glide_engines();
+        } else if (i == 2) {
+            set.loud = (uint8_t)clamp((int32_t)set.loud + d, 0, (int32_t)LOUD_STEPS - 1);
+            set_dirty = 1;
         }
         knob_info(i, &label, val);
         app_say(label, val);
@@ -2724,7 +2736,7 @@ static void draw(void)
     } else if (lay == B_GLO) {           /* SETTINGS / MORE: where the other half is, and the USB port */
         int h = plat_usb_host_state();
         cv_text(10, 4, &FONT_S, set.page ? "MORE: THE OUTPUT" : "SETTINGS: PLAYING, USB", C_WHITE);
-        cv_text(10, 22, &FONT_S, set.page ? "HOME: PLAY, USB, MPE, BEND" : "HOME: PHONES MAX, SPREAD", C_GRAY);
+        cv_text(10, 22, &FONT_S, set.page ? "HOME: PLAY, USB, MPE, BEND" : "HOME: PHONES MAX, SPREAD, LOUD", C_GRAY);
         cv_text(10, 44, &FONT_XS, h ? "USB: HOSTING A DEVICE   SELECT LEFT: COMPUTER" : "USB: TO A COMPUTER   SELECT RIGHT: HOST",
                 h ? C_HI : C_GRAY);
     } else if (lay == B_SEL) {           /* SCALE: the number, its name, its twelve pitch classes from the key */
@@ -3349,6 +3361,8 @@ int app_expect(const char *what, int *got)
             *got += gl[k].on;
     } else if (!strcmp(what, "engine_glide"))   /* the engines' own glide now */
         *got = (int)synth_param(SP_GLIDE);
+    else if (!strcmp(what, "loud"))      /* LOUD: 0 OFF, 1 +3 DB, 2 +6 DB */
+        *got = set.loud;
     else if (!strcmp(what, "phones"))    /* PHONES MAX, 2..20 (5% each) */
         *got = set.phones;
     else if (!strcmp(what, "gain"))      /* the render's gain at MASTER's top (4096 MASTER all the way) */

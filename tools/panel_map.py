@@ -158,7 +158,7 @@ head()
 row("GLO, PLAY page", [["PLAY", "POLY MONO", "POLY+BR MONO+BR"], ["USB AUDIO", "MASTER: as MASTER", "FULL: full level"],
                        ["MPE OUT", "ON OFF"], ["BEND", "12 24 48 96"], ["USB: right, host", "a MIDI device;", "left, a computer"]],
     "SETTINGS", CORAL)
-row("GLO, SOUND page", [["PHONES MAX", "100% to 10%"], ["SPREAD", "MPE glide"], [], [], []], "MORE", CORAL)
+row("GLO, SOUND page", [["PHONES MAX", "100% to 10%"], ["SPREAD", "MPE glide"], ["LOUD", "OFF +3 DB +6 DB"], [], []], "MORE", CORAL)
 row("EDIT, PLAY page", [["VOICING", "CLOSE OPEN", "WIDE PAIRS"], ["VOICES", "3 to 6"], ["BASS", "ON OFF"],
                         ["BANK", "QUALITY / SCALE"], ["the chord type"]], "CHORD", CORAL)
 row("EDIT, SOUND page", [["DETUNE / WAVE", "/ ONSET"], ["SUB / PW", "/ ONSET LVL"], ["RES / NOISE", "/ LEVEL"],
