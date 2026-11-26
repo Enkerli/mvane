@@ -299,11 +299,18 @@ typedef struct {
         uint16_t pcs;                    /* 0x8000 | the number: used */
         uint8_t pad[2];
     } sc[US_N];
+    uint32_t hmagic;                     /* (version 4, 0.17) "MVHB": the house effects, under every Clipper sound */
+    uint8_t hon;                         /* 1: on */
+    int8_t hrtype;                       /* the reverb's model (-1: as each sound has it) */
+    uint8_t hv[5];                       /* DRIVE CHORUS DELAY REVERB SPACE, 0..127 (0xFF: as each sound has it) */
+    uint8_t hpad[5];
 } yard_bank_t;
 #define SB_MAGIC 0x4253564Du             /* "MVSB" */
+#define HB_MAGIC 0x4248564Du             /* "MVHB" (0.17: the house effects) */
 #define YB_V1_SIZE (8u + 32u * YB_N)
 #define YB_V2_SIZE (YB_V1_SIZE + 8u + 64u * YB_N)
-typedef char yb_bank_size[sizeof(yard_bank_t) == YB_V2_SIZE + 8u + 16u * US_N && sizeof(yard_bank_t) <= PLAT_STORE_MAX ? 1 : -1];
+#define YB_V3_SIZE (YB_V2_SIZE + 8u + 16u * US_N)
+typedef char yb_bank_size[sizeof(yard_bank_t) == YB_V3_SIZE + 16u && sizeof(yard_bank_t) <= PLAT_STORE_MAX ? 1 : -1];
 typedef char cb_sound_is_64[sizeof(cb_sound_t) == 64u ? 1 : -1];
 typedef char yb_sound_is_32[sizeof(yb_sound_t) == 32u ? 1 : -1];
 static yard_bank_t ybank;
@@ -364,10 +371,20 @@ static void yard_bank_load(void)
         mvane_zero(&ybank.cmagic, sizeof ybank - YB_V1_SIZE);
     else if (n == (int)YB_V2_SIZE && ybank.magic == YB_MAGIC && ybank.version == 2u && ybank.cmagic == CB_MAGIC)
         mvane_zero(&ybank.smagic, sizeof ybank - YB_V2_SIZE);   /* 0.11's: no scales */
-    else if (n != (int)sizeof ybank || ybank.magic != YB_MAGIC || ybank.version != 3u || ybank.cmagic != CB_MAGIC
-             || ybank.smagic != SB_MAGIC)
+    else if (n == (int)YB_V3_SIZE && ybank.magic == YB_MAGIC && ybank.version == 3u && ybank.cmagic == CB_MAGIC
+             && ybank.smagic == SB_MAGIC)
+        mvane_zero(&ybank.hmagic, sizeof ybank - YB_V3_SIZE);   /* 0.12 to 0.16's: no house effects */
+    else if (n != (int)sizeof ybank || ybank.magic != YB_MAGIC || ybank.version != 4u || ybank.cmagic != CB_MAGIC
+             || ybank.smagic != SB_MAGIC || ybank.hmagic != HB_MAGIC)
         mvane_zero(&ybank, sizeof ybank);
-    ybank.magic = YB_MAGIC, ybank.version = 3, ybank.n = YB_N;
+    if (ybank.hmagic != HB_MAGIC) {      /* (none yet: off, every value as each sound has it) */
+        uint32_t k;
+        ybank.hon = 0, ybank.hrtype = -1;
+        for (k = 0; k < sizeof ybank.hv; k++)
+            ybank.hv[k] = 0xFFu;
+    }
+    ybank.magic = YB_MAGIC, ybank.version = 4, ybank.n = YB_N;
+    ybank.hmagic = HB_MAGIC;
     ybank.cmagic = CB_MAGIC, ybank.cn = YB_N;
     ybank.smagic = SB_MAGIC, ybank.sn = US_N;
     {                                    /* the user's scales, in slot order */
@@ -386,6 +403,7 @@ static void yard_bank_load(void)
     }
     yard_bank_index();
     clp_bank_index();
+    clp_house(ybank.hon, ybank.hv, ybank.hrtype);
 }
 /* PRESETS's list (0.10, Alex 2026-11-22): the families CHORDS EZ, LEADS EZ, HITS EZ, CHORDS HRD, LEADS HRD, HITS HRD,
  * OTHER (clp.h), each YARD's own sounds first, then the user's, then Clipper's. An entry: PL_YARD | YARD's own,
@@ -2042,8 +2060,43 @@ static const char *const YED_N[3][4] = {{"DETUNE", "SUB", "RES", "PLUCK"}, {"WAV
 static const uint8_t YENV_P[4] = {SP_ATTACK, SP_DECAY, SP_PLUCK, SP_REL};
 static const uint8_t YENV_CC[4] = {SYNTH_CC_ATTACK, SYNTH_CC_DECAY, SYNTH_CC_PLUCK, SYNTH_CC_REL};
 static const char *const YENV_N[4] = {"ATTACK", "DECAY", "PLUCK", "RELEASE"};
-static const char *const FX_N[2][4] = {{"DRIVE", "CHORUS", "DELAY", "REVERB"}, {"SPACE", "ROOM", "-", "-"}};
+static const char *const FX_N[2][4] = {{"DRIVE", "CHORUS", "DELAY", "REVERB"}, {"SPACE", "ROOM", "HOUSE", "-"}};
 static uint8_t fx_pg;                    /* FX's page: 0 the sends, 1 SPACE and ROOM */
+
+/* (0.17, Alex: house effects for all the factory sounds) FX's second page, K3 HOUSE: turned right, this sound's
+ * CHORUS, REVERB, SPACE and ROOM go under every Clipper sound as it loads (DRIVE and DELAY as the bank has them: as
+ * each sound has them, unless the page set them); left, off. Kept in the bank at once (yard.ysb: the page edits them
+ * all); a user sound's own changes go over them */
+static void house_set(int on)
+{
+    uint8_t v[5];
+    int32_t rt = clp_reverb_type();
+    uint32_t k;
+    int same;
+    for (k = 0; k < 5u; k++)
+        v[k] = ybank.hv[k];
+    v[1] = (uint8_t)clp_fx(1), v[3] = (uint8_t)clp_fx(3), v[4] = (uint8_t)clp_macro(3);
+    same = on ? ybank.hon && ybank.hrtype == rt && v[1] == ybank.hv[1] && v[3] == ybank.hv[3] && v[4] == ybank.hv[4]
+              : !ybank.hon;
+    if (same) {
+        app_say("HOUSE", on ? "ON, AS IT IS" : "OFF");
+        return;
+    }
+    rt_flash();
+    if (on) {
+        for (k = 0; k < 5u; k++)
+            ybank.hv[k] = v[k];
+        ybank.hrtype = (int8_t)rt;
+    }
+    ybank.hon = (uint8_t)on;
+    if (plat_store_save(OBJ_YARD, &ybank, sizeof ybank)) {
+        app_say("HOUSE", "NOT SAVED");
+        return;
+    }
+    clp_house(ybank.hon, ybank.hv, ybank.hrtype);
+    app_say("HOUSE", on ? "ON: EVERY SOUND" : "OFF");
+    ui.redraw = 1;
+}
 
 static void yard_text(uint32_t w, char *val)   /* a YARD value as the screen says it */
 {
@@ -2126,6 +2179,8 @@ static void knob_info(uint32_t i, const char **label, char *val)
             int_text((int32_t)clp_macro(3), val);
         else if (i == 1)
             text_cat(val, clp_reverb_step(0));
+        else if (i == 2)
+            text_cat(val, ybank.hon ? "ON" : "OFF");
     } else if (l == B_FX) {              /* YARD: none yet */
         *label = "-";
     } else if (l == L_OUT) {             /* GLO on SOUND: the output */
@@ -2323,7 +2378,8 @@ static void knob_turn(uint32_t i, int32_t e)
         else if (i == 1) {
             app_say("ROOM", clp_reverb_step(d));
             set_dirty = 1;
-        }
+        } else if (i == 2)
+            house_set(e > 0);
         return;
     } else if (l == B_GLO) {
         if (i == 0) {
@@ -2456,7 +2512,7 @@ static void select_turn(int32_t e)       /* SELECT: what the context lists */
     } else if (l == B_FX) {              /* the effects' other page (as EDIT's and ARP's: SELECT, the next page) */
         if (clp_on()) {
             fx_pg ^= 1u;
-            app_say("FX", fx_pg ? "SPACE ROOM" : "DRIVE CHORUS DELAY REVERB");
+            app_say("FX", fx_pg ? "SPACE ROOM HOUSE" : "DRIVE CHORUS DELAY REVERB");
         } else
             app_say("YARD", "NO EFFECTS YET");
         ui.redraw = 1;
@@ -2918,7 +2974,7 @@ static void draw(void)
         cv_text(10, 44, &FONT_XS, "SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_FX && clp_on()) {   /* FX: the sends, then SPACE and ROOM */
         cv_text(10, 4, &FONT_S, "1/2 SENDS", fx_pg ? C_GRAY : C_WHITE);
-        cv_text(100, 4, &FONT_S, "2/2 SPACE, ROOM", fx_pg ? C_WHITE : C_GRAY);
+        cv_text(84, 4, &FONT_S, ybank.hon ? "2/2 SPACE ROOM HOUSE" : "2/2 SPACE ROOM", fx_pg ? C_WHITE : C_GRAY);
         sound_layers_line(clp_sound_engine(clp_at()));
         cv_text(10, 44, &FONT_XS, "SELECT: NEXT PAGE   SAVE: KEEP THE SOUND", C_GRAY);
     } else if (lay == B_FX) {            /* FX: YARD has none yet */
@@ -3472,6 +3528,8 @@ int app_expect(const char *what, int *got)
         *got = (int)clp_fx(1);
     else if (!strcmp(what, "space"))    /* .. its SPACE macro (CC 19; 0.17: FX's second page too) */
         *got = (int)clp_macro(3);
+    else if (!strcmp(what, "house"))    /* (0.17) the house effects on */
+        *got = ybank.hon;
     else if (!strcmp(what, "reverb"))   /* the reverb's model now */
         *got = (int)clp_reverb_type();
     else if (!strcmp(what, "fav"))      /* (0.17) the sound playing is a favourite */

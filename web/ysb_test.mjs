@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromJson, toJson, fx, SIZE, SIZE1, SIZE2 } from "./ysb.js";
+import { fromJson, toJson, fx, SIZE, SIZE1, SIZE2, SIZE4 } from "./ysb.js";
 
 const names = JSON.parse(readFileSync(new URL("./clp_names.json", import.meta.url)));
 const d = mkdtempSync(join(tmpdir(), "ysb-"));
@@ -53,5 +53,17 @@ if (!back.sounds[0].favourite || back.sounds[1].favourite || !c[0].favourite || 
   if (Buffer.compare(Buffer.from(fromJson(mine2, names)), readFileSync(join(d, "fx.ysb")))) throw new Error("fx: ysb.js and ysb.py differ");
   const f = fx(back.clipper, names, { CHO: 1 }, { favourites: true });
   if (f.done !== 1 || back.clipper[1].changes.length !== 3) throw new Error("fx: favourites only");
+}
+// (0.17) house effects: version 4 only when set; the same bytes as ysb.py's; back the same; version 3 without
+{
+  const h = { ...mine, house: { on: true, chorus: 4, reverb: 8, space: 12, room: "hall" } };
+  const b4 = fromJson(h, names);
+  if (b4.length !== SIZE4 || b4[4] !== 4 || fromJson(mine, names).length !== SIZE) throw new Error("house: sizes");
+  writeFileSync(join(d, "house.json"), JSON.stringify(h));
+  execFileSync("python3", [new URL("../tools/ysb.py", import.meta.url).pathname, join(d, "house.json"), join(d, "house.ysb")]);
+  if (Buffer.compare(Buffer.from(b4), readFileSync(join(d, "house.ysb")))) throw new Error("house: ysb.js and ysb.py differ");
+  const hb = toJson(b4, names).house;
+  if (!hb.on || hb.chorus !== 4 || hb.reverb !== 8 || hb.space !== 12 || hb.drive !== null || hb.room !== "HALL") throw new Error(`house: ${JSON.stringify(hb)}`);
+  if (toJson(b4, names).clipper.length !== 2 || toJson(b4, names).scales.length !== 2) throw new Error("house: the rest");
 }
 console.log("ysb.js: all checks passed (the same bytes as ysb.py, YARD's and Clipper's sounds, scales, and back)");

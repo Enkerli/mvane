@@ -28,6 +28,10 @@ void clp_select(uint32_t i);
  * reverb's model (-1: as it is); clp_changes: what differs now from the factory sound as it loaded (the macros and
  * sends first), at most max; the reverb's model now; a parameter's label (an EDIT value: engine's); P_COUNT */
 #define CLP_OV_MAX 14u
+/* (0.17, Alex: "house effects for all factory sounds") the same sends and SPACE under every sound as it loads: v the
+ * DRIVE CHORUS DELAY REVERB sends and SPACE (0..127; 0xFF: as each sound has it), rtype the reverb's model (-1: as it
+ * is); on 0: none. They count as the sound's own (clp_changes leaves them out); a user sound's changes go over them */
+void clp_house(int on, const uint8_t v[5], int32_t rtype);
 void clp_select_with(uint32_t i, const uint8_t *id, const int16_t *v, uint32_t n, int32_t rtype);
 uint32_t clp_changes(uint8_t *id, int16_t *v, uint32_t max);
 int32_t clp_reverb_type(void);

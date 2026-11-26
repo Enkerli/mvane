@@ -13,7 +13,9 @@
                                           yard-sounds.json; .ysb: the bank as it is); --put FILE (.json or .ysb) sends
                                           them, replacing the FM-1's; --fx "CHO=4,REV=8,SPACE=12" (0.17) sets those
                                           on every Clipper sound of yours on the FM-1 (--favourites: only those;
-                                          --reverb MODEL as well), and sends them back
+                                          --reverb MODEL as well), and sends them back; --house "CHO=4,REV=8,SPACE=12"
+                                          the house effects, under every Clipper sound, the factory ones too
+                                          (--reverb MODEL as well; --house off: none)
     tools/yard.py ls                      what the FM-1 has
 
 Options: --port NAME (part of the FM-1's MIDI port name), --serve-cmd CMD (a host simulator instead of an FM-1:
@@ -161,7 +163,8 @@ def main(argv=None, link=None):
     p.add_argument("--mpe", action="store_true", help="take: the MPE channels kept (a DAW may split them into clips)")
     p.add_argument("--put", metavar="FILE", help="settings, sounds: send this file to the FM-1")
     p.add_argument("--fx", metavar="NAME=V,...", help="sounds: these changes on your Clipper sounds, sent back")
-    p.add_argument("--reverb", metavar="MODEL", help="sounds --fx: the reverb's model too (ROOM PLATE HALL SHIMR)")
+    p.add_argument("--house", metavar="NAME=V,...|off", help="sounds: the house effects (DRIVE CHORUS DELAY REVERB SPACE), or off")
+    p.add_argument("--reverb", metavar="MODEL", help="sounds --fx, --house: the reverb's model too (ROOM PLATE HALL SHIMR)")
     p.add_argument("--favourites", action="store_true", help="sounds --fx: only your favourites")
     p.add_argument("--port")
     p.add_argument("--serve-cmd")
@@ -224,7 +227,26 @@ def main(argv=None, link=None):
                 print(f"settings -> {out}")
         elif a.cmd == "sounds":
             i = c.index_of(SOUNDS)["index"]
-            if a.fx:                         # (0.17) the same changes on many sounds: read, changed, sent back
+            if a.house:                      # (0.17) the house effects: read, set, sent back
+                j = ysb.to_json(bytes(c.read(i)))
+                h = {k: None for k in ysb.HOUSE}
+                if a.house.strip().lower() != "off":
+                    alias = {"DRIVE": "drive", "DST": "drive", "CHORUS": "chorus", "CHO": "chorus", "DELAY": "delay",
+                             "DLY": "delay", "REVERB": "reverb", "REV": "reverb", "SPACE": "space"}
+                    for x in (y for y in a.house.split(",") if y.strip()):
+                        k, v = x.split("=", 1)
+                        if k.strip().upper() not in alias:
+                            raise SystemExit(f"--house: {k}: one of DRIVE CHORUS DELAY REVERB SPACE")
+                        h[alias[k.strip().upper()]] = int(v)
+                h["on"], h["room"] = a.house.strip().lower() != "off", a.reverb
+                j["house"] = h if h["on"] or j.get("house") else None
+                try:
+                    raw = ysb.from_json(j)
+                except ValueError as e:
+                    raise SystemExit(f"--house: {e}")
+                c.write(i, raw)
+                print(f"house effects on the FM-1: {'off' if not h['on'] else a.house}")
+            elif a.fx:                       # (0.17) the same changes on many sounds: read, changed, sent back
                 try:
                     vals = {k.strip(): int(v) for k, v in (x.split("=", 1) for x in a.fx.split(",") if x.strip())}
                     j = ysb.to_json(bytes(c.read(i)))

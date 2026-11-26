@@ -4,7 +4,10 @@
 // clp-names) turn a change's label into its parameter and back.
 export const FAV = 4;                             // (0.17) a sound's flag: a favourite (first in PRESETS, in FAVOURITES)
 export const MAGIC = 0x4259564d, CMAGIC = 0x4243564d, SMAGIC = 0x4253564d, N = 32, CN = 32, SN = 16, OV = 14, HYBRID = 12;
-export const SIZE1 = 8 + 32 * N, SIZE2 = SIZE1 + 8 + 64 * CN, SIZE = SIZE2 + 8 + 16 * SN;
+export const SIZE1 = 8 + 32 * N, SIZE2 = SIZE1 + 8 + 64 * CN, SIZE = SIZE2 + 8 + 16 * SN, SIZE4 = SIZE + 16;
+// (0.17) version 4: the house effects after the scales ("MVHB", on, the reverb's model, DRIVE CHORUS DELAY REVERB SPACE
+// 0..127 or 255 as each sound has it), written only when on or set (an older firmware keeps version 3); as ysb.py's
+export const HMAGIC = 0x4248564d, HOUSE = ["drive", "chorus", "delay", "reverb", "space"];
 export const PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave", "pw", "noise", "filter",
   "onset", "onset_level", "level"];   // (0.16: LEVEL, half dB from 64; 0, from before it: 0 dB)   // (0.15: ONSET, its type as the panel steps it: OFF, TONGUE ... TICK, each a band of 0..127)
 export const ONSETS = ["OFF", "TONGUE", "CLICK", "CHIFF", "KNOCK", "PICK", "BUZZ", "PING", "SQUEAK", "SCRATCH", "TICK"];
@@ -52,9 +55,15 @@ const getName = (raw, o) => { let s = ""; for (let k = 0; k < 12 && raw[o + k]; 
 
 export function toJson(raw, names) {            // yard.ysb's bytes -> {format, version, sounds, clipper}
   const out = { format: "mvane-yard-sounds", version: 3, sounds: [], clipper: [], scales: [] };
-  if (!raw || ![SIZE1, SIZE2, SIZE].includes(raw.length)) return out;
+  if (!raw || ![SIZE1, SIZE2, SIZE, SIZE4].includes(raw.length)) return out;
   const v = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-  if (v.getUint32(0, true) !== MAGIC || ![1, 2, 3].includes(raw[4])) return out;
+  if (v.getUint32(0, true) !== MAGIC || ![1, 2, 3, 4].includes(raw[4])) return out;
+  if (raw.length === SIZE4 && raw[4] === 4 && v.getUint32(SIZE, true) === HMAGIC) {
+    const rt = v.getInt8(SIZE + 5), r = names ? rt - names.reverb.min : -1;
+    out.version = 4;
+    out.house = { on: !!raw[SIZE + 4], room: names && r >= 0 && r < names.reverb.names.length ? names.reverb.names[r] : null };
+    HOUSE.forEach((k, j) => { out.house[k] = raw[SIZE + 6 + j] <= 127 ? raw[SIZE + 6 + j] : null; });
+  }
   for (let i = 0; i < N; i++) {
     const o = 8 + 32 * i;
     if (!(raw[o + 12] & 1)) continue;
@@ -63,7 +72,7 @@ export function toJson(raw, names) {            // yard.ysb's bytes -> {format, 
     out.sounds.push(s);
   }
   if (raw.length === SIZE1 || raw[4] === 1 || v.getUint32(SIZE1, true) !== CMAGIC) return out;
-  if (raw.length === SIZE && raw[4] === 3 && v.getUint32(SIZE2, true) === SMAGIC)
+  if ([SIZE, SIZE4].includes(raw.length) && [3, 4].includes(raw[4]) && v.getUint32(SIZE2, true) === SMAGIC)
     for (let i = 0; i < SN; i++) {
       const o = SIZE2 + 8 + 16 * i, p = v.getUint16(o + 12, true);
       if (p & 0x8000) out.scales.push({ slot: i + 1, name: getName(raw, o), pcs: p & 0xfff });
@@ -140,7 +149,26 @@ export function fromJson(d, names) {            // the lists -> yard.ysb's bytes
     putName(raw, o, s, "");
     v.setUint16(o + 12, 0x8000 | s.pcs, true);
   });
-  return raw;
+  const h = d.house || {};
+  if (!(h.on || h.room || HOUSE.some((k) => h[k] !== null && h[k] !== undefined))) return raw;
+  const out = new Uint8Array(SIZE4), w = new DataView(out.buffer);   // (0.17) version 4, the house effects
+  out.set(raw);
+  out[4] = 4;
+  let rt = -1;
+  if (h.room) {
+    const r = names ? names.reverb.names.indexOf(String(h.room).toUpperCase()) : -1;
+    if (r < 0) throw new Error(`house: room ${h.room}${names ? `, not one of ${names.reverb.names.join(", ")}` : ""}`);
+    rt = names.reverb.min + r;
+  }
+  w.setUint32(SIZE, HMAGIC, true);
+  out[SIZE + 4] = h.on ? 1 : 0;
+  w.setInt8(SIZE + 5, rt);
+  HOUSE.forEach((k, j) => {
+    const x = h[k];
+    if (x !== null && x !== undefined && (!Number.isInteger(x) || x < 0 || x > 127)) throw new Error(`house: ${k} ${x}, not 0..127`);
+    out[SIZE + 6 + j] = x === null || x === undefined ? 255 : x;
+  });
+  return out;
 }
 
 // (0.17, Alex: "applying some similar FX across the board") the same changes on many Clipper sounds: values

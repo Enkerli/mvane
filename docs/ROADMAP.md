@@ -53,9 +53,9 @@ together); favourites (SAVE held; FAVOURITES first on PRESETS); the same effects
 `yard.py sounds --fx`, `ysb.py fx`); a "Download all" ZIP loaded back on the page. Next from them:
 - **YARD's effects**: route YARD through Clipper's buses (chorus, delay, reverb, SPACE) so FX means the same on every
   sound; its CPU on the FM-1 to measure first (YARD's point is being light).
-- **House effects**: one set of sends and SPACE over every sound as it loads, Clipper's 337 too ("across the board"
-  without making each one yours: the user's bank holds 32); a new settings record (the last byte of room went to the
-  ARP's VELO and FEEL).
+- **House effects. Done (0.17):** FX's second page, K3 HOUSE (this sound's CHORUS, REVERB, SPACE, ROOM under every
+  Clipper sound as it loads, the factory ones too), the page's row, `yard.py sounds --house`; in the bank (version 4).
+  Next: the native port (it plays the bank's sounds without them yet).
 - **Headroom**: with FX up, sounds get louder without distortion (Alex, on headphones): measure the effects' peaks
   against the limiter (`make loud` with the sends up) before raising anything; a LOUD step of +9 DB if it holds.
 - **Native**: VELO and FEEL as DAW parameters (the port plays the defaults, 40% and 30%); ENV and FX pages there too.

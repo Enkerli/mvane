@@ -108,6 +108,17 @@ def main():
         assert clip[0]["favourite"] and clip[0]["reverb"] == "PLATE", clip
         assert [(c["name"], c["value"]) for c in clip[0]["changes"]] == [("M1", 20), ("CHO", 4), ("REV", 8), ("DLY", 2)], clip
         r = link.cmd("expect ncuser 1"); assert r[-1].strip().startswith("ok"), r
+        # (0.17) house effects from the command line: on the FM-1 at once, back as set; then off
+        assert yard.main(["sounds", "--house", "CHO=4,REV=8,SPACE=12", "--reverb", "hall"], link) == 0
+        link.run(50)
+        r = link.cmd("expect house 1"); assert r[-1].strip().startswith("ok"), r
+        # (a factory sound loading with them: app/tests/house.txt)
+        assert yard.main(["sounds", os.path.join(d, "house.json")], link) == 0
+        h = json.load(open(os.path.join(d, "house.json")))["house"]
+        assert h == {"on": True, "room": "HALL", "drive": None, "chorus": 4, "delay": None, "reverb": 8, "space": 12}, h
+        assert yard.main(["sounds", "--house", "off"], link) == 0
+        link.run(50)
+        r = link.cmd("expect house 0"); assert r[-1].strip().startswith("ok"), r
         print("yard: all checks passed (take out as MIDI, a MIDI file in, settings out, YARD and Clipper sounds in and out)")
     finally:
         link.close()

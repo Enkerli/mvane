@@ -23,6 +23,7 @@ app/build/host/mvane-yard_host app/tests/transpose.txt app/build/host >> build/h
 app/build/host/mvane-yard_host app/tests/overdub.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/arp.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/arp_vel.txt app/build/host >> build/host.log
+app/build/host/mvane-yard_host app/tests/house.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/dub_ch.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/breath.txt app/build/host >> build/host.log
 app/build/host/mvane-yard_host app/tests/onset.txt app/build/host >> build/host.log

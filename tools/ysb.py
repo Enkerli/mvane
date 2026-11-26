@@ -13,6 +13,9 @@ YARD part only, 1032 bytes):
   zeros, 14 changes of 3 bytes (Clipper's parameter P_*, a signed 16-bit value, little-endian), two zeros;
   "MVSB" (0x4253564D), 16, three zeros; 16 scales of 16 bytes: a name (12; empty: the screen shows its number),
   0x8000 | the pitch-class set's number (0..4095, bit 0 the tonic: C major 2741; 0: an empty slot), two zeros.
+Version 4 (0.17) adds the house effects after the scales: "MVHB" (0x4248564D), on (1) or off, the reverb's model
+(signed, -1 as each sound has it), DRIVE CHORUS DELAY REVERB SPACE (0..127; 255 as each sound has it), five zeros: 16
+bytes. Written only when the JSON has them on or set (an older firmware would not read version 4: it keeps 3).
 The JSON: {"format": "mvane-yard-sounds", "version": 3, "scales": [{"slot", "name", "pcs"}], "sounds": [YARD's: {"slot", "name", "mono", "tone",
 "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck", "wave" (0..42 SAW, 43..84 PULSE, 85..127
 TRIANGLE), "pw", "noise", "filter" (0..42 LOW, 43..84 BAND, 85..127 HIGH)}], "clipper": [{"slot", "name", "engine",
@@ -34,10 +37,13 @@ import sys
 
 MAGIC, CMAGIC, SMAGIC, N, CN, SN, OV = 0x4259564D, 0x4243564D, 0x4253564D, 32, 32, 16, 14
 FAV = 4                                             # (0.17) a sound's flag: a favourite
+HMAGIC = 0x4248564D                                 # (0.17) the house effects' block, after the scales
+HOUSE = ["drive", "chorus", "delay", "reverb", "space"]
 HYBRID = 12                                         # (Clipper's HYBRID engine: its macros are its EDIT values M1..M4)
 SIZE1 = 8 + 32 * N
 SIZE2 = SIZE1 + 8 + 64 * CN
 SIZE = SIZE2 + 8 + 16 * SN
+SIZE4 = SIZE + 16
 PARAMS = ["tone", "release", "glide", "attack", "decay", "res", "detune", "sub", "pluck",   # synth.h SP_*
           "wave", "pw", "noise", "filter",          # (0.11: 0 leaves a sound as 0.10 made it)
           "onset", "onset_level", "level"]   # (0.16: LEVEL, half dB from 64; 0, from before it: 0 dB)                   # (0.15: ONSET, 0..127 as the panel steps it, 0..11 OFF..TICK; 0 none)
@@ -80,12 +86,17 @@ def _yard(raw, out):
 def to_json(raw):
     """yard.ysb's bytes -> the JSON's dict (an empty or foreign bank: no sounds)"""
     out = {"format": "mvane-yard-sounds", "version": 3, "sounds": [], "clipper": [], "scales": []}
-    if len(raw) not in (SIZE1, SIZE2, SIZE) or struct.unpack_from("<I", raw)[0] != MAGIC or raw[4] not in (1, 2, 3):
+    if len(raw) not in (SIZE1, SIZE2, SIZE, SIZE4) or struct.unpack_from("<I", raw)[0] != MAGIC or raw[4] not in (1, 2, 3, 4):
         return out
+    if len(raw) == SIZE4 and raw[4] == 4 and struct.unpack_from("<I", raw, SIZE)[0] == HMAGIC:   # (0.17) house effects
+        rt, rev = struct.unpack_from("<b", raw, SIZE + 5)[0], names()["reverb"]
+        out["version"] = 4
+        out["house"] = {"on": bool(raw[SIZE + 4]), "room": rev["names"][rt - rev["min"]] if 0 <= rt - rev["min"] < len(rev["names"]) else None}
+        out["house"].update({k: (raw[SIZE + 6 + j] if raw[SIZE + 6 + j] <= 127 else None) for j, k in enumerate(HOUSE)})
     _yard(raw, out)
     if len(raw) == SIZE1 or raw[4] == 1 or struct.unpack_from("<I", raw, SIZE1)[0] != CMAGIC:
         return out
-    if len(raw) == SIZE and raw[4] == 3 and struct.unpack_from("<I", raw, SIZE2)[0] == SMAGIC:
+    if len(raw) in (SIZE, SIZE4) and raw[4] in (3, 4) and struct.unpack_from("<I", raw, SIZE2)[0] == SMAGIC:
         for i in range(SN):
             o = SIZE2 + 8 + 16 * i
             p = struct.unpack_from("<H", raw, o + 12)[0]
@@ -211,6 +222,21 @@ def from_json(d):
         b = _name(s, "")
         raw[o:o + len(b)] = b
         struct.pack_into("<H", raw, o + 12, 0x8000 | p)
+    h = d.get("house") or {}
+    if h.get("on") or h.get("room") or any(h.get(k) is not None for k in HOUSE):   # (0.17) version 4, the house effects
+        rev = names()["reverb"]
+        r = h.get("room")
+        if r is not None and str(r).upper() not in rev["names"]:
+            raise ValueError(f"house: room {r!r}, not one of {', '.join(rev['names'])}")
+        raw[4] = 4
+        raw += bytes(16)
+        struct.pack_into("<IBb", raw, SIZE, HMAGIC, 1 if h.get("on") else 0,
+                         -1 if r is None else rev["min"] + rev["names"].index(str(r).upper()))
+        for j, k in enumerate(HOUSE):
+            v = h.get(k)
+            if v is not None and (not isinstance(v, int) or not 0 <= v <= 127):
+                raise ValueError(f"house: {k} {v!r}, not 0..127")
+            raw[SIZE + 6 + j] = 255 if v is None else v
     return bytes(raw)
 
 

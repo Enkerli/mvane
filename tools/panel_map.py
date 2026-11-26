@@ -169,7 +169,7 @@ row("", [["engine 1 / 5"], ["engine 2 / 6"], ["engine 3 / 7"], ["engine 4 / 8"],
 row("ENV", [["ATTACK"], ["DECAY"], ["SUSTAIN", "(YARD: PLUCK)"], ["RELEASE"], ["SAVE: keep", "the sound"]],
     "every sound's envelope", CORAL)
 row("FX", [["DRIVE / SPACE", "SPACE: more reverb,", "delay and width"], ["CHORUS / ROOM", "ROOM: the reverb's", "model"],
-           ["DELAY / -"], ["REVERB / -"], ["the other page", "SAVE: keep it"]],
+           ["DELAY / HOUSE", "HOUSE: these under", "every sound"], ["REVERB / -"], ["the other page", "SAVE: keep it"]],
     "the effects (YARD: none yet)", CORAL)
 row("SEL", [["thousands", "0 to 4"], ["hundreds"], ["tens"], ["units"], ["the named list;", "SAVE: keep the", "number in yours"]],
     "SCALE: its number", CORAL)

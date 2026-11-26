@@ -63,6 +63,7 @@ them keeps the sound; SAVE held a moment keeps it as a favourite too. LFO does n
 | Edit a sound and keep it | HOME to SOUND, tap EDIT, turn (SELECT: the next page), SAVE, tap EDIT; the envelope: tap ENV; the effects: tap FX |
 | Mark a sound a favourite | With EDIT (SOUND page), ENV or FX open, hold SAVE a moment: FAVOURITE; it is first on PRESETS, in FAVOURITES (again: no longer one) |
 | Softer contrast in the ARP | Tap ARP, SELECT (the second page), K3 VELO down (EVEN: all alike), K4 FEEL (accents), tap ARP |
+| The same effects on every sound, the factory ones too | On a Clipper sound with the CHORUS, REVERB, SPACE and ROOM you want: tap FX, SELECT (page 2), K3 HOUSE right, tap FX (left: off) |
 | The same effects on all your sounds | The page's Your sounds: CHORUS, REVERB, SPACE ..., Apply, Send to the FM-1 (or `tools/yard.py sounds --fx "CHO=4,REV=8,SPACE=12"`) |
 | Everything off | OCT- and OCT+ together |
 
@@ -103,7 +104,7 @@ On both pages SELECT goes to the next family's first sound. Every turn on these 
 | **EDIT** on the SOUND page, a YARD sound (three pages) | DETUNE / WAVE / ONSET | SUB / PW / ONSET LVL | RES / NOISE / LEVEL | PLUCK / FILTER / - | the next page; SAVE keeps the sound |
 | **EDIT** on the SOUND page, a Clipper sound (two pages) | its engine's values 1 / 5 | 2 / 6 | 3 / 7 | 4 / 8 | the other page; SAVE keeps the sound |
 | **ENV** (0.17), every sound | ATTACK | DECAY | SUSTAIN (YARD: PLUCK) | RELEASE | SAVE keeps the sound |
-| **FX**, a Clipper sound (two pages, 0.17) | DRIVE / SPACE | CHORUS / ROOM (the reverb's model) | DELAY / - | REVERB / - (sends; CC 12, 93, 94, 91; SPACE 19) | the other page; SAVE keeps the sound |
+| **FX**, a Clipper sound (two pages, 0.17) | DRIVE / SPACE | CHORUS / ROOM (the reverb's model) | DELAY / HOUSE (right: this sound's effects under every sound; left: off) | REVERB / - (sends; CC 12, 93, 94, 91; SPACE 19) | the other page; SAVE keeps the sound |
 | **FX**, a YARD sound | none yet (YARD has no effects) | | | | |
 | **SEL**: SCALE | thousands (0 to 4) | hundreds | tens | units (at most 4095) | the named list, then yours; SAVE keeps the number in your list |
 | **SEQ**: RECORDINGS | SLOT (1 to 8) | LOOP (OFF, ON) | | | the slot |
@@ -303,7 +304,17 @@ ZIP (its sounds and scales); `tools/yard.py sounds` fetches them as JSON, `--put
 those on every Clipper sound of yours (or the favourites only), replacing each one's own, a field left empty leaving
 it be; then Send to the FM-1. From the command line, on the FM-1 at once: `tools/yard.py sounds --fx
 "CHO=4,REV=8,SPACE=12" [--reverb HALL] [--favourites]`; on files: `tools/ysb.py fx IN.json OUT.json CHO=4 REV=8
-SPACE=12`. A sound that would pass 14 changes is left as it was (and named). YARD's sounds have no effects yet. In the JSON a
+SPACE=12`. A sound that would pass 14 changes is left as it was (and named). YARD's sounds have no effects yet.
+
+**House effects** (0.17): one set of effects under every Clipper sound as it loads, Clipper's 337 factory sounds
+too, without making each one yours. On the FM-1: on a Clipper sound with the CHORUS, REVERB, SPACE and ROOM you
+want, FX, SELECT to its second page, **K3 HOUSE** right: ON: EVERY SOUND (kept at once, across a restart); left:
+OFF. DRIVE and DELAY stay each sound's own unless the page sets them. A sound of yours keeps its own changes over
+the house's (and saving a sound keeps only what differs from them). On the page: the same row's **Make them the
+house effects** (an empty field: as each sound has it) and **house effects on**, then Send to the FM-1; from the
+command line, `tools/yard.py sounds --house "CHO=4,REV=8,SPACE=12" [--reverb HALL]`, `--house off`. They live in
+`yard.ysb` (version 4; the JSON's `"house": {"on", "drive", "chorus", "delay", "reverb", "space", "room"}`, null:
+as each sound has it); a bank without them stays version 3, which earlier firmwares read. In the JSON a
 YARD sound is `{"slot", "name", "mono", "tone", "release", "glide", "attack", "decay", "res", "detune", "sub",
 "pluck", "wave", "pw", "noise", "filter", "onset", "onset_level", "level"}` (0 to 127; wave and filter 0, 64, 127;
 level 64 is 0 dB, a half dB a step), a Clipper sound `{"slot", "name", "sound" (or "engine" and "preset"), "reverb",

@@ -1,0 +1,56 @@
+# House effects (0.17, Alex: "house effects for all factory sounds"): FX's second page, K3 HOUSE right, and this
+# sound's CHORUS, REVERB, SPACE and ROOM go under every Clipper sound as it loads; a user sound's own changes over
+# them; kept in the bank across a restart; HOUSE left: off. app/build/host/mvane-yard_host app/tests/house.txt app/build/host
+wait 600
+sound SOUL_ORGAN
+wait 300
+expect house 0
+expect space 0
+# on SOUL ORGAN: CHORUS, REVERB, SPACE turned, then HOUSE on
+press FX
+turn K2 2
+turn K4 4
+turn SELECT 1
+turn K1 6
+turn K3 1
+wait 30
+shot house.png
+turn SELECT 1
+release FX
+wait 50
+expect house 1
+expect space 12
+# another factory sound: the house's sends and SPACE as it loads
+sound GLASS_PAD
+wait 300
+expect space 12
+expect chorus 4
+sound CHAPEL
+wait 300
+expect space 12
+expect chorus 4
+# a user sound's own CHORUS (GLASSY: 6) over the house's
+cbank_glassy
+wait 50
+sound GLASSY
+wait 300
+expect chorus 6
+expect space 12
+# a restart: still on
+reboot
+wait 800
+expect house 1
+sound GLASS_PAD
+wait 300
+expect space 12
+# HOUSE left: off, the factory sounds as they were
+press FX
+turn SELECT 1
+turn K3 -1
+turn SELECT 1
+release FX
+wait 50
+expect house 0
+sound CHAPEL
+wait 300
+expect space 0

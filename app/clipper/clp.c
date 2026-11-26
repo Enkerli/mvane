@@ -483,6 +483,31 @@ static void clp_param_set(track_t *t, uint32_t id, int32_t v)   /* within its ra
         v = clamp(v, d->min, d->max);
     t->p[id] = (int16_t)v;
 }
+static volatile uint8_t clp_house_on;
+static uint8_t clp_house_v[5];
+static int16_t clp_house_rt = -1;
+void clp_house(int on, const uint8_t v[5], int32_t rtype)   /* (main loop; the render reads them at the next load) */
+{
+    uint32_t k;
+    clp_house_on = 0;
+    for (k = 0; k < 5u; k++)
+        clp_house_v[k] = v ? v[k] : 0xFFu;
+    clp_house_rt = (int16_t)rtype;
+    clp_house_on = (uint8_t)(on != 0);
+}
+static void clp_house_apply(track_t *t)         /* over the factory sound just loaded (SPACE: HYBRID's is its M4) */
+{
+    uint32_t k;
+    if (!clp_house_on)
+        return;
+    for (k = 0; k < 5u; k++)
+        if (clp_house_v[k] <= 127u)
+            t->p[k < 4u ? P_DIST + k : t->eng_req == ENGI_HYBRID ? P_E4 + 3u : P_MAC4] = (int16_t)clp_house_v[k];
+    if (clp_house_rt >= 0) {
+        const param_desc_t *g = &GP[G_RTYPE];
+        song.g[G_RTYPE] = (int16_t)clamp(clp_house_rt, g->min, g->max);
+    }
+}
 static void clp_pending(void)                   /* a sound asked for: loaded before what follows it */
 {
     int32_t r = clp_req;
@@ -490,6 +515,7 @@ static void clp_pending(void)                   /* a sound asked for: loaded bef
         uint32_t k;
         clp_req = -1;
         clp_load(clp_list[r] >> 8, clp_list[r] & 0xFFu);
+        clp_house_apply(&trk[0]);                /* (0.17) the house effects: part of the sound as it loaded */
         for (k = 0; k < P_COUNT; k++)
             clp_base[k] = trk[0].p[k];
         if (clp_ov_on) {
