@@ -314,7 +314,8 @@ the house's (and saving a sound keeps only what differs from them). On the page:
 house effects** (an empty field: as each sound has it) and **house effects on**, then Send to the FM-1; from the
 command line, `tools/yard.py sounds --house "CHO=4,REV=8,SPACE=12" [--reverb HALL]`, `--house off`. They live in
 `yard.ysb` (version 4; the JSON's `"house": {"on", "drive", "chorus", "delay", "reverb", "space", "room"}`, null:
-as each sound has it); a bank without them stays version 3, which earlier firmwares read. In the JSON a
+as each sound has it); a bank without them stays version 3, which earlier firmwares read. Natively: on a Clipper sound's SOUND
+page, F6 to its third page (SPACE, HOUSE), encoder 2 HOUSE right or left; kept in the project's bank as on the FM-1. In the JSON a
 YARD sound is `{"slot", "name", "mono", "tone", "release", "glide", "attack", "decay", "res", "detune", "sub",
 "pluck", "wave", "pw", "noise", "filter", "onset", "onset_level", "level"}` (0 to 127; wave and filter 0, 64, 127;
 level 64 is 0 dB, a half dB a step), a Clipper sound `{"slot", "name", "sound" (or "engine" and "preset"), "reverb",

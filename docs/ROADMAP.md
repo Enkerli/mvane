@@ -55,7 +55,7 @@ together); favourites (SAVE held; FAVOURITES first on PRESETS); the same effects
   sound; its CPU on the FM-1 to measure first (YARD's point is being light).
 - **House effects. Done (0.17):** FX's second page, K3 HOUSE (this sound's CHORUS, REVERB, SPACE, ROOM under every
   Clipper sound as it loads, the factory ones too), the page's row, `yard.py sounds --house`; in the bank (version 4).
-  Next: the native port (it plays the bank's sounds without them yet).
+  The native port too: Clipper's SOUND page, F6 to its third page, SPACE and HOUSE; the same bank.
 - **Headroom**: with FX up, sounds get louder without distortion (Alex, on headphones): measure the effects' peaks
   against the limiter (`make loud` with the sends up) before raising anything; a LOUD step of +9 DB if it holds.
 - **Native**: VELO and FEEL as DAW parameters (the port plays the defaults, 40% and 30%); ENV and FX pages there too.

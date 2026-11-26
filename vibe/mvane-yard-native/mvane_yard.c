@@ -51,6 +51,7 @@ VIBE_PARALLEL_AUDIO
 #define Q_ARP 0xF9u                      /* (the ARP, step 8) d1: 0 off, 1 on, 2 on with LATCH */
 #define Q_ARP_A 0xFAu                    /* d1: MODE | RATE << 4, d2: GATE (5..100) */
 #define Q_ARP_B 0xFBu                    /* d1: OCTAVES | (TEMPO - 40) >> 7 << 3, d2: (TEMPO - 40) & 127 */
+#define Q_HOUSE 0xFFu                    /* (0.17) the house effects (ho_*, handed over first) */
 static uint8_t q_st[QN], q_d1[QN], q_d2[QN], q_rec[QN];
 static uint8_t q_live = 1;               /* (send's: 0 while a sound loads, which the history does not keep) */
 static volatile uint32_t qw, qr;
@@ -103,9 +104,12 @@ static uint16_t scale_mask(void) { return (uint16_t)((set.pcs & 0xFFFu) | 1u); }
 #define YB_V1 1032u
 #define YB_V2 3088u
 #define YB_V3 3352u
+#define YB_V4 (YB_V3 + 16u)              /* (0.17) the house effects after the scales: "MVHB", on, the reverb's model,
+                                          * DRIVE CHORUS DELAY REVERB SPACE (255: as each sound has it), five zeros */
+#define YB_HOUSE YB_V3
 #define YB_SOUND(i) (8u + 32u * (i))
 #define YB_SCALE(i) (YB_V2 + 8u + 16u * (i))
-static uint8_t bank[YB_V3];
+static uint8_t bank[YB_V4];
 static uint32_t us_pcs(uint32_t i);
 static void bank_name(const uint8_t *b, char *out);
 static const char *scale_name(void)      /* the list's name, else a known one, else 0 */
@@ -355,11 +359,12 @@ static const char *const SOUND_N[SOUND_PAGES][4] = {{"TONE", "ATTACK", "DECAY", 
  * 16 (a name, 0x8000 | the number). A bank from 0.10 or 0.11 grows to version 3, as on the FM-1 ---- */
 static void le32(uint8_t *b, uint32_t v) { b[0] = (uint8_t)v, b[1] = (uint8_t)(v >> 8), b[2] = (uint8_t)(v >> 16), b[3] = (uint8_t)(v >> 24); }
 static uint32_t rd32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
+static void house_send(void);
 static void bank_load(void)
 {
-    int n = vibe_store_read("yard.ysb", bank, (int)YB_V3);
+    int n = vibe_store_read("yard.ysb", bank, (int)YB_V4);
     uint32_t v = n >= (int)YB_V1 ? bank[4] : 0u;
-    if (n < (int)YB_V1 || rd32(bank) != 0x4259564Du || v < 1u || v > 3u)
+    if (n < (int)YB_V1 || rd32(bank) != 0x4259564Du || v < 1u || v > 4u)
         memset(bank, 0, sizeof bank), v = 0;
     if (v < 2u || n < (int)YB_V2) {      /* (0.10's, or none: no Clipper part yet) */
         memset(bank + YB_V1, 0, YB_V3 - YB_V1);
@@ -369,9 +374,40 @@ static void bank_load(void)
         memset(bank + YB_V2, 0, YB_V3 - YB_V2);
         le32(bank + YB_V2, 0x4253564Du), bank[YB_V2 + 4u] = US_N;
     }
+    if (v < 4u || n < (int)YB_V4 || rd32(bank + YB_HOUSE) != 0x4248564Du) {   /* (0.16's: no house effects: off) */
+        memset(bank + YB_HOUSE, 0, YB_V4 - YB_HOUSE);
+        le32(bank + YB_HOUSE, 0x4248564Du);
+        memset(bank + YB_HOUSE + 5u, 0xFF, 6u);   /* (the reverb's model -1, the five values as each sound has them) */
+    }
     le32(bank, 0x4259564Du), bank[4] = 3, bank[5] = YB_N;
+    house_send();
 }
-static int bank_save(void) { return vibe_store_write("yard.ysb", bank, (int)YB_V3); }
+static int house_any(void)               /* the house effects on or set: the bank is version 4 (else 3, as before) */
+{
+    uint32_t k;
+    for (k = 5u; k < 11u; k++)
+        if (bank[YB_HOUSE + k] != 0xFFu)
+            return 1;
+    return bank[YB_HOUSE + 4u] != 0;
+}
+static int bank_save(void)
+{
+    bank[4] = house_any() ? 4u : 3u;
+    return vibe_store_write("yard.ysb", bank, (int)(bank[4] == 4u ? YB_V4 : YB_V3));
+}
+/* (0.17, as the FM-1's) the house effects, handed to the audio: clp_house there, before the next sound loads */
+static uint8_t ho_on, ho_v[5];
+static int32_t ho_rt;
+static void house_send(void)
+{
+    uint32_t k;
+    ho_on = bank[YB_HOUSE + 4u];
+    ho_rt = (int8_t)bank[YB_HOUSE + 5u];
+    for (k = 0; k < 5u; k++)
+        ho_v[k] = bank[YB_HOUSE + 6u + k];
+    VIBE_RELEASE();
+    send(Q_HOUSE, 0, 0);
+}
 static int user_used(uint32_t slot) { return slot < YB_N && (bank[YB_SOUND(slot) + 12u] & 1u); }
 static void bank_name(const uint8_t *b, char *out)   /* 12 bytes, NUL-padded, ASCII (others as '?') */
 {
@@ -669,14 +705,43 @@ static void slot_save(void);
 static void send_loop(void);
 static void recorder_init(void);
 
+/* (0.17, as the FM-1's FX second page, K3 HOUSE) on: this sound's CHORUS, REVERB, SPACE and the reverb's model under
+ * every Clipper sound as it loads (DRIVE and DELAY as the bank has them); off: none. Kept in the bank at once */
+#define CLP_PAGES 3u                     /* Clipper's SOUND pages (F6): its macros, its sends, SPACE and HOUSE */
+static void house_set(int on)
+{
+    uint8_t *h = bank + YB_HOUSE;
+    uint8_t cho = (uint8_t)clp_fx(1), rev = (uint8_t)clp_fx(3), spc = (uint8_t)clp_macro(3);
+    int8_t rt = (int8_t)clp_reverb_type();
+    if (on ? h[4] && h[7] == cho && h[9] == rev && h[10] == spc && (int8_t)h[5] == rt : !h[4]) {
+        say("HOUSE", on ? "ON, AS IT IS" : "OFF");
+        return;
+    }
+    if (on)
+        h[7] = cho, h[9] = rev, h[10] = spc, h[5] = (uint8_t)rt;
+    h[4] = (uint8_t)(on != 0);
+    if (bank_save()) {
+        say("HOUSE", "NOT KEPT");
+        return;
+    }
+    house_send();
+    say("HOUSE", on ? "ON: EVERY SOUND" : "OFF");
+}
 static void page_value(uint32_t i, const char **label, char *val)   /* encoder i's on this page */
 {
     val[0] = 0;
     *label = "";
     if (page == PG_SOUND && sound_clp(set.sound)) {   /* Clipper's: its four macros; F6: its four sends */
-        static const char *const N[2][4] = {{"BRITE", "TIMBR", "MOTN", "SPACE"}, {"DRIVE", "CHORUS", "DELAY", "REVERB"}};
-        *label = N[more % 2u][i];
-        vg_itoa((int)(more % 2u ? clp_fx(i) : clp_macro(i)), val);
+        static const char *const N[CLP_PAGES][4] = {{"BRITE", "TIMBR", "MOTN", "SPACE"}, {"DRIVE", "CHORUS", "DELAY", "REVERB"},
+                                                    {"SPACE", "HOUSE", "", ""}};
+        *label = N[more % CLP_PAGES][i];
+        if (more % CLP_PAGES == 2u) {    /* (0.17) SPACE beside HOUSE, as the FM-1's FX second page */
+            if (i == 0)
+                vg_itoa((int)clp_macro(3), val);
+            else if (i == 1)
+                strcpy(val, bank[YB_HOUSE + 4u] ? "ON" : "OFF");
+        } else
+            vg_itoa((int)(more % CLP_PAGES ? clp_fx(i) : clp_macro(i)), val);
     } else if (page == PG_SOUND) {
         uint32_t p = SOUND_P[more % SOUND_PAGES][i];
         *label = SOUND_N[more % SOUND_PAGES][i];
@@ -772,8 +837,16 @@ static void page_turn(uint32_t i, float e)   /* encoder i turned e detents on th
         de = d;
     if (page == PG_SOUND && sound_clp(set.sound)) {   /* (as the FM-1's: CC 16..19, and 12 93 94 91; recorded) */
         static const uint8_t FXC[4] = {12, 93, 94, 91};
-        int v = (int)(more % 2u ? clp_fx(i) : clp_macro(i)) + 2 * de;
-        send(0xB0u, more % 2u ? FXC[i] : 16u + i, (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v));
+        if (more % CLP_PAGES == 2u) {    /* SPACE (CC 19), HOUSE */
+            if (i == 0) {
+                int v = (int)clp_macro(3) + 2 * de;
+                send(0xB0u, 19u, (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v));
+            } else if (i == 1)
+                house_set(d > 0);
+            return;
+        }
+        int v = (int)(more % CLP_PAGES ? clp_fx(i) : clp_macro(i)) + 2 * de;
+        send(0xB0u, more % CLP_PAGES ? FXC[i] : 16u + i, (uint32_t)(v < 0 ? 0 : v > 127 ? 127 : v));
     } else if (page == PG_SOUND) {
         uint32_t p = SOUND_P[more % SOUND_PAGES][i];
         if (p == SP_N)
@@ -1299,7 +1372,7 @@ static void event(const vibe_event *e)
         else if (e->id == VB_REC)
             rec_press(1);
         else if (e->id == VB_F6)
-            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? (sound_clp(set.sound) ? 2u : SOUND_PAGES) : page == PG_ARP ? 2u : 1u));
+            more = (uint8_t)((more + 1u) % (page == PG_SOUND ? (sound_clp(set.sound) ? CLP_PAGES : SOUND_PAGES) : page == PG_ARP ? 2u : 1u));
         lights();
     }
 }
@@ -1731,6 +1804,8 @@ static void a_command(uint32_t st, uint32_t d1, uint32_t d2)
         a_tonic = (uint8_t)(d1 % 12u);
     else if (st == Q_LOUD)
         a_loud_step = (uint8_t)(d1 < LOUD_STEPS ? d1 : 0u);
+    else if (st == Q_HOUSE)              /* (0.17) the house effects, under the next sound that loads */
+        clp_house(ho_on, ho_v, ho_rt);
     else if (st == Q_LOOP)
         a_loop = (uint8_t)(d1 != 0);
     else if (st == Q_ARP) {
@@ -2161,7 +2236,7 @@ static void draw_values(void)
         vg_text(lb, x + 8, 234, VG_SMALL, C_DIM, 0);
         vg_text(v, x + 8, 250, VG_BIG, C_INK, 0);
         if (page == PG_SOUND && sound_clp(set.sound))
-            fill = (int)(more % 2u ? clp_fx(i) : clp_macro(i));
+            fill = more % CLP_PAGES == 2u ? (i ? -1 : (int)clp_macro(3)) : (int)(more % CLP_PAGES ? clp_fx(i) : clp_macro(i));
         else if (page == PG_SOUND)
             fill = SOUND_P[more % SOUND_PAGES][i] < SP_N ? set.val[SOUND_P[more % SOUND_PAGES][i]] : -1;
         else if (page == PG_PLAY && i == 3u)
@@ -2252,7 +2327,8 @@ void vibe_on_draw(uint16_t *fb)
         vg_text(msg, 240, 10, VG_BIG, 0xFF8A1F, 1);
     }
     if (page == PG_SOUND && sound_clp(set.sound)) {   /* Clipper's sound: its family and engine, its two pages */
-        static const char *const SUB[2] = {"BRITE TIMBR MOTN SPACE (ITS MACROS)", "DRIVE CHORUS DELAY REVERB (ITS SENDS)"};
+        static const char *const SUB[CLP_PAGES] = {"BRITE TIMBR MOTN SPACE (ITS MACROS)", "DRIVE CHORUS DELAY REVERB (ITS SENDS)",
+                                                   "SPACE, HOUSE (UNDER EVERY SOUND)"};
         uint32_t c = clp_now();
         vg_text(sound_name(), 16, 72, VG_BIG | VG_X2, C_INK, 0);
         t[0] = 0;
@@ -2263,9 +2339,9 @@ void vibe_on_draw(uint16_t *fb)
         if (clp_sound_mono(c))
             cat(t, "  MONO");
         vg_text(t, 16, 124, VG_MED, C_DIM, 0);
-        for (i = 0; i < 2u; i++)
-            vg_text(SUB[i], 16, 150 + (int)i * 18, VG_SMALL, i == more % 2u ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
-        vg_text("A: THE SOUND   F6: THE OTHER FOUR   F4: KEEP", 464, 186, VG_SMALL, C_DIM, 2);
+        for (i = 0; i < CLP_PAGES; i++)
+            vg_text(SUB[i], 16, 146 + (int)i * 16, VG_SMALL, i == more % CLP_PAGES ? PG_COLOR[PG_SOUND] : C_FAINT, 0);
+        vg_text("A: THE SOUND   F6: THE NEXT PAGE   F4: KEEP", 464, 194, VG_SMALL, C_DIM, 2);
     } else if (page == PG_SOUND) {              /* YARD's sound: its name, its three pages of values (F6) */
         static const char *const SUB[SOUND_PAGES] = {"TONE ATTACK DECAY RELEASE", "DETUNE SUB RES PLUCK", "WAVE PW NOISE FILTER",
                                                      "ONSET: A BURST AT EACH NOTE'S START; LEVEL: THE SOUND'S"};
