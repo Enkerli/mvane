@@ -13,7 +13,8 @@ ZIG_SHA=d45312e61ebcc48032b77bc4cf7fd6915c11fa16e4aad116b66c9468211230ea
 SDK_URL=https://github.com/Vibe-FM-SDK/vibe-fm-sdk.git
 SDK_REV=c6c435566928950239d8d584bd6dc44d9316472e   # SDK 28
 if [ ! -x "$T/zig-linux-x86_64-0.13.0/zig" ]; then
-  curl -fsSL -o "$T/zig.tar.xz" "$ZIG_URL"
+  # (a timeout and retries: a stalled download from ziglang.org hung v0.17's first release run for 25 minutes)
+  curl -fsSL --connect-timeout 30 --max-time 300 --retry 3 --retry-all-errors -o "$T/zig.tar.xz" "$ZIG_URL"
   echo "$ZIG_SHA  $T/zig.tar.xz" | sha256sum -c -
   tar -xJf "$T/zig.tar.xz" -C "$T"
 fi
