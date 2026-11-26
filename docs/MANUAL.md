@@ -1,4 +1,4 @@
-# mvane yard manual (0.16)
+# mvane yard manual (0.17)
 
 mvane yard is a performance firmware for the M-VAVE FM-1, on [The Firmware Hub](https://thefirmwarehub.com/). Play
 notes or chords from any of 4096 scales, through YARD (mvane yard's own synth, 13 sounds) or Clipper's 337 factory
